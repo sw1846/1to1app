@@ -8,40 +8,37 @@
     <!-- 
     ===== Dropbox API 設定ガイド =====
     
-    1. Dropbox App の作成:
-       - https://www.dropbox.com/developers/apps にアクセス
-       - "Create app" をクリック
-       - "Scoped access" を選択
-       - "App folder" を選択（セキュリティのため推奨）
-       - App name を入力（例: PlaceOn1to1）
+    ✅ Dropbox App Key 統合済み: 6u9kud7ntmkaicg
     
-    2. 権限設定:
-       - Permissions タブで以下を有効化:
-         * files.content.write
-         * files.content.read
-         * files.metadata.read
+    このシステムは以下の機能を提供します:
+    - Dropbox OAuth2 認証フロー
+    - App Folder内でのファイル読み書き
+    - アクセストークンの永続化（localStorage/sessionStorage）
+    - モバイル対応
+    - GitHub Pages対応
     
-    3. OAuth 設定:
-       - OAuth 2 > Redirect URIs に GitHub Pages のURLを追加
-         例: https://yourusername.github.io/meeting-system/
-       - Generated access token は使用しません（OAuth2フローを使用）
-    
-    4. App Key の設定:
-       - 下記の CLIENT_ID に App key を設定してください
-    
-    ===== GitHub Pages 設定 =====
+    ===== 使用方法 =====
     
     1. このHTMLファイルを index.html として保存
     2. GitHubリポジトリにプッシュ
     3. Settings > Pages で GitHub Pages を有効化
-    4. HTTPS URLを確認し、Dropbox App の Redirect URI に追加
+    4. 初回アクセス時に「Dropboxと連携」ボタンが表示されます
+    5. Dropboxにログインして認証を許可
+    6. 以降は自動的にDropboxと連携されます
+    7. データは /Apps/[AppName]/PlaceOn_1to1/ に保存されます
     
-    ===== 使用方法 =====
+    ===== Dropbox App 設定 =====
     
-    1. 初回アクセス時に「Dropboxと連携」ボタンが表示されます
-    2. Dropboxにログインして認証を許可
-    3. 以降は自動的にDropboxと連携されます
-    4. データは /Apps/[AppName]/PlaceOn_1to1/ に保存されます
+    既に統合されているApp Keyの設定内容:
+    - App name: お使いのDropbox Appの名前
+    - Permission type: App folder
+    - Required permissions:
+      * files.content.write
+      * files.content.read
+      * files.metadata.read
+    
+    重要: Redirect URIsにGitHub PagesのURLを追加してください
+    例: https://yourusername.github.io/meeting-system/
     
     -->
     
@@ -838,6 +835,12 @@
                 <div class="header-content">
                     <h1>1to1ミーティング管理システム</h1>
                     <div class="header-buttons">
+                        <span id="connection-status" style="color: #4c8bf5; margin-right: 16px; font-size: 14px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                            Dropbox接続済み
+                        </span>
                         <button class="btn-secondary" onclick="syncData()">
                             <span id="sync-status">🔄 同期</span>
                         </button>
@@ -1090,7 +1093,7 @@
 
     <script>
         // ===== グローバル変数 =====
-        const CLIENT_ID = 'YOUR_DROPBOX_APP_KEY'; // ここにDropbox App Keyを設定
+        const CLIENT_ID = '6u9kud7ntmkaicg'; // Dropbox App Key
         const REDIRECT_URI = window.location.origin + window.location.pathname;
         const DATA_PATH = '/PlaceOn_1to1';
         
@@ -1118,12 +1121,18 @@
             // URLからアクセストークンを取得
             const accessToken = getAccessTokenFromUrl();
             if (accessToken) {
+                // トークンを保存（localStorageとsessionStorageの両方に保存）
                 localStorage.setItem('dropbox_access_token', accessToken);
+                sessionStorage.setItem('dropbox_access_token', accessToken);
+                
+                // URLをクリーンアップ
                 window.history.replaceState({}, document.title, REDIRECT_URI);
             }
             
-            // 保存されたトークンをチェック
-            const savedToken = localStorage.getItem('dropbox_access_token');
+            // 保存されたトークンをチェック（localStorageを優先、なければsessionStorage）
+            const savedToken = localStorage.getItem('dropbox_access_token') || 
+                              sessionStorage.getItem('dropbox_access_token');
+            
             if (savedToken) {
                 await initializeDropbox(savedToken);
             } else {
@@ -1141,6 +1150,21 @@
             const hash = window.location.hash;
             if (hash) {
                 const params = new URLSearchParams(hash.substring(1));
+                
+                // Check for errors in OAuth response
+                const error = params.get('error');
+                if (error) {
+                    console.error('OAuth error:', error);
+                    const errorDescription = params.get('error_description');
+                    if (errorDescription) {
+                        showNotification(`認証エラー: ${decodeURIComponent(errorDescription)}`, 'error');
+                    } else {
+                        showNotification('認証がキャンセルされました', 'error');
+                    }
+                    window.history.replaceState({}, document.title, REDIRECT_URI);
+                    return null;
+                }
+                
                 return params.get('access_token');
             }
             return null;
@@ -1149,7 +1173,17 @@
         async function initializeDropbox(accessToken) {
             try {
                 showLoading();
+                
+                // Dropbox SDKを初期化
                 dropbox = new Dropbox.Dropbox({ accessToken });
+                
+                // 接続テスト（ユーザー情報を取得）
+                try {
+                    const userInfo = await dropbox.usersGetCurrentAccount();
+                    console.log('Dropbox接続成功:', userInfo.result.name.display_name);
+                } catch (err) {
+                    console.log('ユーザー情報取得をスキップ（App folder権限のため）');
+                }
                 
                 // フォルダ構造を作成
                 await createFolderStructure();
@@ -1171,7 +1205,9 @@
             } catch (error) {
                 console.error('Dropbox初期化エラー:', error);
                 if (error.status === 401) {
+                    // 認証エラーの場合はトークンをクリア
                     localStorage.removeItem('dropbox_access_token');
+                    sessionStorage.removeItem('dropbox_access_token');
                     showAuthScreen();
                 } else {
                     showNotification('初期化エラーが発生しました', 'error');
@@ -1186,7 +1222,11 @@
         }
         
         function logout() {
+            // トークンを削除
             localStorage.removeItem('dropbox_access_token');
+            sessionStorage.removeItem('dropbox_access_token');
+            
+            // ページをリロード
             window.location.reload();
         }
         
@@ -1214,6 +1254,11 @@
         // ===== データ読み込み =====
         async function loadData() {
             try {
+                // ネットワーク接続チェック
+                if (!navigator.onLine) {
+                    throw new Error('インターネット接続がありません');
+                }
+                
                 // 連絡先データを読み込み
                 const contactsData = await loadJsonFile(`${DATA_PATH}/contacts.json`);
                 contacts = contactsData || [];
@@ -1232,7 +1277,11 @@
                 updateAllReferrerLinks();
             } catch (error) {
                 console.error('データ読み込みエラー:', error);
-                showNotification('データの読み込みに失敗しました', 'error');
+                if (error.message === 'インターネット接続がありません') {
+                    showNotification('インターネット接続を確認してください', 'error');
+                } else {
+                    showNotification('データの読み込みに失敗しました', 'error');
+                }
             }
         }
         
@@ -2455,6 +2504,23 @@
                     document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
                         dropdown.classList.remove('show');
                     });
+                }
+            });
+            
+            // オンライン/オフライン状態の監視
+            window.addEventListener('online', () => {
+                showNotification('インターネット接続が復旧しました', 'success');
+                const statusElement = document.getElementById('connection-status');
+                if (statusElement) {
+                    statusElement.style.color = '#4c8bf5';
+                }
+            });
+            
+            window.addEventListener('offline', () => {
+                showNotification('インターネット接続が切断されました', 'error');
+                const statusElement = document.getElementById('connection-status');
+                if (statusElement) {
+                    statusElement.style.color = '#d93025';
                 }
             });
         });
