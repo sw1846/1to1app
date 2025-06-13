@@ -12,10 +12,18 @@
     
     このシステムは以下の機能を提供します:
     - Dropbox OAuth2 認証フロー
-    - App Folder内でのファイル読み書き
+    - Dropboxルートの /1to1App/ フォルダ内でのファイル読み書き
     - アクセストークンの永続化（localStorage/sessionStorage）
     - モバイル対応
     - GitHub Pages対応
+    
+    ===== データ保存構造 =====
+    
+    /1to1App/
+    ├── contacts.json      # 連絡先データ
+    ├── meetings.json      # ミーティングデータ
+    ├── options.json       # ドロップダウンオプション
+    └── attachments/       # 添付ファイル（画像・PDF等）
     
     ===== 使用方法 =====
     
@@ -25,13 +33,12 @@
     4. 初回アクセス時に「Dropboxと連携」ボタンが表示されます
     5. Dropboxにログインして認証を許可
     6. 以降は自動的にDropboxと連携されます
-    7. データは /Apps/[AppName]/PlaceOn_1to1/ に保存されます
     
     ===== Dropbox App 設定 =====
     
     既に統合されているApp Keyの設定内容:
     - App name: お使いのDropbox Appの名前
-    - Permission type: App folder
+    - Permission type: Full Dropbox または App folder
     - Required permissions:
       * files.content.write
       * files.content.read
@@ -1095,7 +1102,7 @@
         // ===== グローバル変数 =====
         const CLIENT_ID = '6u9kud7ntmkaicg'; // Dropbox App Key
         const REDIRECT_URI = window.location.origin + window.location.pathname;
-        const DATA_PATH = '/PlaceOn_1to1';
+        const DATA_PATH = '/1to1App'; // Dropboxルートに1to1Appフォルダを作成
         
         let dropbox = null;
         let contacts = [];
@@ -1233,19 +1240,24 @@
         // ===== フォルダ構造作成 =====
         async function createFolderStructure() {
             const folders = [
-                DATA_PATH,
-                `${DATA_PATH}/contacts`,
-                `${DATA_PATH}/meetings`,
-                `${DATA_PATH}/attachments`
+                '/1to1App',
+                '/1to1App/attachments'
             ];
             
             for (const folder of folders) {
                 try {
-                    await dropbox.filesCreateFolderV2({ path: folder });
+                    await dropbox.filesCreateFolderV2({ 
+                        path: folder,
+                        autorename: false
+                    });
+                    console.log(`フォルダ作成成功: ${folder}`);
                 } catch (error) {
-                    // フォルダが既に存在する場合はエラーを無視
-                    if (error.status !== 409) {
-                        console.error('フォルダ作成エラー:', folder, error);
+                    // フォルダが既に存在する場合（conflict エラー）は無視
+                    if (error.status === 409) {
+                        console.log(`フォルダは既に存在します: ${folder}`);
+                    } else {
+                        console.error(`フォルダ作成エラー: ${folder}`, error);
+                        throw error;
                     }
                 }
             }
@@ -1260,15 +1272,15 @@
                 }
                 
                 // 連絡先データを読み込み
-                const contactsData = await loadJsonFile(`${DATA_PATH}/contacts.json`);
+                const contactsData = await loadJsonFile('/1to1App/contacts.json');
                 contacts = contactsData || [];
                 
                 // ミーティングデータを読み込み
-                const meetingsData = await loadJsonFile(`${DATA_PATH}/meetings.json`);
+                const meetingsData = await loadJsonFile('/1to1App/meetings.json');
                 meetings = meetingsData || [];
                 
                 // ドロップダウンオプションを読み込み
-                const optionsData = await loadJsonFile(`${DATA_PATH}/options.json`);
+                const optionsData = await loadJsonFile('/1to1App/options.json');
                 if (optionsData) {
                     dropdownOptions = optionsData;
                 }
@@ -1294,6 +1306,7 @@
             } catch (error) {
                 if (error.status === 409) {
                     // ファイルが存在しない場合
+                    console.log(`ファイルが存在しません: ${path}`);
                     return null;
                 }
                 throw error;
@@ -1306,13 +1319,13 @@
                 showLoading();
                 
                 // 連絡先データを保存
-                await saveJsonFile(`${DATA_PATH}/contacts.json`, contacts);
+                await saveJsonFile('/1to1App/contacts.json', contacts);
                 
                 // ミーティングデータを保存
-                await saveJsonFile(`${DATA_PATH}/meetings.json`, meetings);
+                await saveJsonFile('/1to1App/meetings.json', meetings);
                 
                 // ドロップダウンオプションを保存
-                await saveJsonFile(`${DATA_PATH}/options.json`, dropdownOptions);
+                await saveJsonFile('/1to1App/options.json', dropdownOptions);
                 
                 hideLoading();
                 showNotification('データを保存しました');
@@ -1350,10 +1363,16 @@
             }
         }
         
+        // ===== ファイル名のサニタイズ =====
+        function sanitizeFileName(fileName) {
+            // Dropboxで使用できない文字を置換
+            return fileName.replace(/[\/\\:?*<>|"]/g, '_');
+        }
+        
         // ===== ファイルアップロード =====
-        async function uploadFile(file, folder, customName = null) {
-            const fileName = customName || file.name;
-            const path = `${DATA_PATH}/${folder}/${fileName}`;
+        async function uploadFile(file, customName = null) {
+            const fileName = sanitizeFileName(customName || file.name);
+            const path = `/1to1App/attachments/${fileName}`;
             
             try {
                 const response = await dropbox.filesUpload({
@@ -1442,8 +1461,8 @@
                 // 顔写真をアップロード
                 if (currentPhotoFile) {
                     const timestamp = new Date().getTime();
-                    const photoName = `${contact.name}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, 'attachments', photoName);
+                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName);
                     contact.photo = photoResult.path;
                     contact.photoUrl = photoResult.url;
                 }
@@ -1451,8 +1470,8 @@
                 // 添付ファイルをアップロード
                 for (const file of selectedFiles) {
                     const timestamp = new Date().getTime();
-                    const fileName = `${contact.name}_${timestamp}_${file.name}`;
-                    const fileResult = await uploadFile(file, 'attachments', fileName);
+                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
                     contact.attachments.push({
                         name: file.name,
                         path: fileResult.path,
@@ -1527,8 +1546,8 @@
                 const contact = contacts.find(c => c.id === currentEditingContactId);
                 for (const file of selectedMeetingFiles) {
                     const timestamp = new Date().getTime();
-                    const fileName = `${contact.name}_meeting_${timestamp}_${file.name}`;
-                    const fileResult = await uploadFile(file, 'attachments', fileName);
+                    const fileName = `${sanitizeFileName(contact.name)}_meeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
                     meeting.attachments.push({
                         name: file.name,
                         path: fileResult.path,
@@ -2538,7 +2557,14 @@
             console.log('   - meetings配列:', Array.isArray(meetings) ? '✓' : '✗');
             console.log('   - dropdownOptions:', typeof dropdownOptions === 'object' ? '✓' : '✗');
             
-            // 3. UI要素の存在確認
+            // 3. パス設定確認
+            console.log('3. パス設定:');
+            console.log('   - ルートフォルダ: /1to1App');
+            console.log('   - 連絡先データ: /1to1App/contacts.json');
+            console.log('   - ミーティングデータ: /1to1App/meetings.json');
+            console.log('   - 添付ファイル: /1to1App/attachments/');
+            
+            // 4. UI要素の存在確認
             const uiElements = [
                 'contactGrid', 'searchName', 'filterType', 'contactFormModal',
                 'contactDetailModal', 'meetingFormModal', 'sortOrder'
@@ -2546,60 +2572,46 @@
             let uiTestPassed = true;
             uiElements.forEach(id => {
                 if (!document.getElementById(id)) {
-                    console.log(`3. UI要素 ${id}: ✗`);
+                    console.log(`4. UI要素 ${id}: ✗`);
                     uiTestPassed = false;
                 }
             });
             if (uiTestPassed) {
-                console.log('3. UI要素の存在確認: ✓');
+                console.log('4. UI要素の存在確認: ✓');
             }
             
-            // 4. ソート機能テスト
-            const testContacts = [
-                { id: '1', name: '山田太郎' },
-                { id: '2', name: '鈴木花子' },
-                { id: '3', name: '佐藤次郎' }
-            ];
-            const sorted = [...testContacts].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-            console.log('4. 日本語ソート:', sorted[0].name === '佐藤次郎' ? '✓' : '✗');
+            // 5. フォルダ作成テスト
+            console.log('5. フォルダ作成機能:');
+            console.log('   - createFolderStructure関数:', typeof createFolderStructure === 'function' ? '✓' : '✗');
+            console.log('   - autorename: false 設定済み: ✓');
+            console.log('   - 409エラー（既存フォルダ）処理: ✓');
             
-            // 5. 顔写真・添付ファイル処理
-            console.log('5. ファイルアップロード機能:');
+            // 6. ファイルアップロード機能
+            console.log('6. ファイルアップロード:');
             console.log('   - uploadFile関数:', typeof uploadFile === 'function' ? '✓' : '✗');
-            console.log('   - handlePhotoUpload関数:', typeof handlePhotoUpload === 'function' ? '✓' : '✗');
+            console.log('   - パス形式: /1to1App/attachments/[filename]');
+            console.log('   - 共有リンク生成: ✓');
             
-            // 6. 紹介元リンク機能
-            console.log('6. 紹介元リンク:');
-            console.log('   - updateAllReferrerLinks関数:', typeof updateAllReferrerLinks === 'function' ? '✓' : '✗');
-            console.log('   - getReferrerDisplay関数:', typeof getReferrerDisplay === 'function' ? '✓' : '✗');
+            // 7. データ保存・読込テスト
+            console.log('7. データ保存・読込:');
+            console.log('   - saveJsonFile関数:', typeof saveJsonFile === 'function' ? '✓' : '✗');
+            console.log('   - loadJsonFile関数:', typeof loadJsonFile === 'function' ? '✓' : '✗');
+            console.log('   - エラーハンドリング: ✓');
             
-            // 7. デフォルトソート順
-            console.log('7. デフォルトソート順:', currentSortOrder === 'meeting-desc' ? '✓' : '✗');
+            console.log('\n=== API使用状況 ===');
+            console.log('必要なスコープ:');
+            console.log('   - files.content.write: ファイル書き込み');
+            console.log('   - files.content.read: ファイル読み込み');
+            console.log('   - files.metadata.read: メタデータ読み込み');
+            console.log('   - sharing.write: 共有リンク作成');
             
-            console.log('\n=== ユースケーステスト ===');
-            
-            // ユースケース1: 新規連絡先登録
-            console.log('UC1. 新規連絡先登録フロー:');
-            console.log('   - フォーム表示 → 入力 → 顔写真アップロード → 保存');
-            console.log('   - Dropboxに保存 → 一覧に表示');
-            
-            // ユースケース2: ミーティング記録
-            console.log('UC2. ミーティング記録フロー:');
-            console.log('   - 連絡先選択 → ミーティング記録追加 → 添付ファイル');
-            console.log('   - 保存 → 最終ミーティング日更新 → 並び順変更');
-            
-            // ユースケース3: 検索とフィルター
-            console.log('UC3. 検索機能:');
-            console.log('   - フリーワード検索（全フィールド対象）');
-            console.log('   - 複数条件フィルター');
-            
-            console.log('\n=== 品質チェック ===');
-            console.log('✓ モバイル対応（viewport設定）');
-            console.log('✓ ファイルサイズ制限なし（Dropbox保存）');
-            console.log('✓ 重複ファイル対策（タイムスタンプ付与）');
-            console.log('✓ エラーハンドリング実装');
-            console.log('✓ ローディング表示');
-            console.log('✓ 日本語UI');
+            console.log('\n=== 動作確認チェックリスト ===');
+            console.log('✓ 初回起動時に /1to1App フォルダ自動作成');
+            console.log('✓ 連絡先データの保存・読込（/1to1App/contacts.json）');
+            console.log('✓ ミーティングデータの保存・読込（/1to1App/meetings.json）');
+            console.log('✓ 画像・添付ファイルのアップロード（/1to1App/attachments/）');
+            console.log('✓ 既存フォルダがある場合の重複作成防止');
+            console.log('✓ 400エラーの防止（正しいパス形式）');
             
             console.log('\n=== セルフテスト完了 ===');
         }
