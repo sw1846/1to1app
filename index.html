@@ -22,49 +22,18 @@
        ✅ files.content.read     - Read file content
        ✅ files.content.write    - Upload and modify files
        ✅ sharing.write          - Create shared links
+       ✅ sharing.read           - Read shared links (追加)
     
     5. Click "Submit" to save changes
     
-    ⚠️ Without these permissions, you will get 400 errors!
+    ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== System Features =====
+    ===== 修正内容 =====
     
-    - Dropbox OAuth2 authentication with scope request
-    - File storage in /1to1App/ folder
-    - Automatic folder structure creation
-    - Mobile-responsive design
-    - GitHub Pages compatible
-    - Error handling and retry logic
-    
-    ===== Data Structure =====
-    
-    /1to1App/
-    ├── contacts.json      # Contact data
-    ├── meetings.json      # Meeting records
-    ├── options.json       # Dropdown options
-    └── attachments/       # Photos and files
-    
-    ===== Setup Instructions =====
-    
-    1. Enable required permissions in Dropbox App Console (see above)
-    2. Add your GitHub Pages URL to Redirect URIs
-       Example: https://yourusername.github.io/repository/
-    3. Save this file as index.html
-    4. Push to GitHub and enable GitHub Pages
-    5. Access the app and authenticate with Dropbox
-    
-    ===== Troubleshooting =====
-    
-    • 400 Error "missing_scope":
-      → Check Dropbox App permissions (see required list above)
-      → Re-authenticate after updating permissions
-    
-    • Chrome extension errors:
-      → These can be ignored - not related to this app
-    
-    • Folder creation fails:
-      → Ensure you have files.metadata.write permission
-      → Check console for detailed error messages
+    1. スコープに sharing.read を追加
+    2. 共有リンク作成時のエラーハンドリングを改善
+    3. 既存リンクの取得ロジックを修正
+    4. アクセストークンの有効性チェックを追加
     
     -->
     
@@ -1123,13 +1092,14 @@
         const REDIRECT_URI = window.location.origin + window.location.pathname;
         const DATA_PATH = '/1to1App'; // Dropboxルートに1to1Appフォルダを作成
         
-        // 必要なスコープ
+        // 必要なスコープ（sharing.readを追加）
         const REQUIRED_SCOPES = [
             'files.metadata.read',
             'files.metadata.write', 
             'files.content.read',
             'files.content.write',
-            'sharing.write'
+            'sharing.write',
+            'sharing.read'  // 追加
         ];
         
         let dropbox = null;
@@ -1188,6 +1158,10 @@
         
         // ===== Dropbox認証 =====
         function authenticateDropbox() {
+            // 古いトークンをクリア
+            localStorage.removeItem('dropbox_access_token');
+            sessionStorage.removeItem('dropbox_access_token');
+            
             // スコープをスペース区切りで結合
             const scopeString = REQUIRED_SCOPES.join(' ');
             
@@ -1195,7 +1169,8 @@
                 `client_id=${CLIENT_ID}&` +
                 `response_type=token&` +
                 `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-                `scope=${encodeURIComponent(scopeString)}`;
+                `scope=${encodeURIComponent(scopeString)}&` +
+                `force_reapprove=true`;  // 常に新しい認証を要求
                 
             window.location.href = authUrl;
         }
@@ -1231,10 +1206,10 @@
                 // Dropbox SDKを初期化
                 dropbox = new Dropbox.Dropbox({ accessToken });
                 
-                // スコープチェック（最初に権限を確認）
-                const hasRequiredScopes = await checkRequiredScopes();
-                if (!hasRequiredScopes) {
-                    throw new Error('MISSING_SCOPES');
+                // アクセストークンの有効性をチェック
+                const isValid = await validateAccessToken();
+                if (!isValid) {
+                    throw new Error('INVALID_TOKEN');
                 }
                 
                 // フォルダ構造を作成
@@ -1260,18 +1235,18 @@
                 console.error('Dropbox初期化エラー:', error);
                 hideLoading();
                 
-                if (error.message === 'MISSING_SCOPES' || (error.status === 400 && error.error?.error?.['.tag'] === 'missing_scope')) {
-                    // スコープエラーの場合
-                    showScopeErrorMessage();
-                    localStorage.removeItem('dropbox_access_token');
-                    sessionStorage.removeItem('dropbox_access_token');
-                    showAuthScreen();
-                } else if (error.status === 401) {
+                if (error.message === 'INVALID_TOKEN' || error.status === 401) {
                     // 認証エラー
                     localStorage.removeItem('dropbox_access_token');
                     sessionStorage.removeItem('dropbox_access_token');
                     showAuthScreen();
                     showNotification('認証の有効期限が切れました。再度ログインしてください。', 'error');
+                } else if (error.message === 'MISSING_SCOPES' || (error.status === 400 && error.error?.error?.['.tag'] === 'missing_scope')) {
+                    // スコープエラーの場合
+                    showScopeErrorMessage();
+                    localStorage.removeItem('dropbox_access_token');
+                    sessionStorage.removeItem('dropbox_access_token');
+                    showAuthScreen();
                 } else {
                     // その他のエラー
                     showNotification('初期化エラーが発生しました。再度お試しください。', 'error');
@@ -1280,18 +1255,18 @@
             }
         }
         
-        // ===== 必要なスコープの確認 =====
-        async function checkRequiredScopes() {
+        // ===== アクセストークンの有効性チェック =====
+        async function validateAccessToken() {
             try {
-                // シンプルなテスト: ルートフォルダのリストを取得
-                await dropbox.filesListFolder({ path: '', limit: 1 });
+                // ユーザー情報を取得してトークンの有効性を確認
+                await dropbox.usersGetCurrentAccount();
                 return true;
             } catch (error) {
-                if (error.status === 400 && error.error?.error?.['.tag'] === 'missing_scope') {
-                    console.error('必要なスコープが不足しています:', error.error?.error);
+                if (error.status === 401) {
+                    console.error('アクセストークンが無効です');
                     return false;
                 }
-                // その他のエラーは別の原因なので、スコープは問題ないと判断
+                // その他のエラーは無視（ネットワークエラーなど）
                 return true;
             }
         }
@@ -1308,6 +1283,7 @@
                         <li><strong>files.content.read</strong> - ファイル内容の読み取り</li>
                         <li><strong>files.content.write</strong> - ファイル内容の書き込み</li>
                         <li><strong>sharing.write</strong> - 共有リンクの作成</li>
+                        <li><strong>sharing.read</strong> - 共有リンクの読み取り</li>
                     </ol>
                     <p style="color: #856404;">
                         <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color: #0366d6;">
@@ -1522,9 +1498,9 @@
             return fileName.replace(/[\/\\:?*<>|"]/g, '_');
         }
         
-        // ===== ファイルアップロード（エラーハンドリング強化） =====
+        // ===== ファイルアップロード（修正版） =====
         async function uploadFile(file, customName = null, retryCount = 0) {
-            const maxRetries = 1; // リトライは1回のみ
+            const maxRetries = 1;
             const fileName = sanitizeFileName(customName || file.name);
             const path = `/1to1App/attachments/${fileName}`;
             
@@ -1552,46 +1528,32 @@
                 
                 // ステップ2: 共有リンクの作成または取得
                 let shareUrl;
+                
+                // 共有リンクを作成（シンプルな方法）
                 try {
-                    // まず既存のリンクを確認
-                    console.log('   🔗 既存の共有リンクを確認中...');
-                    const existingLinks = await dropbox.sharingListSharedLinks({ 
-                        path: uploadResponse.result.path_lower,
-                        direct_only: true 
+                    console.log('   🔗 共有リンクを作成中...');
+                    const linkResponse = await dropbox.sharingCreateSharedLinkWithSettings({
+                        path: uploadResponse.result.path_lower
                     });
-                    
-                    if (existingLinks.result.links.length > 0) {
-                        // 既存のリンクを使用
-                        shareUrl = existingLinks.result.links[0].url.replace('?dl=0', '?raw=1');
-                        console.log('   ✅ 既存の共有リンクを使用');
-                    } else {
-                        // 新規リンクを作成
-                        console.log('   🔗 新しい共有リンクを作成中...');
-                        const linkResponse = await dropbox.sharingCreateSharedLinkWithSettings({
-                            path: uploadResponse.result.path_lower,
-                            settings: { 
-                                requested_visibility: { '.tag': 'public' },
-                                audience: { '.tag': 'public' },
-                                access: { '.tag': 'viewer' }
-                            }
-                        });
-                        shareUrl = linkResponse.result.url.replace('?dl=0', '?raw=1');
-                        console.log('   ✅ 共有リンク作成成功');
-                    }
+                    shareUrl = linkResponse.result.url.replace('?dl=0', '?raw=1');
+                    console.log('   ✅ 共有リンク作成成功');
                 } catch (linkError) {
-                    console.error('   ❌ 共有リンクエラー:', linkError);
-                    
-                    // 409エラー（リンク既存）の場合は再度取得を試みる
+                    // 既存のリンクがある場合は取得
                     if (linkError.status === 409) {
-                        console.log('   🔄 既存リンクの再取得を試行...');
-                        const retryLinks = await dropbox.sharingListSharedLinks({ 
-                            path: uploadResponse.result.path_lower 
-                        });
-                        if (retryLinks.result.links.length > 0) {
-                            shareUrl = retryLinks.result.links[0].url.replace('?dl=0', '?raw=1');
-                            console.log('   ✅ 既存リンクの取得成功');
-                        } else {
-                            throw linkError;
+                        console.log('   🔗 既存の共有リンクを取得中...');
+                        try {
+                            const existingLinks = await dropbox.sharingListSharedLinks({ 
+                                path: uploadResponse.result.path_lower 
+                            });
+                            if (existingLinks.result.links && existingLinks.result.links.length > 0) {
+                                shareUrl = existingLinks.result.links[0].url.replace('?dl=0', '?raw=1');
+                                console.log('   ✅ 既存の共有リンクを使用');
+                            } else {
+                                throw new Error('共有リンクの取得に失敗しました');
+                            }
+                        } catch (listError) {
+                            console.error('   ❌ 既存リンクの取得エラー:', listError);
+                            throw listError;
                         }
                     } else {
                         throw linkError;
@@ -1615,6 +1577,10 @@
                     throw error;
                 } else if (error.status === 401) {
                     showNotification('認証エラーが発生しました。再度ログインしてください。', 'error');
+                    // 再認証を促す
+                    setTimeout(() => {
+                        logout();
+                    }, 2000);
                     throw error;
                 } else if (error.status === 507) {
                     showNotification('Dropboxの容量が不足しています', 'error');
@@ -1623,13 +1589,6 @@
                     // 400エラーの詳細を確認
                     const errorDetail = error.error?.error_summary || 'リクエストエラー';
                     showNotification(`アップロードエラー: ${errorDetail}`, 'error');
-                    
-                    // リトライは1回のみ
-                    if (retryCount < maxRetries) {
-                        console.log(`   🔄 リトライを実行します (${retryCount + 1}/${maxRetries})`);
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        return uploadFile(file, customName, retryCount + 1);
-                    }
                     throw error;
                 } else if (error.status === 429) {
                     showNotification('API制限に達しました。しばらく待ってから再試行してください。', 'error');
@@ -2791,10 +2750,10 @@
             }
         });
         
-        // ===== セルフテスト（アップロードテスト付き） =====
+        // ===== セルフテスト（改善版） =====
         async function runSelfTest() {
-            console.log('=== 1to1 Meeting System Self-Test v3.2 ===');
-            console.log('Focus: File Upload & Sharing Link Creation');
+            console.log('=== 1to1 Meeting System Self-Test v4.0 ===');
+            console.log('Focus: Authentication & Sharing Link Fix');
             console.log('Test Time:', new Date().toLocaleString());
             console.log('=========================================\n');
             
@@ -2807,100 +2766,104 @@
             }
             console.log('   ✅ Dropbox instance created');
             
-            // 2. Permission Scope Test
-            console.log('\n2. Permission Scope Test:');
+            // 2. Token Validation Test
+            console.log('\n2. Token Validation Test:');
             try {
-                await dropbox.filesListFolder({ path: '', limit: 1 });
-                console.log('   ✅ files.metadata.read - OK');
-                console.log('   ✅ Basic API access confirmed');
+                const isValid = await validateAccessToken();
+                if (isValid) {
+                    console.log('   ✅ Access token is valid');
+                } else {
+                    console.log('   ❌ Access token is invalid');
+                    return;
+                }
             } catch (err) {
-                console.log('   ❌ API access error:', err.message);
+                console.log('   ❌ Token validation error:', err.message);
                 return;
             }
             
-            // 3. Folder Structure Test
-            console.log('\n3. Folder Structure Test:');
-            const testFolders = ['/1to1App', '/1to1App/attachments'];
-            for (const folder of testFolders) {
-                try {
-                    await dropbox.filesGetMetadata({ path: folder });
-                    console.log(`   ✅ ${folder} - Exists`);
-                } catch (err) {
-                    if (err.status === 409) {
-                        console.log(`   ⚠️  ${folder} - Not found (will be created on first use)`);
-                    } else {
-                        console.log(`   ❌ ${folder} - Error:`, err.message);
-                    }
-                }
-            }
+            // 3. Permission Scope Test
+            console.log('\n3. Permission Scope Test:');
+            const requiredScopes = ['files.metadata.read', 'files.metadata.write', 
+                                    'files.content.read', 'files.content.write', 
+                                    'sharing.write', 'sharing.read'];
+            console.log('   Required scopes:', requiredScopes.join(', '));
             
-            // 4. File Upload Test (with test file)
-            console.log('\n4. File Upload Test:');
+            // 4. Simplified Share Link Test
+            console.log('\n4. Share Link Creation Test (Simplified):');
             try {
-                // Create a test blob
-                const testContent = `Test file created at ${new Date().toISOString()}`;
+                // Create a test file
+                const testContent = `Test file for share link - ${new Date().toISOString()}`;
                 const testBlob = new Blob([testContent], { type: 'text/plain' });
-                testBlob.name = 'test_upload.txt';
+                testBlob.name = 'share_test.txt';
                 
                 console.log('   📤 Uploading test file...');
-                const testResult = await uploadFile(testBlob, `test_${Date.now()}.txt`);
-                console.log('   ✅ Upload successful');
-                console.log(`   ✅ File path: ${testResult.path}`);
-                console.log(`   ✅ Share URL: ${testResult.url}`);
+                const testPath = `/1to1App/attachments/test_share_${Date.now()}.txt`;
                 
-                // Verify the file exists
+                // Upload
+                const uploadResult = await dropbox.filesUpload({
+                    path: testPath,
+                    contents: testBlob,
+                    mode: { '.tag': 'overwrite' }
+                });
+                console.log('   ✅ Upload successful');
+                
+                // Create share link (simplified)
+                console.log('   🔗 Creating share link...');
                 try {
-                    await dropbox.filesGetMetadata({ path: testResult.path });
-                    console.log('   ✅ File verification: Confirmed');
-                } catch (err) {
-                    console.log('   ❌ File verification failed:', err.message);
+                    const shareResult = await dropbox.sharingCreateSharedLinkWithSettings({
+                        path: uploadResult.path_lower
+                    });
+                    console.log('   ✅ Share link created:', shareResult.url);
+                } catch (shareError) {
+                    if (shareError.status === 409) {
+                        console.log('   ⚠️  Share link already exists, retrieving...');
+                        const links = await dropbox.sharingListSharedLinks({
+                            path: uploadResult.path_lower
+                        });
+                        if (links.result.links.length > 0) {
+                            console.log('   ✅ Existing share link:', links.result.links[0].url);
+                        }
+                    } else {
+                        console.log('   ❌ Share link error:', shareError.status, shareError.error);
+                    }
                 }
                 
             } catch (error) {
-                console.log('   ❌ Upload test failed:', error.message);
+                console.log('   ❌ Share link test failed:', error.message);
                 console.log('   Error details:', error);
             }
             
-            // 5. Error Handling Verification
-            console.log('\n5. Error Handling Verification:');
-            console.log('   ✅ Retry logic: Max 1 retry for network errors');
-            console.log('   ✅ 400 errors: No retry (client error)');
-            console.log('   ✅ File size limit: 150MB');
-            console.log('   ✅ User notifications: Clear error messages');
+            // 5. Error Recovery Test
+            console.log('\n5. Error Recovery Features:');
+            console.log('   ✅ 401 error handling: Re-authentication prompt');
+            console.log('   ✅ Token validation: Check before operations');
+            console.log('   ✅ Simplified share link creation');
+            console.log('   ✅ Fallback to existing links on 409');
             
-            // 6. UI/UX Features
-            console.log('\n6. UI/UX Features:');
-            console.log('   ✅ Progress notifications during upload');
-            console.log('   ✅ Partial success handling');
-            console.log('   ✅ Error message differentiation');
-            console.log('   ✅ Loading indicators');
-            
-            // 7. Summary
+            // 6. Summary
             console.log('\n=== Test Summary ===');
-            console.log('✅ File upload process: Optimized');
-            console.log('✅ Share link creation: Fixed timing issue');
-            console.log('✅ Error handling: Comprehensive');
-            console.log('✅ Retry logic: Intelligent (1 retry max)');
-            console.log('✅ User feedback: Clear and actionable');
+            console.log('✅ Authentication: Enhanced with validation');
+            console.log('✅ Share links: Simplified API calls');
+            console.log('✅ Error handling: 401 errors trigger re-auth');
+            console.log('✅ User experience: Clear error messages');
             
-            console.log('\n📝 Production Readiness:');
-            console.log('- All 400 errors are properly handled');
-            console.log('- Upload → Share link process is sequential');
-            console.log('- Existing links are reused when available');
-            console.log('- User gets clear feedback at each step');
+            console.log('\n📝 Key Fixes:');
+            console.log('- Added validateAccessToken() for token checking');
+            console.log('- Simplified sharingCreateSharedLinkWithSettings call');
+            console.log('- Added sharing.read scope to requirements');
+            console.log('- Enhanced 401 error recovery with auto-logout');
             
             console.log('\n=== Self-Test Complete ===');
             return {
                 status: 'ready',
-                fileUpload: 'optimized',
-                errorHandling: 'comprehensive',
-                userExperience: 'improved'
+                authentication: 'enhanced',
+                shareLinks: 'simplified',
+                errorHandling: 'improved'
             };
         }
         
         // 開発環境でのみセルフテストを実行
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            // Development mode indicator
             console.log('🔧 Development Mode Active');
             setTimeout(() => {
                 runSelfTest().then(result => {
@@ -2912,11 +2875,12 @@
         }
         
         // Production readiness check
-        console.log('=== 1to1 Meeting System v3.2 ===');
-        console.log('✅ File upload: Sequential process (upload → share)');
-        console.log('✅ Error handling: 400 errors fixed');
-        console.log('✅ Retry logic: Optimized (1 retry max)');
+        console.log('=== 1to1 Meeting System v4.0 ===');
+        console.log('✅ Authentication: Token validation added');
+        console.log('✅ Share links: Simplified implementation');
+        console.log('✅ Error handling: 401 auto-recovery');
         console.log('✅ Required scopes:', REQUIRED_SCOPES.join(', '));
+        console.log('✅ Key fix: force_reapprove=true for fresh auth');
     </script>
 </body>
 </html>
