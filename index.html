@@ -40,66 +40,99 @@
     <script src="https://unpkg.com/dropbox@10.34.0/dist/Dropbox-sdk.min.js"></script>
     
     <script>
-    // ★ Chrome拡張機能エラー対策を最初に実行
+    // ★ Chrome拡張機能エラー対策を最初に実行（強化版）
     (function() {
+        // すぐにエラーハンドラーを設定
+        const suppressChromeError = function(e) {
+            if (e && e.message && e.message.includes('chrome.runtime')) {
+                e.preventDefault && e.preventDefault();
+                e.stopPropagation && e.stopPropagation();
+                e.stopImmediatePropagation && e.stopImmediatePropagation();
+                return true;
+            }
+        };
+
+        // グローバルエラーハンドラー（最優先）
+        window.addEventListener('error', suppressChromeError, true);
+        window.addEventListener('unhandledrejection', function(e) {
+            if (e.reason && e.reason.message && e.reason.message.includes('chrome.runtime')) {
+                e.preventDefault();
+                return true;
+            }
+        }, true);
+
         // Chrome拡張機能のruntime APIをオーバーライド
         if (typeof chrome !== 'undefined' && chrome.runtime) {
-            const originalSendMessage = chrome.runtime.sendMessage;
-            const originalConnect = chrome.runtime.connect;
-            
-            // sendMessageをラップ
-            if (originalSendMessage) {
-                chrome.runtime.sendMessage = function(...args) {
+            // lastErrorを常にnullにする
+            Object.defineProperty(chrome.runtime, 'lastError', {
+                get: function() { return null; },
+                set: function() { }
+            });
+
+            const noop = function() {};
+            const safeWrapper = function(originalMethod) {
+                return function(...args) {
                     try {
-                        // コールバックがある場合は、エラーをキャッチするラッパーを追加
+                        // コールバックを探してラップ
                         const callback = args[args.length - 1];
                         if (typeof callback === 'function') {
                             args[args.length - 1] = function(...cbArgs) {
-                                if (chrome.runtime.lastError) {
-                                    console.warn('Chrome runtime error (suppressed):', chrome.runtime.lastError.message);
+                                try {
+                                    return callback.apply(this, cbArgs);
+                                } catch (e) {
+                                    console.warn('Chrome callback error (suppressed):', e);
                                 }
-                                return callback.apply(this, cbArgs);
                             };
                         }
-                        return originalSendMessage.apply(this, args);
+                        
+                        if (originalMethod) {
+                            return originalMethod.apply(this, args);
+                        }
                     } catch (error) {
-                        console.warn('Chrome sendMessage error (suppressed):', error);
+                        console.warn('Chrome API error (suppressed):', error);
+                    }
+                };
+            };
+
+            // すべてのchrome.runtime関数をラップ
+            if (chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage = safeWrapper(chrome.runtime.sendMessage);
+            }
+            if (chrome.runtime.connect) {
+                chrome.runtime.connect = safeWrapper(chrome.runtime.connect);
+            }
+            if (chrome.runtime.onMessage) {
+                const originalAddListener = chrome.runtime.onMessage.addListener;
+                chrome.runtime.onMessage.addListener = function(listener) {
+                    const wrappedListener = function(...args) {
+                        try {
+                            return listener(...args);
+                        } catch (error) {
+                            console.warn('Chrome message listener error (suppressed):', error);
+                        }
+                    };
+                    if (originalAddListener) {
+                        return originalAddListener.call(this, wrappedListener);
                     }
                 };
             }
-            
-            // connectをラップ
-            if (originalConnect) {
-                chrome.runtime.connect = function(...args) {
-                    try {
-                        return originalConnect.apply(this, args);
-                    } catch (error) {
-                        console.warn('Chrome connect error (suppressed):', error);
-                        return null;
-                    }
-                };
-            }
+
+            // 他のchrome APIもラップ
+            ['tabs', 'storage', 'windows', 'browserAction'].forEach(api => {
+                if (chrome[api] && chrome[api].query) {
+                    chrome[api].query = safeWrapper(chrome[api].query);
+                }
+            });
         }
-        
-        // グローバルエラーハンドラー
-        window.addEventListener('error', function(event) {
-            if (event.message && event.message.includes('chrome.runtime')) {
-                event.preventDefault();
-                event.stopPropagation();
-                console.warn('Chrome runtime error prevented:', event.message);
-                return true;
+
+        // consoleメソッドもラップしてchrome関連エラーを抑制
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+            const errorString = args.join(' ');
+            if (!errorString.includes('chrome.runtime')) {
+                originalConsoleError.apply(console, args);
             }
-        }, true);
-        
-        // 未処理のPromiseエラーをキャッチ
-        window.addEventListener('unhandledrejection', function(event) {
-            if (event.reason && event.reason.message && event.reason.message.includes('chrome.runtime')) {
-                event.preventDefault();
-                event.stopPropagation();
-                console.warn('Chrome runtime promise rejection prevented:', event.reason);
-                return true;
-            }
-        }, true);
+        };
     })();
     </script>
     
@@ -1321,7 +1354,7 @@
             return null;
         }
         
-        // ★ 修正開始: initializeDropbox改善（トークン検証の最適化）
+        // ★ 修正開始: initializeDropbox改善（fetchバインディング修正）
         async function initializeDropbox(accessToken) {
             // 二重初期化を防ぐ
             if (isReauthInProgress) {
@@ -1335,10 +1368,10 @@
                 console.log('=== Dropbox SDK初期化開始 ===');
                 console.log('トークン長:', accessToken.length);
                 
-                // Dropbox SDKを初期化（新しい設定）
+                // Dropbox SDKを初期化（fetchを正しくバインド）
                 dropbox = new Dropbox.Dropbox({ 
                     accessToken: accessToken,
-                    fetch: fetch // windowのfetchを使用
+                    fetch: window.fetch.bind(window) // fetchを正しくwindowにバインド
                 });
                 
                 console.log('Dropbox SDKインスタンス作成完了');
