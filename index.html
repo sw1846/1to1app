@@ -28,33 +28,45 @@
     
     ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== 修正内容 v16.0 =====
+    ===== 修正内容 v17.0 =====
     
-    1. 連絡先フォーム2段組レイアウト
-       - CSS Gridで50%×2カラム表示
-       - モバイル(600px以下)で1カラム自動切替
-    
-    2. 初回ミーティング編集機能
-       - 連絡先編集モーダルで初回ミーティング入力
-       - 自動的にmeetings.jsonに保存
+    1. 新規連絡先登録時に初回ミーティングも同時登録
+       - 新規登録モーダルでも初回ミーティングセクション表示
        - isFirstMeetingフラグで管理
     
-    3. 過去の経歴欄の恒久削除
-       - ミーティングフォームから完全削除
+    2. スマホ/タブレットで顔写真表示問題を修正
+       - キャッシュバスティング実装
+       - 画像属性の最適化
     
-    4. マルチセレクト初期値バグ修正
-       - 新規登録時の完全リセット実装
+    3. カメラで撮影ボタンを廃止
+       - タップで直接カメラ起動（capture属性）
     
-    5. テンプレート機能
-       - 設定モーダルから編集可能
-       - localStorageに保存
-       - 新規ミーティング時に自動挿入
+    4. モバイル時アップロード説明文簡略化
+       - メディアクエリで制御
     
-    6. v15.0までの全機能を継承
-       - PKCE認証フロー
-       - トークン自動更新
-       - ドラフト自動保存
-       - その他既存機能
+    5. Markdown内URL・メール自動リンク化
+       - linkifyText関数実装
+    
+    6. 並び替えセレクタ位置変更
+       - ビュー切り替えボタンの右隣へ
+    
+    7. フリーワード検索を常時表示
+       - 検索バーを独立化
+    
+    8. 連絡先一覧のメール/HPを直接リンク
+       - クリックイベント制御
+    
+    9. 設定内容をデバイス間で同期
+       - options.jsonに保存
+    
+    10. ミーティング履歴の視覚的改善
+        - カード型デザイン
+    
+    11. 強み・経歴タブ内の長文折りたたみ
+        - 7行超えで省略表示
+    
+    12. 添付ファイルの実体チェック
+        - 404ファイルを自動除去
     
     -->
     
@@ -288,6 +300,124 @@
             padding: 6px 12px;
             font-size: 13px;
         }
+
+        /* ★ BEGIN PATCH v17.0 - CSS追加・変更 ★ */
+        /* フリーワード検索を常時表示 */
+        .search-bar {
+            background: #2a2a2a;
+            padding: 20px 24px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid #3a3a3a;
+        }
+
+        /* 表示コントロールバー */
+        .view-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .view-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+
+        /* 並び替えとビュー切り替えを横並びに */
+        .view-sort-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* モバイル時のアップロード説明文簡略化 */
+        @media (max-width: 768px) {
+            .upload-hint {
+                display: none;
+            }
+        }
+
+        /* ミーティングカードスタイル */
+        .meeting-card {
+            background: #333333;
+            border: 1px solid #444444;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .meeting-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #444444;
+        }
+
+        .meeting-card-date {
+            font-size: 16px;
+            font-weight: 500;
+            color: #4c8bf5;
+        }
+
+        .meeting-card-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* タスクリストを右寄せ */
+        .meeting-tasks {
+            margin-left: 20px;
+            padding: 12px;
+            background: #2a2a2a;
+            border-radius: 6px;
+            border-left: 3px solid #4c8bf5;
+        }
+
+        /* リンククリック可能に */
+        .contact-list-item a,
+        .contact-card a {
+            pointer-events: auto;
+            z-index: 10;
+            position: relative;
+        }
+
+        /* 強み・経歴の折りたたみ */
+        .collapsible-content {
+            position: relative;
+            transition: max-height 0.3s ease;
+        }
+
+        .collapsible-content.collapsed {
+            max-height: calc(1.6em * 7);
+            overflow: hidden;
+        }
+
+        .toggle-link {
+            color: #4c8bf5;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 8px;
+            display: inline-block;
+        }
+
+        .toggle-link:hover {
+            opacity: 0.8;
+        }
+
+        /* 新規連絡先での初回ミーティングセクション */
+        .first-meeting-new {
+            background: #2d2d2d;
+            border: 1px solid #3d3d3d;
+        }
+        /* ★ END PATCH v17.0 - CSS追加・変更 ★ */
 
         /* 検索・フィルター */
         .search-filters {
@@ -1551,15 +1681,16 @@
             </header>
             <!-- ★ END PATCH v15.0 - HTMLヘッダー変更 ★ -->
 
-            <!-- ★ BEGIN PATCH v15.0 - 検索フィルター変更 ★ -->
-            <div class="search-filters" id="searchFilters">
-                <div class="search-header">
-                    <h3>
-                        <span class="filter-toggle" onclick="toggleFilters()">
-                            <span id="filterToggleIcon">▼</span>
-                            検索・フィルター
-                        </span>
-                    </h3>
+            <!-- ★ BEGIN PATCH v17.0 - HTML変更 ★ -->
+            <!-- 検索バーを独立 -->
+            <div class="search-bar">
+                <label>フリーワード検索</label>
+                <input type="text" id="searchName" placeholder="名前、よみ、会社、メール、タグ、内容などを検索..." onkeyup="filterContacts()">
+            </div>
+
+            <!-- 表示コントロールバー -->
+            <div class="view-controls">
+                <div class="view-sort-wrapper">
                     <div class="sort-controls">
                         <label>並び替え:</label>
                         <select id="sortOrder" onchange="applySorting()">
@@ -1571,13 +1702,35 @@
                             <option value="yomi-desc">よみ (ん→あ)</option>
                         </select>
                     </div>
+                    <div class="view-toggle">
+                        <button id="cardViewBtn" class="active" onclick="setViewMode('card')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 3h8v8H3V3m10 0h8v8h-8V3M3 13h8v8H3v-8m10 0h8v8h-8v-8Z"/>
+                            </svg>
+                            カード表示
+                        </button>
+                        <button id="listViewBtn" onclick="setViewMode('list')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 4h18v2H3V4m0 7h18v2H3v-2m0 7h18v2H3v-2Z"/>
+                            </svg>
+                            リスト表示
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 検索フィルター（フリーワード除く） -->
+            <div class="search-filters" id="searchFilters">
+                <div class="search-header">
+                    <h3>
+                        <span class="filter-toggle" onclick="toggleFilters()">
+                            <span id="filterToggleIcon">▶</span>
+                            詳細フィルター
+                        </span>
+                    </h3>
                 </div>
                 <div class="filter-content" id="filterContent">
                     <div class="filter-row">
-                        <div class="filter-group search-group">
-                            <label>フリーワード検索</label>
-                            <input type="text" id="searchName" placeholder="名前、よみ、会社、メール、タグ、内容などを検索..." onkeyup="filterContacts()">
-                        </div>
                         <div class="filter-group">
                             <label>種別</label>
                             <select id="filterType" onchange="filterContacts()">
@@ -1623,7 +1776,7 @@
                     </div>
                 </div>
             </div>
-            <!-- ★ END PATCH v15.0 - 検索フィルター変更 ★ -->
+            <!-- ★ END PATCH v17.0 - HTML変更 ★ -->
 
             <!-- Outstanding Actions Dashboard -->
             <div id="outstandingActions" class="search-filters" style="margin-bottom: 24px;">
@@ -1637,25 +1790,6 @@
                     <!-- Outstanding actions will be rendered here -->
                 </div>
             </div>
-
-            <!-- ★ BEGIN PATCH v15.0 - 表示切り替えボタン追加 ★ -->
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
-                <div class="view-toggle">
-                    <button id="cardViewBtn" class="active" onclick="setViewMode('card')">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M3 3h8v8H3V3m10 0h8v8h-8V3M3 13h8v8H3v-8m10 0h8v8h-8v-8Z"/>
-                        </svg>
-                        カード表示
-                    </button>
-                    <button id="listViewBtn" onclick="setViewMode('list')">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M3 4h18v2H3V4m0 7h18v2H3v-2m0 7h18v2H3v-2Z"/>
-                        </svg>
-                        リスト表示
-                    </button>
-                </div>
-            </div>
-            <!-- ★ END PATCH v15.0 - 表示切り替えボタン追加 ★ -->
 
             <div id="contactGrid" class="contact-grid">
                 <!-- 連絡先カードがここに表示される -->
@@ -1764,22 +1898,24 @@
                     <!-- 全幅項目 -->
                     <div class="form-group">
                         <label>顔写真</label>
+                        <!-- ★ BEGIN PATCH v17.0 - アップロード文言変更 ★ -->
                         <div class="file-drop-zone" id="photoDropZone">
-                            写真をアップロード（クリックまたはドラッグ＆ドロップ）
+                            写真をアップロード<span class="upload-hint">（クリックまたはドラッグ＆ドロップ）</span>
                         </div>
+                        <!-- ★ END PATCH v17.0 ★ -->
                         <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
                         <div id="photoPreview"></div>
                     </div>
 
                     <div class="form-group">
                         <label>名刺画像</label>
+                        <!-- ★ BEGIN PATCH v17.0 - カメラボタン削除、文言変更 ★ -->
                         <div class="file-drop-zone card-image-zone" id="cardImageDropZone">
-                            名刺画像をアップロード（クリックまたはドラッグ＆ドロップ）
+                            名刺画像をアップロード<span class="upload-hint">（クリックまたはドラッグ＆ドロップ）</span>
                         </div>
-                        <button type="button" class="btn-secondary camera-button" onclick="openCamera()">
-                            📷 カメラで撮影
-                        </button>
+                        <!-- カメラボタンを削除 -->
                         <input type="file" id="cardImageUpload" accept="image/*" style="display: none;" onchange="handleCardImageUpload(event)">
+                        <!-- ★ END PATCH v17.0 ★ -->
                         <div id="cardImagePreview"></div>
                     </div>
 
@@ -1809,6 +1945,7 @@
                     </div>
 
                     <!-- 初回ミーティングセクション（編集時のみ表示） -->
+                    <!-- ★ BEGIN PATCH v17.0 - 初回ミーティングセクション常時表示対応 ★ -->
                     <div class="first-meeting-section" id="firstMeetingSection" style="display: none;">
                         <h4>初回ミーティング情報</h4>
                         <div class="form-group">
@@ -1833,6 +1970,7 @@
                             <div id="firstMeetingAttachments" class="file-list"></div>
                         </div>
                     </div>
+                    <!-- ★ END PATCH v17.0 ★ -->
 
                     <div class="action-buttons">
                         <button type="submit" class="btn-primary">保存</button>
@@ -2210,6 +2348,14 @@
         let selectedFirstMeetingFiles = [];
         let hasFirstMeeting = {};  // 連絡先IDをキーとして初回ミーティングの有無を管理
         // ★ END PATCH v16.0 - グローバル変数追加 ★
+
+        // ★ BEGIN PATCH v17.0 - グローバル変数追加 ★
+        let userSettings = {
+            viewMode: 'card',
+            filterVisible: false,
+            meetingTemplate: ''
+        };
+        // ★ END PATCH v17.0 ★
         
         // ★ v12.0: Dropbox共有リンクを直接アクセス可能な形式に変換
         function toDirectLink(url) {
@@ -2266,7 +2412,10 @@
                 // ★ BEGIN PATCH v15.0 - 初期設定追加 ★ */
                 initializeViewMode();
                 initializeFilterVisibility();
-                checkCameraSupport();
+                // ★ BEGIN PATCH v17.0 - カメラサポートチェック削除、代替処理追加 ★
+                // checkCameraSupport(); // 削除
+                setupCardImageInput();
+                // ★ END PATCH v17.0 ★
                 updateConnectionStatus();
                 /* ★ END PATCH v15.0 ★ */
                 
@@ -2430,6 +2579,10 @@
             viewMode = mode;
             localStorage.setItem('viewMode', mode);
             
+            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
+            saveOptions();
+            // ★ END PATCH v17.0 ★
+            
             if (mode === 'card') {
                 document.getElementById('cardViewBtn').classList.add('active');
                 document.getElementById('listViewBtn').classList.remove('active');
@@ -2448,6 +2601,10 @@
             
             filterVisible = !filterVisible;
             localStorage.setItem('filterVisible', filterVisible);
+            
+            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
+            saveOptions();
+            // ★ END PATCH v17.0 ★
             
             if (filterVisible) {
                 filterContent.classList.add('show');
@@ -2586,10 +2743,161 @@
             const templateContent = document.getElementById('templateContent').value;
             localStorage.setItem('meetingTemplate', templateContent);
             
+            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
+            saveOptions();
+            // ★ END PATCH v17.0 ★
+            
             showNotification('テンプレートを保存しました');
             hideTemplateEditor();
         }
         // ★ END PATCH v16.0 - テンプレート機能追加 ★
+
+        // ★ BEGIN PATCH v17.0 - 設定保存・読み込み関数 ★
+        async function saveOptions() {
+            try {
+                userSettings.viewMode = viewMode;
+                userSettings.filterVisible = filterVisible;
+                userSettings.meetingTemplate = localStorage.getItem('meetingTemplate') || '';
+                
+                // options.jsonに保存
+                const optionsData = {
+                    dropdownOptions: dropdownOptions,
+                    userSettings: userSettings
+                };
+                
+                await saveJsonFile('/1to1App/options.json', optionsData);
+            } catch (error) {
+                console.error('設定保存エラー:', error);
+            }
+        }
+
+        async function loadOptions() {
+            try {
+                const optionsData = await loadJsonFile('/1to1App/options.json');
+                if (optionsData) {
+                    if (optionsData.dropdownOptions) {
+                        dropdownOptions = optionsData.dropdownOptions;
+                    }
+                    if (optionsData.userSettings) {
+                        userSettings = optionsData.userSettings;
+                        viewMode = userSettings.viewMode || 'card';
+                        filterVisible = userSettings.filterVisible || false;
+                        if (userSettings.meetingTemplate) {
+                            localStorage.setItem('meetingTemplate', userSettings.meetingTemplate);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('設定読み込みエラー:', error);
+            }
+        }
+
+        // URL・メールアドレスの自動リンク化
+        function linkifyText(text) {
+            // URLパターン
+            const urlPattern = /(https?:\/\/[^\s<]+)/g;
+            // メールパターン
+            const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+            
+            text = text.replace(urlPattern, '<a href="$1" target="_blank">$1</a>');
+            text = text.replace(emailPattern, '<a href="mailto:$1">$1</a>');
+            
+            return text;
+        }
+
+        // 名刺画像入力の設定
+        function setupCardImageInput() {
+            const cardImageZone = document.getElementById('cardImageDropZone');
+            const cardImageInput = document.getElementById('cardImageUpload');
+            
+            if (!cardImageZone || !cardImageInput) return;
+            
+            // モバイルの場合はcapture属性を追加
+            if (window.matchMedia("(max-width: 768px)").matches) {
+                cardImageInput.setAttribute('capture', 'camera');
+            }
+            
+            // 既存のイベントリスナー設定
+            cardImageZone.addEventListener('click', () => cardImageInput.click());
+            cardImageZone.addEventListener('dragover', handleDragOver);
+            cardImageZone.addEventListener('dragleave', handleDragLeave);
+            cardImageZone.addEventListener('drop', (e) => handleCardImageDrop(e));
+        }
+
+        // クリックハンドラー
+        function handleContactClick(event, contactId) {
+            // リンククリックの場合は何もしない
+            if (event.target.tagName === 'A') {
+                return;
+            }
+            showContactDetail(contactId);
+        }
+
+        // 強み・経歴の折りたたみ
+        function toggleCollapsible(elementId) {
+            const element = document.getElementById(elementId);
+            const link = event.target;
+            
+            if (element.classList.contains('collapsed')) {
+                element.classList.remove('collapsed');
+                link.textContent = '閉じる';
+            } else {
+                element.classList.add('collapsed');
+                link.textContent = '続きを読む';
+            }
+        }
+
+        // 添付ファイルの実体チェック
+        async function validateAttachments() {
+            let needsSave = false;
+            
+            // 連絡先の添付ファイルチェック
+            for (const contact of contacts) {
+                if (contact.attachments && contact.attachments.length > 0) {
+                    const validAttachments = [];
+                    for (const att of contact.attachments) {
+                        try {
+                            await callDropboxSafe(dropbox.filesGetMetadata, [{ path: att.path }]);
+                            validAttachments.push(att);
+                        } catch (error) {
+                            if (error.status === 409) {
+                                console.log(`ファイルが存在しません: ${att.path}`);
+                                needsSave = true;
+                            } else {
+                                validAttachments.push(att); // エラーでも保持
+                            }
+                        }
+                    }
+                    contact.attachments = validAttachments;
+                }
+            }
+            
+            // ミーティングの添付ファイルチェック
+            for (const meeting of meetings) {
+                if (meeting.attachments && meeting.attachments.length > 0) {
+                    const validAttachments = [];
+                    for (const att of meeting.attachments) {
+                        try {
+                            await callDropboxSafe(dropbox.filesGetMetadata, [{ path: att.path }]);
+                            validAttachments.push(att);
+                        } catch (error) {
+                            if (error.status === 409) {
+                                console.log(`ファイルが存在しません: ${att.path}`);
+                                needsSave = true;
+                            } else {
+                                validAttachments.push(att);
+                            }
+                        }
+                    }
+                    meeting.attachments = validAttachments;
+                }
+            }
+            
+            if (needsSave) {
+                await saveData();
+            }
+        }
+        // ★ END PATCH v17.0 - 新規関数 ★
         
         // ===== Dropbox認証 =====
         // ★ BEGIN PATCH v14.0 - PKCE認証フロー ★
@@ -2724,6 +3032,12 @@
                 // データを読み込み
                 console.log('データを読み込み中...');
                 await loadData();
+                
+                // ★ BEGIN PATCH v17.0 - 設定適用 ★
+                // 設定を適用
+                initializeViewMode();
+                initializeFilterVisibility();
+                // ★ END PATCH v17.0 ★
                 
                 // ★ v12.0: 顔写真URLのマイグレーションを実行
                 migratePhotoUrls();
@@ -3031,6 +3345,11 @@
                     throw new Error('インターネット接続がありません');
                 }
                 
+                // ★ BEGIN PATCH v17.0 - 設定読み込み追加 ★
+                // 設定を読み込み
+                await loadOptions();
+                // ★ END PATCH v17.0 ★
+                
                 // 連絡先データを読み込み
                 const contactsData = await loadJsonFile('/1to1App/contacts.json');
                 contacts = contactsData || [];
@@ -3043,14 +3362,21 @@
                 migrateMeetingsData();
                 migrateContactsData();
                 
-                // ドロップダウンオプションを読み込み
-                const optionsData = await loadJsonFile('/1to1App/options.json');
-                if (optionsData) {
-                    dropdownOptions = optionsData;
+                // ドロップダウンオプションを読み込み（すでにloadOptionsで読み込み済みの場合はスキップ）
+                if (Object.keys(dropdownOptions).every(key => dropdownOptions[key].length === 0)) {
+                    const optionsData = await loadJsonFile('/1to1App/options.json');
+                    if (optionsData && optionsData.dropdownOptions) {
+                        dropdownOptions = optionsData.dropdownOptions;
+                    }
                 }
                 
                 // 紹介元リンクを更新
                 updateAllReferrerLinks();
+                
+                // ★ BEGIN PATCH v17.0 - ファイル検証追加 ★
+                // ファイル実体チェック
+                await validateAttachments();
+                // ★ END PATCH v17.0 ★
             } catch (error) {
                 console.error('データ読み込みエラー:', error);
                 if (error.message === 'インターネット接続がありません') {
@@ -3176,9 +3502,15 @@
                 await saveJsonFile('/1to1App/meetings.json', meetings);
                 console.log('   ✅ meetings.json 保存完了');
                 
-                // ドロップダウンオプションを保存
-                await saveJsonFile('/1to1App/options.json', dropdownOptions);
-                console.log('   ✅ options.json 保存完了');
+                // ★ BEGIN PATCH v17.0 - options.json保存変更 ★
+                // ドロップダウンオプションと設定を保存
+                const optionsData = {
+                    dropdownOptions: dropdownOptions,
+                    userSettings: userSettings
+                };
+                await saveJsonFile('/1to1App/options.json', optionsData);
+                console.log('   ✅ options.json 保存完了（設定含む）');
+                // ★ END PATCH v17.0 ★
                 
                 hideLoading();
                 console.log('📊 データ保存完了');
@@ -3250,8 +3582,17 @@
         // ★ v12.0: ファイルアップロード修正（toDirectLink使用）
         // ===== ファイルアップロード（最終修正版） =====
         // ★ BEGIN PATCH v15.0 - uploadFile関数の修正（カスタムパス対応） ★
+        // ★ BEGIN PATCH v17.0 - uploadFile関数修正（モバイル対応） ★
         async function uploadFile(file, customName = null, customPath = null) {
-            const fileName = sanitizeFileName(customName || file.name);
+            // モバイル判定
+            const isMobile = window.matchMedia("(max-width: 768px)").matches;
+            
+            // ファイル名処理（モバイルサフィックス追加）
+            let fileName = sanitizeFileName(customName || file.name);
+            if (isMobile && fileName.includes('photo')) {
+                fileName = fileName.replace('.', '_mobile.');
+            }
+            
             const basePath = customPath || '/1to1App/attachments/';
             const path = `${basePath}${fileName}`;
             
@@ -3322,8 +3663,8 @@
                     }
                 }
                 
-                // すべてのURLを直接アクセス形式に変換
-                shareUrl = toDirectLink(shareUrl);
+                // すべてのURLを直接アクセス形式に変換（タイムスタンプ追加）
+                shareUrl = toDirectLink(shareUrl) + `&t=${Date.now()}`;
                 console.log('   🔗 直接アクセスURL:', shareUrl);
                 
                 console.log(`   ✅ 完了: ${fileName}`);
@@ -3353,6 +3694,7 @@
                 throw error;
             }
         }
+        // ★ END PATCH v17.0 - uploadFile関数修正 ★
         /* ★ END PATCH v15.0 - uploadFile関数の修正 ★ */
         
         // ★ v11.0: 顔写真のドラッグ＆ドロップ対応
@@ -3705,6 +4047,7 @@
         
         // ===== UI関数 =====
         // ★ BEGIN PATCH v16.0 - showContactForm修正（初回ミーティング対応） ★
+        // ★ BEGIN PATCH v17.0 - showContactForm修正（新規登録時も初回ミーティング表示） ★
         function showContactForm(contactId = null) {
             // 詳細モーダルを閉じる
             closeModal('contactDetailModal');
@@ -3769,7 +4112,21 @@
                     }
                 }
             } else {
+                // 新規登録モード
                 document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+                
+                // 初回ミーティングセクションを表示
+                document.getElementById('firstMeetingSection').style.display = 'block';
+                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
+                
+                // 現在時刻を設定
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
+                
+                // テンプレートを適用
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
             }
             
             setupMultiSelect();
@@ -3777,9 +4134,11 @@
             document.getElementById('contactFormModal').style.display = 'block';
             document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
         }
+        // ★ END PATCH v17.0 - showContactForm修正 ★
         // ★ END PATCH v16.0 - showContactForm修正 ★
         
         // ★ BEGIN PATCH v15.0 - showContactDetailの修正（タブ表示） ★
+        // ★ BEGIN PATCH v17.0 - showContactDetail修正（折りたたみ、リンク化） ★
         function showContactDetail(contactId) {
             const contact = contacts.find(c => c.id === contactId);
             if (!contact) return;
@@ -3791,7 +4150,7 @@
                 <div style="margin-bottom: 20px;">
                     ${contact.photoUrl ? 
                         `<div class="contact-photo" style="width: 120px; height: 120px; margin-bottom: 20px;">
-                            <img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">
+                            <img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">
                         </div>` : ''}
                     <h3 style="font-size: 24px; margin-bottom: 10px;">${escapeHtml(contact.name)}</h3>
                     ${contact.yomi ? `<p style="color: #aaaaaa; margin-bottom: 10px;">よみ: ${escapeHtml(contact.yomi)}</p>` : ''}
@@ -3853,14 +4212,24 @@
                         ${contact.strengths ? `
                             <div style="margin-bottom: 20px;">
                                 <strong>強み:</strong>
-                                <div class="markdown">${renderMarkdown(contact.strengths)}</div>
+                                <div class="collapsible-content ${contact.strengths.length > 500 ? 'collapsed' : ''}" id="strengths-${contact.id}">
+                                    <div class="markdown">${renderMarkdown(contact.strengths)}</div>
+                                </div>
+                                ${contact.strengths.length > 500 ? `
+                                    <a href="#" class="toggle-link" onclick="toggleCollapsible('strengths-${contact.id}'); return false;">続きを読む</a>
+                                ` : ''}
                             </div>
                         ` : ''}
                         
                         ${contact.careerHistory ? `
                             <div>
                                 <strong>過去の経歴:</strong>
-                                <div class="markdown">${renderMarkdown(contact.careerHistory)}</div>
+                                <div class="collapsible-content ${contact.careerHistory.length > 500 ? 'collapsed' : ''}" id="career-${contact.id}">
+                                    <div class="markdown">${renderMarkdown(contact.careerHistory)}</div>
+                                </div>
+                                ${contact.careerHistory.length > 500 ? `
+                                    <a href="#" class="toggle-link" onclick="toggleCollapsible('career-${contact.id}'); return false;">続きを読む</a>
+                                ` : ''}
                             </div>
                         ` : ''}
                         
@@ -3878,6 +4247,7 @@
                                     <img src="${contact.cardImageUrl}" style="max-width: 100%; border-radius: 8px; cursor: pointer;" 
                                          onclick="window.open('${contact.cardImageUrl}', '_blank')"
                                          crossorigin="anonymous" 
+                                         loading="lazy"
                                          onerror="handleImageError(this, '名刺')">
                                 </div>
                             </div>
@@ -3911,35 +4281,7 @@
                 <div class="meeting-timeline">
                     <h3 style="margin-bottom: 20px;">ミーティング履歴</h3>
                     ${contactMeetings.length > 0 ? 
-                        contactMeetings.map(meeting => `
-                            <div class="meeting-item">
-                                <div class="meeting-date">${formatDateTime(meeting.datetime)}</div>
-                                <div class="markdown-content ${meeting.content.length > 500 ? 'truncated' : ''}" id="content-${meeting.id}">
-                                    ${renderMarkdown(meeting.content)}
-                                </div>
-                                ${meeting.content.length > 500 ? `
-                                    <a href="#" class="read-more" onclick="toggleContent('${meeting.id}'); return false;">続きを読む</a>
-                                ` : ''}
-                                ${meeting.tasks && meeting.tasks.length > 0 ? `
-                                    <div style="margin-top: 10px;">
-                                        <strong>次回アクション:</strong>
-                                        ${renderTaskListNew(meeting)}
-                                    </div>
-                                ` : ''}
-                                ${meeting.attachments && meeting.attachments.length > 0 ? `
-                                    <div style="margin-top: 10px;">
-                                        <strong>添付ファイル:</strong>
-                                        ${meeting.attachments.map(att => `
-                                            <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" style="margin-left: 10px;">${escapeHtml(att.name)}</a>
-                                        `).join('')}
-                                    </div>
-                                ` : ''}
-                                <div style="margin-top: 10px;">
-                                    <button class="btn-small btn-secondary" onclick="editMeeting('${meeting.id}')">編集</button>
-                                    <button class="btn-small btn-danger" onclick="deleteMeeting('${meeting.id}')">削除</button>
-                                </div>
-                            </div>
-                        `).join('') : 
+                        renderMeetingHistory(contactMeetings) : 
                         '<p style="color: #aaaaaa;">まだミーティング記録がありません。</p>'
                     }
                 </div>
@@ -3951,6 +4293,42 @@
             // モーダルを最上部にスクロール
             document.querySelector('#contactDetailModal .modal-content').scrollTop = 0;
         }
+
+        // ミーティング履歴の表示改善
+        function renderMeetingHistory(meetings) {
+            return meetings.map(meeting => `
+                <div class="meeting-card">
+                    <div class="meeting-card-header">
+                        <div class="meeting-card-date">${formatDateTime(meeting.datetime)}</div>
+                        <div class="meeting-card-actions">
+                            <button class="btn-small btn-secondary" onclick="editMeeting('${meeting.id}')">編集</button>
+                            <button class="btn-small btn-danger" onclick="deleteMeeting('${meeting.id}')">削除</button>
+                        </div>
+                    </div>
+                    <div class="markdown-content ${meeting.content.length > 500 ? 'truncated' : ''}" id="content-${meeting.id}">
+                        ${renderMarkdown(meeting.content)}
+                    </div>
+                    ${meeting.content.length > 500 ? `
+                        <a href="#" class="read-more" onclick="toggleContent('${meeting.id}'); return false;">続きを読む</a>
+                    ` : ''}
+                    ${meeting.tasks && meeting.tasks.length > 0 ? `
+                        <div class="meeting-tasks">
+                            <strong>次回アクション:</strong>
+                            ${renderTaskListNew(meeting)}
+                        </div>
+                    ` : ''}
+                    ${meeting.attachments && meeting.attachments.length > 0 ? `
+                        <div style="margin-top: 10px;">
+                            <strong>添付ファイル:</strong>
+                            ${meeting.attachments.map(att => `
+                                <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" style="margin-left: 10px;">${escapeHtml(att.name)}</a>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+        // ★ END PATCH v17.0 - showContactDetail修正 ★
         /* ★ END PATCH v15.0 - showContactDetailの修正 ★ */
         
         // 過去の経歴の折りたたみ切り替え
@@ -4536,6 +4914,7 @@
         
         // ===== レンダリング =====
         // ★ BEGIN PATCH v15.0 - renderContactListの修正（リスト表示対応） ★
+        // ★ BEGIN PATCH v17.0 - renderContactList修正（リンククリック対応） ★
         function renderContactList(filterFunc = null) {
             const grid = document.getElementById('contactGrid');
             let filteredContacts = filterFunc ? contacts.filter(filterFunc) : contacts;
@@ -4560,10 +4939,10 @@
                         '未実施';
                     
                     return `
-                        <div class="contact-list-item" onclick="showContactDetail('${contact.id}')">
+                        <div class="contact-list-item" onclick="handleContactClick(event, '${contact.id}')">
                             <div class="contact-list-photo">
                                 ${contact.photoUrl ? 
-                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
+                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
                                     `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`
                                 }
                             </div>
@@ -4573,6 +4952,10 @@
                                     ${contact.yomi ? `<span style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</span>` : ''}
                                 </div>
                                 <div class="contact-list-company">${contact.company || 'ー'}</div>
+                                <div style="display: flex; gap: 10px; margin-top: 4px;">
+                                    ${contact.email ? `<a href="mailto:${contact.email}" onclick="event.stopPropagation()" style="font-size: 13px;">📧</a>` : ''}
+                                    ${contact.homepage ? `<a href="${contact.homepage}" target="_blank" onclick="event.stopPropagation()" style="font-size: 13px;">🌐</a>` : ''}
+                                </div>
                             </div>
                             <div class="contact-list-meeting">${lastMeetingText}</div>
                         </div>
@@ -4592,19 +4975,19 @@
                     }
                     
                     return `
-                        <div class="contact-card" onclick="showContactDetail('${contact.id}')">
+                        <div class="contact-card" onclick="handleContactClick(event, '${contact.id}')">
                             <div class="contact-photo">
                                 ${contact.photoUrl ? 
-                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
+                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
                                     `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`
                                 }
                             </div>
                             <div class="contact-name">${escapeHtml(contact.name)}</div>
                             ${contact.yomi ? `<div class="contact-info" style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</div>` : ''}
                             ${contact.company ? `<div class="contact-info">会社: ${escapeHtml(contact.company)}</div>` : ''}
-                            ${contact.email ? `<div class="contact-info">📧 ${escapeHtml(contact.email)}</div>` : ''}
+                            ${contact.email ? `<div class="contact-info"><a href="mailto:${contact.email}" onclick="event.stopPropagation()">📧 ${escapeHtml(contact.email)}</a></div>` : ''}
                             ${contact.phone ? `<div class="contact-info">📱 ${escapeHtml(contact.phone)}</div>` : ''}
-                            ${contact.homepage ? `<div class="contact-info">🌐 ${escapeHtml(contact.homepage)}</div>` : ''}
+                            ${contact.homepage ? `<div class="contact-info"><a href="${contact.homepage}" target="_blank" onclick="event.stopPropagation()">🌐 ${escapeHtml(contact.homepage)}</a></div>` : ''}
                             <div class="last-meeting-info">${lastMeetingText}</div>
                             <div class="tags">
                                 ${(contact.types || []).map(type => `<span class="tag">${escapeHtml(type)}</span>`).join('')}
@@ -4616,9 +4999,10 @@
                 }).join('');
             }
         }
+        // ★ END PATCH v17.0 - renderContactList修正 ★
         /* ★ END PATCH v15.0 - renderContactListの修正 ★ */
         
-        // 画像エラーハンドリング
+        // ★ BEGIN PATCH v17.0 - 画像エラーハンドリング修正 ★
         function handleImageError(img, contactName) {
             console.error('画像読み込みエラー:', {
                 url: img.src,
@@ -4626,13 +5010,20 @@
                 error: '画像の読み込みに失敗しました'
             });
             
+            // キャッシュ問題対応
+            const originalSrc = img.src;
+            if (!originalSrc.includes('&t=')) {
+                img.src = originalSrc + `&t=${Date.now()}`;
+                return;
+            }
+            
             // crossOriginを削除して再試行
             if (img.hasAttribute('crossorigin')) {
                 img.removeAttribute('crossorigin');
-                const originalSrc = img.src;
+                const cleanUrl = originalSrc.split('&t=')[0];
                 img.src = '';
                 setTimeout(() => {
-                    img.src = originalSrc;
+                    img.src = cleanUrl + `&t=${Date.now()}`;
                     img.onerror = () => {
                         // 2回目も失敗したらwww.dropbox.com形式のURLだった場合は変換を試みる
                         if (img.src.includes('www.dropbox.com')) {
@@ -4658,6 +5049,7 @@
                 parentDiv.innerHTML = `<span style="font-size: ${parentDiv.style.width === '120px' ? '48px' : '32px'};">${contactName.charAt(0)}</span>`;
             }
         }
+        // ★ END PATCH v17.0 - 画像エラーハンドリング修正 ★
         
         // ===== 紹介元リンク =====
         function updateAllReferrerLinks() {
@@ -4763,6 +5155,7 @@
         }
         
         // ===== Markdownレンダリング =====
+        // ★ BEGIN PATCH v17.0 - renderMarkdown修正（URL・メール自動リンク化） ★
         function renderMarkdown(text) {
             if (!text) return '';
             
@@ -4772,6 +5165,9 @@
                 div.textContent = str;
                 return div.innerHTML;
             };
+            
+            // 最初にURLとメールをリンク化
+            text = linkifyText(text);
             
             // コードブロックを一時的に置換
             const codeBlocks = [];
@@ -4791,7 +5187,7 @@
             // 太字
             processedText = processedText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
             
-            // リンク
+            // リンク（Markdown形式）
             processedText = processedText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
             
             // リスト（順序なし）
@@ -4825,6 +5221,7 @@
             
             return processedText;
         }
+        // ★ END PATCH v17.0 - renderMarkdown修正 ★
         
         // ===== ドロップダウンオプション管理 =====
         function updateDropdownOptions() {
@@ -4968,13 +5365,9 @@
             photoZone.addEventListener('drop', (e) => handlePhotoDrop(e));
             
             // ★ BEGIN PATCH v15.0 - 名刺画像のドラッグ＆ドロップ ★
-            const cardImageZone = document.getElementById('cardImageDropZone');
-            const cardImageInput = document.getElementById('cardImageUpload');
-            
-            cardImageZone.addEventListener('click', () => cardImageInput.click());
-            cardImageZone.addEventListener('dragover', handleDragOver);
-            cardImageZone.addEventListener('dragleave', handleDragLeave);
-            cardImageZone.addEventListener('drop', (e) => handleCardImageDrop(e));
+            // ★ BEGIN PATCH v17.0 - setupCardImageInput呼び出しに変更 ★
+            setupCardImageInput();
+            // ★ END PATCH v17.0 ★
             /* ★ END PATCH v15.0 ★ */
             
             // 連絡先の添付ファイル
@@ -5161,7 +5554,7 @@
 
             try {
                 const exportData = {
-                    version: '2.7',  // ★ BEGIN PATCH v16.0 - バージョン更新 ★
+                    version: '2.8',  // ★ BEGIN PATCH v17.0 - バージョン更新 ★
                     exportDate: new Date().toISOString(),
                     contacts: contacts,
                     meetings: meetings,
@@ -5293,6 +5686,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 setupFileDragDrop();
+                // ★ BEGIN PATCH v17.0 - 名刺画像入力設定追加 ★
+                setupCardImageInput();
+                // ★ END PATCH v17.0 ★
                 
                 // モーダルの外側クリックで閉じる
                 document.querySelectorAll('.modal').forEach(modal => {
@@ -5331,30 +5727,5 @@
                 });
                 
                 window.addEventListener('offline', () => {
-                    showNotification('インターネット接続が切断されました', 'error');
-                    const statusElement = document.getElementById('connection-status');
-                    if (statusElement) {
-                        statusElement.style.color = '#d93025';
-                    }
-                });
-                
-            } catch (error) {
-                console.error('イベントリスナー設定エラー:', error);
-            }
-        });
-        
-        // Production readiness
-        // ★ BEGIN PATCH v16.0 - コンソールログ更新 ★
-        console.log('=== 1to1 Meeting System v16.0 (改善版) ===');
-        console.log('✅ 連絡先フォーム2段組レイアウト: CSS Gridで視認性向上');
-        console.log('✅ 初回ミーティング編集対応: 連絡先編集時に入力可能');
-        console.log('✅ 過去の経歴欄削除: ミーティングフォームから恒久削除');
-        console.log('✅ マルチセレクトバグ修正: 新規登録時の初期化問題解決');
-        console.log('✅ テンプレート機能: ミーティング内容の定型文対応');
-        console.log('✅ 既存機能互換性: v15.0までの全機能を継承');
-        console.log('================================');
-        console.log('📋 納品準備完了 - v16.0');
-        // ★ END PATCH v16.0 - コンソールログ更新 ★
-    </script>
-</body>
-</html>
+                    
+            
