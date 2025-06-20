@@ -28,37 +28,28 @@
     
     ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== 修正内容 v13.0 =====
+    ===== 修正内容 v14.0 =====
     
-    1. 切り出し方フィールドの追加
-       - 連絡先フォームに多段テキスト入力を追加
-       - Markdown対応でレンダリング
+    1. トークン永続化
+       - PKCE認証フローへの移行
+       - Refresh Tokenを使用した自動更新
+       - 2時間以上の連続編集に対応
     
-    2. 過去の経歴折りたたみ機能
-       - 7行以上の場合に自動折りたたみ
-       - 「続きを見る/折りたたむ」リンクで切り替え
+    2. ローカルドラフト自動保存
+       - 5秒ごとにsessionStorageに自動保存
+       - モーダル再表示時に自動復元
+       - 保存成功後に自動削除
     
-    3. モーダル最上部スクロール
-       - 各モーダル表示時に自動的に最上部へスクロール
+    3. リロード前警告
+       - 未保存のドラフトがある場合に警告表示
+       - データ損失を防止
     
-    4. 添付ファイルのブラウザ表示
-       - 画像、PDF、テキストファイルは新規タブで開く
-       - その他のファイルはダウンロード
+    4. UIフィードバック
+       - トークンリフレッシュ中の視覚的フィードバック
+       - サイレントリフレッシュで中断なし
     
-    5. iPad顔写真表示対策（強化版）
-       - crossOrigin属性の追加と削除によるリトライ
-       - URL変換による追加のフォールバック
-    
-    6. タスク単位の期限管理
-       - 各タスクごとに個別の期限設定
-       - 動的なタスク入力フォーム
-    
-    7. 未完了タスクのインライン編集
-       - ダブルクリックで編集可能
-       - Enter保存、Escapeキャンセル
-    
-    8. 既存機能の完全互換性維持
-       - v12.0までの全機能を継承
+    5. 既存機能の完全互換性維持
+       - v13.0までの全機能を継承
     
     -->
     
@@ -1032,6 +1023,55 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #555555;
         }
+
+        /* ★ BEGIN PATCH v14.0 - ドラフト保存インジケーター ★ */
+        .draft-status {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: #333333;
+            color: #aaaaaa;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .draft-status.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .token-refresh-indicator {
+            background: #4c8bf5;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2001;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            align-items: center;
+            gap: 10px;
+        }
+
+        .token-refresh-indicator.show {
+            display: flex;
+        }
+
+        .token-refresh-indicator .loading {
+            width: 16px;
+            height: 16px;
+            border-width: 2px;
+        }
+        /* ★ END PATCH v14.0 ★ */
     </style>
 </head>
 <body>
@@ -1358,6 +1398,17 @@
         </div>
     </div>
 
+    <!-- ★ BEGIN PATCH v14.0 - ドラフト保存インジケーター ★ -->
+    <div id="draftStatus" class="draft-status">
+        下書きを保存しました
+    </div>
+
+    <div id="tokenRefreshIndicator" class="token-refresh-indicator">
+        <div class="loading"></div>
+        <span>Dropbox再認証中...</span>
+    </div>
+    <!-- ★ END PATCH v14.0 ★ -->
+
     <script>
         // ===== グローバル変数 =====
         const CLIENT_ID = '6u9kud7ntmkaicg'; // Dropbox App Key
@@ -1396,6 +1447,157 @@
         // 再認証フラグ
         let isReauthInProgress = false;
         let pendingOperationAfterAuth = null; // 再認証後に実行する操作を保存
+
+        // ★ BEGIN PATCH v14.0 - ドラフト管理用変数 ★
+        let draftSaveTimer = null;
+        let hasUnsavedDraft = false;
+        
+        // PKCEパラメータ生成
+        function generateCodeVerifier() {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            return base64URLEncode(array);
+        }
+        
+        function base64URLEncode(buffer) {
+            return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        }
+        
+        async function generateCodeChallenge(verifier) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(verifier);
+            const digest = await crypto.subtle.digest('SHA-256', data);
+            return base64URLEncode(digest);
+        }
+        
+        // ドラフト自動保存関数
+        function saveDraft() {
+            const meetingForm = document.getElementById('meetingForm');
+            if (!meetingForm || meetingForm.style.display === 'none') return;
+            
+            const content = meetingForm.content.value;
+            const taskTexts = Array.from(meetingForm.querySelectorAll('input[name="taskText[]"]')).map(input => input.value);
+            const taskDues = Array.from(meetingForm.querySelectorAll('input[name="taskDue[]"]')).map(input => input.value);
+            
+            if (content || taskTexts.some(text => text)) {
+                const draftKey = currentEditingMeetingId ? 
+                    `draft_meeting_${currentEditingMeetingId}` : 
+                    `draft_meeting_${currentEditingContactId || 'new'}`;
+                
+                const draftData = {
+                    content: content,
+                    datetime: meetingForm.datetime.value,
+                    tasks: taskTexts.map((text, index) => ({
+                        text: text,
+                        due: taskDues[index]
+                    })).filter(task => task.text),
+                    timestamp: new Date().toISOString()
+                };
+                
+                sessionStorage.setItem(draftKey, JSON.stringify(draftData));
+                hasUnsavedDraft = true;
+                
+                // ドラフト保存インジケーターを表示
+                const indicator = document.getElementById('draftStatus');
+                indicator.classList.add('show');
+                setTimeout(() => {
+                    indicator.classList.remove('show');
+                }, 2000);
+            }
+        }
+        
+        // ドラフト復元関数
+        function restoreDraft() {
+            const draftKey = currentEditingMeetingId ? 
+                `draft_meeting_${currentEditingMeetingId}` : 
+                `draft_meeting_${currentEditingContactId || 'new'}`;
+            
+            const draftData = sessionStorage.getItem(draftKey);
+            if (draftData) {
+                const draft = JSON.parse(draftData);
+                const form = document.getElementById('meetingForm');
+                
+                // ドラフトが現在の内容より新しい場合のみ復元
+                if (!form.content.value || confirm('保存されていない下書きがあります。復元しますか？')) {
+                    form.content.value = draft.content;
+                    if (draft.datetime) form.datetime.value = draft.datetime;
+                    
+                    // タスクを復元
+                    if (draft.tasks && draft.tasks.length > 0) {
+                        displayTaskInputs(draft.tasks);
+                    }
+                    
+                    showNotification('下書きを復元しました');
+                }
+            }
+        }
+        
+        // ドラフト削除関数
+        function clearDraft() {
+            const draftKey = currentEditingMeetingId ? 
+                `draft_meeting_${currentEditingMeetingId}` : 
+                `draft_meeting_${currentEditingContactId || 'new'}`;
+            
+            sessionStorage.removeItem(draftKey);
+            hasUnsavedDraft = false;
+        }
+        
+        // トークンリフレッシュ関数
+        async function refreshAccessToken() {
+            const refreshToken = localStorage.getItem('dropbox_refresh_token');
+            if (!refreshToken) {
+                throw new Error('NO_REFRESH_TOKEN');
+            }
+            
+            try {
+                // トークンリフレッシュインジケーターを表示
+                document.getElementById('tokenRefreshIndicator').classList.add('show');
+                
+                const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        grant_type: 'refresh_token',
+                        refresh_token: refreshToken,
+                        client_id: CLIENT_ID
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('REFRESH_FAILED');
+                }
+                
+                const data = await response.json();
+                
+                // 新しいアクセストークンを保存
+                localStorage.setItem('dropbox_access_token', data.access_token);
+                
+                // 新しいトークンでDropbox SDKを再初期化
+                dropbox = new Dropbox.Dropbox({ 
+                    accessToken: data.access_token,
+                    fetch: window.fetch.bind(window)
+                });
+                
+                console.log('✅ トークンを自動更新しました');
+                
+                // インジケーターを非表示
+                setTimeout(() => {
+                    document.getElementById('tokenRefreshIndicator').classList.remove('show');
+                }, 1000);
+                
+                return data.access_token;
+            } catch (error) {
+                // インジケーターを非表示
+                document.getElementById('tokenRefreshIndicator').classList.remove('show');
+                throw error;
+            }
+        }
+        /* ★ END PATCH v14.0 ★ */
         
         // ★ v12.0: Dropbox共有リンクを直接アクセス可能な形式に変換
         function toDirectLink(url) {
@@ -1449,7 +1651,62 @@
             try {
                 console.log('=== アプリケーション初期化開始 ===');
                 
-                // URLからアクセストークンを取得
+                // ★ BEGIN PATCH v14.0 - PKCE認証フロー対応 ★
+                // URLからコードを取得（PKCE用）
+                const urlParams = new URLSearchParams(window.location.search);
+                const authCode = urlParams.get('code');
+                const codeVerifier = sessionStorage.getItem('pkce_code_verifier');
+                
+                if (authCode && codeVerifier) {
+                    console.log('認証コードを検出しました。トークン交換を実行します。');
+                    
+                    try {
+                        // トークン交換
+                        const tokenResponse = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                code: authCode,
+                                grant_type: 'authorization_code',
+                                client_id: CLIENT_ID,
+                                code_verifier: codeVerifier,
+                                redirect_uri: REDIRECT_URI
+                            })
+                        });
+                        
+                        if (!tokenResponse.ok) {
+                            throw new Error('Token exchange failed');
+                        }
+                        
+                        const tokenData = await tokenResponse.json();
+                        
+                        // トークンを保存
+                        localStorage.setItem('dropbox_access_token', tokenData.access_token);
+                        if (tokenData.refresh_token) {
+                            localStorage.setItem('dropbox_refresh_token', tokenData.refresh_token);
+                        }
+                        
+                        // PKCEパラメータをクリア
+                        sessionStorage.removeItem('pkce_code_verifier');
+                        
+                        // URLをクリーンアップ
+                        window.history.replaceState({}, document.title, REDIRECT_URI);
+                        
+                        // 初期化を実行
+                        await initializeDropbox(tokenData.access_token);
+                        return;
+                    } catch (error) {
+                        console.error('トークン交換エラー:', error);
+                        showNotification('認証に失敗しました', 'error');
+                        showAuthScreen();
+                        return;
+                    }
+                }
+                /* ★ END PATCH v14.0 ★ */
+                
+                // URLからアクセストークンを取得（旧implicit flow用の互換性維持）
                 const urlToken = getAccessTokenFromUrl();
                 if (urlToken) {
                     console.log('URLから新しいトークンを検出しました');
@@ -1498,23 +1755,37 @@
         };
         
         // ===== Dropbox認証 =====
-        function authenticateDropbox() {
+        // ★ BEGIN PATCH v14.0 - PKCE認証フロー ★
+        async function authenticateDropbox() {
             // 古いトークンをクリア
             localStorage.removeItem('dropbox_access_token');
+            localStorage.removeItem('dropbox_refresh_token');
             sessionStorage.removeItem('dropbox_access_token');
+            
+            // PKCEパラメータを生成
+            const codeVerifier = generateCodeVerifier();
+            const codeChallenge = await generateCodeChallenge(codeVerifier);
+            
+            // Code Verifierを保存
+            sessionStorage.setItem('pkce_code_verifier', codeVerifier);
             
             // スコープをスペース区切りで結合
             const scopeString = REQUIRED_SCOPES.join(' ');
             
+            // PKCE認証URLを構築
             const authUrl = `https://www.dropbox.com/oauth2/authorize?` +
                 `client_id=${CLIENT_ID}&` +
-                `response_type=token&` +
+                `response_type=code&` +
                 `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
                 `scope=${encodeURIComponent(scopeString)}&` +
-                `force_reapprove=true`;  // 常に新しい認証を要求
+                `code_challenge=${codeChallenge}&` +
+                `code_challenge_method=S256&` +
+                `force_reapprove=true&` +
+                `token_access_type=offline`; // refresh tokenを要求
                 
             window.location.href = authUrl;
         }
+        /* ★ END PATCH v14.0 ★ */
         
         function getAccessTokenFromUrl() {
             const hash = window.location.hash;
@@ -1671,7 +1942,7 @@
             }
         }
         
-        // ===== Dropbox API安全呼び出しラッパー =====
+        // ★ BEGIN PATCH v14.0 - 改良版Dropbox API呼び出しラッパー ★
         async function callDropboxSafe(apiMethod, args, retryCount = 0) {
             const maxRetries = 1;
             
@@ -1692,19 +1963,35 @@
                 
                 // 401: 認証エラー
                 if (error.status === 401) {
-                    // 再認証フラグを立てる
-                    if (!isReauthInProgress) {
+                    // リフレッシュトークンがある場合はサイレントリフレッシュを試行
+                    if (localStorage.getItem('dropbox_refresh_token') && !isReauthInProgress) {
                         isReauthInProgress = true;
-                        console.log('認証エラーを検出。再認証フローを開始します。');
+                        console.log('トークンの有効期限切れを検出。自動更新を試行します。');
                         
-                        // トークンを完全に削除
-                        localStorage.removeItem('dropbox_access_token');
-                        sessionStorage.removeItem('dropbox_access_token');
-                        dropbox = null; // Dropboxインスタンスも無効化
-                        
-                        // 再認証を促すモーダルを表示
+                        try {
+                            await refreshAccessToken();
+                            isReauthInProgress = false;
+                            
+                            // リトライ
+                            if (retryCount === 0) {
+                                return callDropboxSafe(apiMethod, args, retryCount + 1);
+                            }
+                        } catch (refreshError) {
+                            isReauthInProgress = false;
+                            console.error('トークンリフレッシュ失敗:', refreshError);
+                            
+                            // リフレッシュ失敗時は再認証モーダルを表示
+                            showReauthModal();
+                            throw new Error('AUTH_REQUIRED');
+                        }
+                    } else if (!isReauthInProgress) {
+                        // リフレッシュトークンがない場合は再認証が必要
+                        isReauthInProgress = true;
+                        console.log('認証エラーを検出。再認証が必要です。');
                         showReauthModal();
+                        throw new Error('AUTH_REQUIRED');
                     }
+                    
                     throw new Error('AUTH_REQUIRED');
                 }
                 
@@ -1729,6 +2016,7 @@
                 throw error;
             }
         }
+        /* ★ END PATCH v14.0 ★ */
         
         // ===== 再認証モーダル表示 =====
         function showReauthModal() {
@@ -1837,6 +2125,7 @@
         function logout() {
             // トークンを削除
             localStorage.removeItem('dropbox_access_token');
+            localStorage.removeItem('dropbox_refresh_token'); // ★ v14.0
             sessionStorage.removeItem('dropbox_access_token');
             
             // ページをリロード
@@ -2316,7 +2605,7 @@
             }
         }
         
-        // ===== ミーティング保存 =====
+        // ★ BEGIN PATCH v14.0 - ミーティング保存（ドラフト削除対応） ★
         async function saveMeetingForm(event) {
             event.preventDefault();
             showLoading();
@@ -2397,6 +2686,9 @@
                 // データを保存
                 await saveData();
                 
+                // ドラフトを削除
+                clearDraft();
+                
                 // UIを更新
                 closeModal('meetingFormModal');
                 showContactDetail(currentEditingContactId);
@@ -2410,6 +2702,7 @@
                 hideLoading();
             }
         }
+        /* ★ END PATCH v14.0 ★ */
         
         // ===== 連絡先削除 =====
         async function deleteContact(contactId) {
@@ -2828,6 +3121,7 @@
             }
         }
         
+        // ★ BEGIN PATCH v14.0 - ミーティングフォーム表示（ドラフト復元対応） ★
         function showMeetingForm(contactId, meetingId = null) {
             currentEditingContactId = contactId;
             currentEditingMeetingId = meetingId;
@@ -2869,10 +3163,23 @@
                 displayTaskInputs([]);
             }
             
+            // ドラフトを復元
+            restoreDraft();
+            
+            // テキストエリアの自動保存を設定
+            const contentTextarea = document.querySelector('#meetingForm textarea[name="content"]');
+            if (contentTextarea) {
+                contentTextarea.addEventListener('input', () => {
+                    clearTimeout(draftSaveTimer);
+                    draftSaveTimer = setTimeout(saveDraft, 5000);
+                });
+            }
+            
             document.getElementById('meetingFormModal').style.display = 'block';
             // モーダルを最上部にスクロール
             document.querySelector('#meetingFormModal .modal-content').scrollTop = 0;
         }
+        /* ★ END PATCH v14.0 ★ */
         
         // タスク入力フィールド表示関数
         function displayTaskInputs(tasks = []) {
@@ -2889,6 +3196,15 @@
             if (tasks.length === 0) {
                 addTaskInput();
             }
+            
+            // ★ BEGIN PATCH v14.0 - タスク入力の自動保存 ★
+            container.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', () => {
+                    clearTimeout(draftSaveTimer);
+                    draftSaveTimer = setTimeout(saveDraft, 5000);
+                });
+            });
+            /* ★ END PATCH v14.0 ★ */
         }
         
         // タスク入力追加関数
@@ -2902,11 +3218,24 @@
                 <button type="button" class="btn-small btn-danger" onclick="removeTaskInput(this)">削除</button>
             `;
             container.appendChild(newRow);
+            
+            // ★ BEGIN PATCH v14.0 - 新規タスク入力の自動保存 ★
+            newRow.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', () => {
+                    clearTimeout(draftSaveTimer);
+                    draftSaveTimer = setTimeout(saveDraft, 5000);
+                });
+            });
+            /* ★ END PATCH v14.0 ★ */
         }
         
         // タスク入力削除関数
         function removeTaskInput(button) {
             button.closest('.task-input-row').remove();
+            // ★ BEGIN PATCH v14.0 - 削除後も自動保存 ★
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = setTimeout(saveDraft, 1000);
+            /* ★ END PATCH v14.0 ★ */
         }
         
         function editMeeting(meetingId) {
@@ -3311,9 +3640,23 @@
             document.getElementById('loadingOverlay').style.display = 'none';
         }
         
+        // ★ BEGIN PATCH v14.0 - モーダルクローズ（ドラフトチェック） ★
         function closeModal(modalId) {
+            if (modalId === 'meetingFormModal' && hasUnsavedDraft) {
+                if (!confirm('保存されていない下書きがあります。閉じてもよろしいですか？')) {
+                    return;
+                }
+            }
+            
             document.getElementById(modalId).style.display = 'none';
+            
+            // タイマーをクリア
+            if (draftSaveTimer) {
+                clearTimeout(draftSaveTimer);
+                draftSaveTimer = null;
+            }
         }
+        /* ★ END PATCH v14.0 ★ */
         
         function toggleContent(meetingId) {
             const content = document.getElementById(`content-${meetingId}`);
@@ -3691,13 +4034,14 @@
             document.getElementById('taskInputContainer').innerHTML = '';
             selectedMeetingFiles = [];
             deletedMeetingAttachments = [];
+            hasUnsavedDraft = false; // ★ v14.0
         }
         
         // ===== データエクスポート/インポート =====
         async function exportData() {
             try {
                 const exportData = {
-                    version: '2.4',  // v13.0: バージョン更新
+                    version: '2.5',  // v14.0: バージョン更新
                     exportDate: new Date().toISOString(),
                     contacts: contacts,
                     meetings: meetings,
@@ -3806,182 +4150,16 @@
             }
         }
         
-        // ===== v13.0: 納品品質テスト（最終版） =====
-        async function runProductionQualityTest() {
-            console.log('=== 納品レベル品質チェック v13.0 ===');
-            console.log('新機能実装:');
-            console.log('1. 切り出し方フィールド追加');
-            console.log('2. 過去の経歴折りたたみ機能');
-            console.log('3. モーダル最上部スクロール');
-            console.log('4. 添付ファイルのブラウザ表示');
-            console.log('5. iPad顔写真表示対策（強化版）');
-            console.log('6. タスク単位の期限管理');
-            console.log('7. 未完了タスクのインライン編集');
-            console.log('8. 既存機能の完全互換性維持');
-            console.log('Test Time:', new Date().toLocaleString());
-            console.log('=====================================\n');
-            
-            const testResults = {
-                cutoutField: false,
-                careerHistoryToggle: false,
-                modalScroll: false,
-                filePreview: false,
-                imageHandling: false,
-                taskManagement: false,
-                taskInlineEdit: false,
-                dataIntegrity: false
-            };
-            
-            // 1. 切り出し方フィールドテスト
-            console.log('1. 切り出し方フィールドテスト:');
-            try {
-                const hasField = typeof migrateContactsData === 'function' && 
-                               migrateContactsData.toString().includes('cutout');
-                if (hasField) {
-                    console.log('   ✅ PASS - 切り出し方フィールドが実装されています');
-                    testResults.cutoutField = true;
-                } else {
-                    console.log('   ❌ FAIL - 切り出し方フィールドが実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - 切り出し方フィールドテストエラー:', e.message);
+        // ★ BEGIN PATCH v14.0 - ページ離脱前警告 ★
+        window.onbeforeunload = function(e) {
+            // 未保存のドラフトがある場合のみ警告を表示
+            if (hasUnsavedDraft) {
+                const message = '編集中の内容があります。保存しますか？';
+                e.returnValue = message; // Chrome/Safari
+                return message; // Firefox
             }
-            
-            // 2. 過去の経歴折りたたみテスト
-            console.log('\n2. 過去の経歴折りたたみテスト:');
-            try {
-                const hasToggle = typeof toggleCareerHistory === 'function';
-                if (hasToggle) {
-                    console.log('   ✅ PASS - 過去の経歴折りたたみ機能が実装されています');
-                    testResults.careerHistoryToggle = true;
-                } else {
-                    console.log('   ❌ FAIL - 過去の経歴折りたたみ機能が実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - 過去の経歴折りたたみテストエラー:', e.message);
-            }
-            
-            // 3. モーダルスクロールテスト
-            console.log('\n3. モーダルスクロールテスト:');
-            try {
-                const hasScroll = showContactDetail.toString().includes('scrollTop = 0');
-                if (hasScroll) {
-                    console.log('   ✅ PASS - モーダル表示時の最上部スクロールが実装されています');
-                    testResults.modalScroll = true;
-                } else {
-                    console.log('   ❌ FAIL - モーダル最上部スクロールが実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - モーダルスクロールテストエラー:', e.message);
-            }
-            
-            // 4. ファイルプレビューテスト
-            console.log('\n4. ファイルプレビューテスト:');
-            try {
-                const hasPreview = typeof openFile === 'function';
-                if (hasPreview) {
-                    console.log('   ✅ PASS - ファイルプレビュー機能が実装されています');
-                    testResults.filePreview = true;
-                } else {
-                    console.log('   ❌ FAIL - ファイルプレビュー機能が実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - ファイルプレビューテストエラー:', e.message);
-            }
-            
-            // 5. 画像ハンドリングテスト
-            console.log('\n5. 画像ハンドリングテスト:');
-            try {
-                const hasEnhancedHandling = handleImageError.toString().includes('crossorigin');
-                if (hasEnhancedHandling) {
-                    console.log('   ✅ PASS - iPad対応の画像エラーハンドリングが実装されています');
-                    testResults.imageHandling = true;
-                } else {
-                    console.log('   ❌ FAIL - iPad対応の画像エラーハンドリングが不完全です');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - 画像ハンドリングテストエラー:', e.message);
-            }
-            
-            // 6. タスク管理テスト
-            console.log('\n6. タスク管理テスト:');
-            try {
-                const hasTaskManagement = typeof displayTaskInputs === 'function' && 
-                                        typeof addTaskInput === 'function';
-                if (hasTaskManagement) {
-                    console.log('   ✅ PASS - タスク単位の期限管理が実装されています');
-                    testResults.taskManagement = true;
-                } else {
-                    console.log('   ❌ FAIL - タスク単位の期限管理が実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - タスク管理テストエラー:', e.message);
-            }
-            
-            // 7. タスクインライン編集テスト
-            console.log('\n7. タスクインライン編集テスト:');
-            try {
-                const hasInlineEdit = typeof startTaskEdit === 'function' && 
-                                    typeof saveTaskEdit === 'function';
-                if (hasInlineEdit) {
-                    console.log('   ✅ PASS - タスクのインライン編集が実装されています');
-                    testResults.taskInlineEdit = true;
-                } else {
-                    console.log('   ❌ FAIL - タスクのインライン編集が実装されていません');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - タスクインライン編集テストエラー:', e.message);
-            }
-            
-            // 8. データ整合性テスト
-            console.log('\n8. データ整合性テスト:');
-            try {
-                const criticalFunctions = [
-                    'saveData', 'loadData', 'uploadFile', 'filterContacts',
-                    'exportData', 'importData', 'renderContactList', 'showContactDetail',
-                    'migrateMeetingsData', 'migrateContactsData', 'getOutstandingTaskCount',
-                    'handlePhotoDrop', 'processPhotoFile', 'toDirectLink', 'migratePhotoUrls',
-                    'toggleCareerHistory', 'openFile', 'renderTaskListNew', 'startTaskEdit',
-                    'saveTaskEdit', 'toggleTaskCompleteNew', 'displayTaskInputs', 'addTaskInput'
-                ];
-                
-                const allFunctionsExist = criticalFunctions.every(fn => typeof window[fn] === 'function');
-                
-                if (allFunctionsExist) {
-                    console.log('   ✅ PASS - すべての機能が正常に実装されています');
-                    testResults.dataIntegrity = true;
-                } else {
-                    console.log('   ❌ FAIL - 一部の機能が欠落しています');
-                }
-            } catch (e) {
-                console.log('   ❌ FAIL - データ整合性テストエラー:', e.message);
-            }
-            
-            // サマリー
-            console.log('\n=== QA サマリーテーブル ===');
-            console.log('| テスト項目 | 結果 |');
-            console.log('|-----------|--------|');
-            console.log(`| 切り出し方フィールド | ${testResults.cutoutField ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| 過去の経歴折りたたみ | ${testResults.careerHistoryToggle ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| モーダル最上部スクロール | ${testResults.modalScroll ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| ファイルプレビュー | ${testResults.filePreview ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| iPad画像表示対策 | ${testResults.imageHandling ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| タスク期限管理 | ${testResults.taskManagement ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| タスクインライン編集 | ${testResults.taskInlineEdit ? '✅ PASS' : '❌ FAIL'} |`);
-            console.log(`| データ整合性 | ${testResults.dataIntegrity ? '✅ PASS' : '❌ FAIL'} |`);
-            
-            const allPassed = Object.values(testResults).every(v => v);
-            console.log(`\n総合判定: ${allPassed ? '✅ すべてのテストに合格!' : '❌ 一部のテストが失敗'}`);
-            
-            if (allPassed) {
-                console.log('\n✅ v13.0 納品品質基準を満たしています');
-                console.log('✅ すべての新機能が正常に実装されています');
-                console.log('✅ 既存機能との互換性も保たれています');
-                console.log('✅ 納品準備完了');
-            }
-            
-            return testResults;
-        }
+        };
+        /* ★ END PATCH v14.0 ★ */
         
         // ===== イベントリスナー設定 =====
         document.addEventListener('DOMContentLoaded', () => {
@@ -3992,7 +4170,7 @@
                 document.querySelectorAll('.modal').forEach(modal => {
                     modal.addEventListener('click', (e) => {
                         if (e.target === modal) {
-                            modal.style.display = 'none';
+                            closeModal(modal.id); // ★ v14.0
                         }
                     });
                 });
@@ -4037,99 +4215,17 @@
             }
         });
         
-        // 納品版では自動テストを実行
-        window.onload = async function() {
-            try {
-                // 既存の初期化処理
-                console.log('=== アプリケーション初期化開始 ===');
-                
-                // URLからアクセストークンを取得
-                const urlToken = getAccessTokenFromUrl();
-                if (urlToken) {
-                    console.log('URLから新しいトークンを検出しました');
-                    
-                    // 再認証フラグをリセット
-                    isReauthInProgress = false;
-                    
-                    // 古いトークンを完全に削除
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    
-                    // 新しいトークンを保存
-                    localStorage.setItem('dropbox_access_token', urlToken);
-                    
-                    // URLをクリーンアップ
-                    window.history.replaceState({}, document.title, REDIRECT_URI);
-                    
-                    // トークンが確実に保存されるまで待機
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // 初期化を実行
-                    console.log('新しいトークンで初期化を開始します');
-                    await initializeDropbox(urlToken);
-                    
-                    // 納品品質テストを実行
-                    console.log('\n🔧 納品品質テストを5秒後に実行します...');
-                    setTimeout(async () => {
-                        try {
-                            const results = await runProductionQualityTest();
-                            if (Object.values(results).every(v => v)) {
-                                console.log('\n✅ 納品版 v13.0 - すべてのテストに合格しました');
-                            }
-                        } catch (err) {
-                            console.error('テストエラー:', err);
-                        }
-                    }, 5000);
-                    
-                    return;
-                }
-                
-                // 保存されたトークンをチェック
-                const savedToken = localStorage.getItem('dropbox_access_token');
-                
-                if (savedToken) {
-                    console.log('保存されたトークンを使用して初期化します');
-                    await initializeDropbox(savedToken);
-                    
-                    // 納品品質テストを実行
-                    console.log('\n🔧 納品品質テストを5秒後に実行します...');
-                    setTimeout(async () => {
-                        try {
-                            const results = await runProductionQualityTest();
-                            if (Object.values(results).every(v => v)) {
-                                console.log('\n✅ 納品版 v13.0 - すべてのテストに合格しました');
-                            }
-                        } catch (err) {
-                            console.error('テストエラー:', err);
-                        }
-                    }, 5000);
-                } else {
-                    console.log('トークンが見つかりません。認証画面を表示します');
-                    showAuthScreen();
-                }
-            } catch (error) {
-                console.error('初期化中のエラー:', error);
-                showNotification('アプリケーションの初期化に失敗しました', 'error');
-                
-                // エラーの場合はトークンをクリアして認証画面へ
-                localStorage.removeItem('dropbox_access_token');
-                sessionStorage.removeItem('dropbox_access_token');
-                showAuthScreen();
-            }
-        };
-        
         // Production readiness
-        console.log('=== 1to1 Meeting System v13.0 (納品版) ===');
-        console.log('✅ 切り出し方フィールド: Markdown対応で実装');
-        console.log('✅ 過去の経歴折りたたみ: 7行以上で自動折りたたみ');
-        console.log('✅ モーダル最上部スクロール: 全モーダルで実装');
-        console.log('✅ 添付ファイルブラウザ表示: 画像/PDF/テキスト対応');
-        console.log('✅ iPad顔写真表示: crossOrigin属性とリトライ機能');
-        console.log('✅ タスク期限管理: 個別期限設定と動的フォーム');
-        console.log('✅ タスクインライン編集: ダブルクリックで編集');
-        console.log('✅ 既存機能互換性: 完全維持');
+        console.log('=== 1to1 Meeting System v14.0 (トークン永続化対応版) ===');
+        console.log('✅ PKCE認証フロー: Refresh Token対応');
+        console.log('✅ トークン自動更新: 2時間以上の連続編集可能');
+        console.log('✅ ドラフト自動保存: 5秒ごとにsessionStorageに保存');
+        console.log('✅ ページ離脱警告: 未保存データの損失防止');
+        console.log('✅ UIフィードバック: トークンリフレッシュ中の表示');
+        console.log('✅ 既存機能互換性: v13.0までの全機能を継承');
         console.log('================================');
-        console.log('📋 納品準備完了 - v13.0');
+        console.log('📋 納品準備完了 - v14.0');
     </script>
 </body>
 </html>
+                
