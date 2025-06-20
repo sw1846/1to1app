@@ -3097,7 +3097,7 @@
             }
         }
         
-        // ★ BEGIN PATCH v14.0 - 改良版Dropbox API呼び出しラッパー ★
+        // ★ オプション2の修正版 callDropboxSafe 関数 ★
         async function callDropboxSafe(apiMethod, args, retryCount = 0) {
             const maxRetries = 1;
             
@@ -3107,13 +3107,34 @@
             }
             
             try {
-                // APIメソッド呼び出し
-                const result = await apiMethod.apply(dropbox, args);
+                // ★ 重要な修正：引数の渡し方を修正
+                let result;
+                
+                // args が配列で、要素が1つの場合は、その要素を直接渡す
+                if (Array.isArray(args) && args.length === 1) {
+                    result = await apiMethod.call(dropbox, args[0]);
+                } else if (Array.isArray(args)) {
+                    // 複数の引数がある場合
+                    result = await apiMethod.apply(dropbox, args);
+                } else {
+                    // args が配列でない場合は直接渡す
+                    result = await apiMethod.call(dropbox, args);
+                }
+                
                 return result;
             } catch (error) {
-                // ★ v11.0: 409エラーのログ出力を抑制
+                // 409エラー（ファイルが存在しない）は正常なケースなのでログ出力を抑制
                 if (error.status !== 409) {
                     console.error(`Dropbox API error (${apiMethod.name}):`, error);
+                    
+                    // 400エラーの場合は詳細情報を出力
+                    if (error.status === 400) {
+                        console.error('Bad Request Details:', {
+                            method: apiMethod.name,
+                            args: args,
+                            errorResponse: error.error || error
+                        });
+                    }
                 }
                 
                 // 401: 認証エラー
@@ -3171,7 +3192,6 @@
                 throw error;
             }
         }
-        /* ★ END PATCH v14.0 ★ */
         
         // ===== 再認証モーダル表示 =====
         function showReauthModal() {
