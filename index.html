@@ -28,31 +28,29 @@
     
     ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== 修正内容 v15.0 =====
+    ===== 修正内容 v16.0 =====
     
-    1. 名刺画像の保存機能
-       - カメラ撮影対応
-       - 専用フォルダ /1to1App/attachments/cards/ に保存
+    1. 連絡先フォーム2段組レイアウト
+       - CSS Gridで50%×2カラム表示
+       - モバイル(600px以下)で1カラム自動切替
     
-    2. 表示切り替え機能
-       - カード表示 / リスト表示の切り替え
-       - 選択状態をlocalStorageに保存
+    2. 初回ミーティング編集機能
+       - 連絡先編集モーダルで初回ミーティング入力
+       - 自動的にmeetings.jsonに保存
+       - isFirstMeetingフラグで管理
     
-    3. 設定モーダル
-       - ヘッダーの機能ボタンを設定モーダルに集約
-       - Dropbox接続状態表示
+    3. 過去の経歴欄の恒久削除
+       - ミーティングフォームから完全削除
     
-    4. 検索フィルターの折りたたみ
-       - 表示/非表示切り替え可能
-       - 状態をlocalStorageに保存
+    4. マルチセレクト初期値バグ修正
+       - 新規登録時の完全リセット実装
     
-    5. 過去の経歴入力制御
-       - 初回ミーティング時のみ表示
+    5. テンプレート機能
+       - 設定モーダルから編集可能
+       - localStorageに保存
+       - 新規ミーティング時に自動挿入
     
-    6. 連絡先詳細のUI改善
-       - タブ表示で情報を整理
-    
-    7. v14.0までの全機能を継承
+    6. v15.0までの全機能を継承
        - PKCE認証フロー
        - トークン自動更新
        - ドラフト自動保存
@@ -1460,6 +1458,61 @@
             display: block;
         }
         /* ★ END PATCH v15.0 - CSS追加 ★ */
+
+        /* ★ BEGIN PATCH v16.0 - CSS追加 ★ */
+        /* 連絡先フォーム2段組レイアウト */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        .form-grid .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 600px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 初回ミーティングセクション */
+        .first-meeting-section {
+            background: #333333;
+            border: 1px solid #444444;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .first-meeting-section h4 {
+            margin: 0 0 20px 0;
+            color: #4c8bf5;
+            font-weight: 400;
+        }
+
+        /* テンプレート編集モーダル */
+        .template-editor {
+            display: none;
+        }
+
+        .template-editor textarea {
+            min-height: 300px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        .template-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        /* ★ END PATCH v16.0 - CSS追加 ★ */
     </style>
 </head>
 <body>
@@ -1617,18 +1670,98 @@
                 <h2 id="contactFormTitle">新規連絡先登録</h2>
                 <span class="close-modal" onclick="closeModal('contactFormModal')">&times;</span>
             </div>
+            <!-- ★ BEGIN PATCH v16.0 - 連絡先フォームレイアウト変更 ★ -->
             <div class="modal-body">
                 <form id="contactForm" onsubmit="saveContactForm(event)">
-                    <div class="form-group">
-                        <label>氏名 <span style="color: #d93025;">*</span></label>
-                        <input type="text" name="name" required>
+                    <!-- 基本情報（2段組） -->
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>氏名 <span style="color: #d93025;">*</span></label>
+                            <input type="text" name="name" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>よみ</label>
+                            <input type="text" name="yomi" placeholder="ひらがなで入力してください">
+                        </div>
+
+                        <div class="form-group">
+                            <label>会社名</label>
+                            <input type="text" name="company">
+                        </div>
+
+                        <div class="form-group">
+                            <label>メールアドレス</label>
+                            <input type="email" name="email">
+                        </div>
+
+                        <div class="form-group">
+                            <label>電話番号</label>
+                            <input type="tel" name="phone">
+                        </div>
+
+                        <div class="form-group">
+                            <label>ホームページ</label>
+                            <input type="url" name="homepage">
+                        </div>
+
+                        <div class="form-group">
+                            <label>種別</label>
+                            <div class="multi-select">
+                                <div class="multi-select-display" onclick="toggleMultiSelect('types')">
+                                    <span style="color: #aaaaaa;">選択してください</span>
+                                </div>
+                                <div id="types-dropdown" class="multi-select-dropdown"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>所属・チャプター</label>
+                            <div class="multi-select">
+                                <div class="multi-select-display" onclick="toggleMultiSelect('affiliations')">
+                                    <span style="color: #aaaaaa;">選択してください</span>
+                                </div>
+                                <div id="affiliations-dropdown" class="multi-select-dropdown"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>繋がりたい人・業種</label>
+                            <div class="multi-select">
+                                <div class="multi-select-display" onclick="toggleMultiSelect('wantToConnect')">
+                                    <span style="color: #aaaaaa;">選択してください</span>
+                                </div>
+                                <div id="wantToConnect-dropdown" class="multi-select-dropdown"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>金の卵</label>
+                            <div class="multi-select">
+                                <div class="multi-select-display" onclick="toggleMultiSelect('goldenEgg')">
+                                    <span style="color: #aaaaaa;">選択してください</span>
+                                </div>
+                                <div id="goldenEgg-dropdown" class="multi-select-dropdown"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>エリア</label>
+                            <input type="text" name="area" placeholder="例: 関東、関西、九州など">
+                        </div>
+
+                        <div class="form-group">
+                            <label>居住地</label>
+                            <input type="text" name="residence" placeholder="例: 東京都港区">
+                        </div>
+
+                        <div class="form-group">
+                            <label>紹介元</label>
+                            <input type="text" name="referredBy" placeholder="紹介者の名前を入力">
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>よみ</label>
-                        <input type="text" name="yomi" placeholder="ひらがなで入力してください">
-                    </div>
-
+                    <!-- 全幅項目 -->
                     <div class="form-group">
                         <label>顔写真</label>
                         <div class="file-drop-zone" id="photoDropZone">
@@ -1638,7 +1771,6 @@
                         <div id="photoPreview"></div>
                     </div>
 
-                    <!-- ★ BEGIN PATCH v15.0 - 連絡先フォームに名刺画像追加 ★ -->
                     <div class="form-group">
                         <label>名刺画像</label>
                         <div class="file-drop-zone card-image-zone" id="cardImageDropZone">
@@ -1649,82 +1781,6 @@
                         </button>
                         <input type="file" id="cardImageUpload" accept="image/*" style="display: none;" onchange="handleCardImageUpload(event)">
                         <div id="cardImagePreview"></div>
-                    </div>
-                    <!-- ★ END PATCH v15.0 - 連絡先フォームに名刺画像追加 ★ -->
-
-                    <div class="form-group">
-                        <label>会社名</label>
-                        <input type="text" name="company">
-                    </div>
-
-                    <div class="form-group">
-                        <label>メールアドレス</label>
-                        <input type="email" name="email">
-                    </div>
-
-                    <div class="form-group">
-                        <label>電話番号</label>
-                        <input type="tel" name="phone">
-                    </div>
-
-                    <div class="form-group">
-                        <label>ホームページ</label>
-                        <input type="url" name="homepage">
-                    </div>
-
-                    <div class="form-group">
-                        <label>種別</label>
-                        <div class="multi-select">
-                            <div class="multi-select-display" onclick="toggleMultiSelect('types')">
-                                <span style="color: #aaaaaa;">選択してください</span>
-                            </div>
-                            <div id="types-dropdown" class="multi-select-dropdown"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>所属・チャプター</label>
-                        <div class="multi-select">
-                            <div class="multi-select-display" onclick="toggleMultiSelect('affiliations')">
-                                <span style="color: #aaaaaa;">選択してください</span>
-                            </div>
-                            <div id="affiliations-dropdown" class="multi-select-dropdown"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>繋がりたい人・業種</label>
-                        <div class="multi-select">
-                            <div class="multi-select-display" onclick="toggleMultiSelect('wantToConnect')">
-                                <span style="color: #aaaaaa;">選択してください</span>
-                            </div>
-                            <div id="wantToConnect-dropdown" class="multi-select-dropdown"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>金の卵</label>
-                        <div class="multi-select">
-                            <div class="multi-select-display" onclick="toggleMultiSelect('goldenEgg')">
-                                <span style="color: #aaaaaa;">選択してください</span>
-                            </div>
-                            <div id="goldenEgg-dropdown" class="multi-select-dropdown"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>エリア</label>
-                        <input type="text" name="area" placeholder="例: 関東、関西、九州など">
-                    </div>
-
-                    <div class="form-group">
-                        <label>居住地</label>
-                        <input type="text" name="residence" placeholder="例: 東京都港区">
-                    </div>
-
-                    <div class="form-group">
-                        <label>紹介元</label>
-                        <input type="text" name="referredBy" placeholder="紹介者の名前を入力">
                     </div>
 
                     <div class="form-group">
@@ -1752,12 +1808,39 @@
                         <div id="newAttachments" class="file-list"></div>
                     </div>
 
+                    <!-- 初回ミーティングセクション（編集時のみ表示） -->
+                    <div class="first-meeting-section" id="firstMeetingSection" style="display: none;">
+                        <h4>初回ミーティング情報</h4>
+                        <div class="form-group">
+                            <label>日時</label>
+                            <input type="datetime-local" name="firstMeetingDatetime">
+                        </div>
+                        <div class="form-group">
+                            <label>打ち合わせ内容</label>
+                            <textarea name="firstMeetingContent" rows="5" placeholder="Markdown記法が使えます"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>次回アクション</label>
+                            <div id="firstMeetingTaskContainer"></div>
+                            <button type="button" class="btn-small btn-secondary" onclick="addFirstMeetingTask()">+ タスクを追加</button>
+                        </div>
+                        <div class="form-group">
+                            <label>添付ファイル</label>
+                            <div class="file-drop-zone" id="firstMeetingAttachmentDropZone">
+                                ファイルをドラッグ＆ドロップまたはクリックして選択
+                            </div>
+                            <input type="file" id="firstMeetingAttachmentUpload" multiple style="display: none;">
+                            <div id="firstMeetingAttachments" class="file-list"></div>
+                        </div>
+                    </div>
+
                     <div class="action-buttons">
                         <button type="submit" class="btn-primary">保存</button>
                         <button type="button" class="btn-secondary" onclick="closeModal('contactFormModal')">キャンセル</button>
                     </div>
                 </form>
             </div>
+            <!-- ★ END PATCH v16.0 - 連絡先フォームレイアウト変更 ★ -->
         </div>
     </div>
 
@@ -1793,12 +1876,15 @@
                         <textarea name="content" rows="5" required placeholder="Markdown記法が使えます"></textarea>
                     </div>
 
-                    <!-- ★ BEGIN PATCH v15.0 - ミーティングフォームの過去の経歴欄 ★ -->
+                    <!-- ★ BEGIN PATCH v16.0 - ミーティングフォームから過去の経歴欄を削除 ★ -->
+                    <!-- 以下の部分を削除 -->
+                    <!-- 
                     <div class="form-group career-history-section" id="careerHistorySection">
                         <label>過去の経歴</label>
                         <textarea name="careerHistory" rows="3" placeholder="初回ミーティング時に過去の経歴を記録します"></textarea>
                     </div>
-                    <!-- ★ END PATCH v15.0 - ミーティングフォームの過去の経歴欄 ★ -->
+                    -->
+                    <!-- ★ END PATCH v16.0 - ミーティングフォームから過去の経歴欄を削除 ★ -->
 
                     <div class="form-group">
                         <label>次回アクション</label>
@@ -1855,6 +1941,15 @@
                             <div class="settings-item-description">JSONファイルからデータを読み込みます</div>
                         </div>
                     </div>
+                    <!-- ★ BEGIN PATCH v16.0 - 設定モーダルにテンプレート編集追加 ★ -->
+                    <div class="settings-item" onclick="showTemplateEditor()">
+                        <div class="settings-item-icon">📝</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">テンプレート編集</div>
+                            <div class="settings-item-description">ミーティング内容のテンプレートを編集します</div>
+                        </div>
+                    </div>
+                    <!-- ★ END PATCH v16.0 - 設定モーダルにテンプレート編集追加 ★ -->
                     <div class="settings-item" onclick="logout()">
                         <div class="settings-item-icon">🚪</div>
                         <div class="settings-item-content">
@@ -1863,6 +1958,19 @@
                         </div>
                     </div>
                 </div>
+                <!-- ★ BEGIN PATCH v16.0 - テンプレート編集画面追加 ★ -->
+                <div class="template-editor" id="templateEditor">
+                    <h3 style="margin-bottom: 20px;">ミーティング内容テンプレート</h3>
+                    <div class="form-group">
+                        <label>Markdownテンプレート</label>
+                        <textarea id="templateContent" placeholder="## 議題&#10;&#10;## 決定事項&#10;&#10;## 次回までのアクション&#10;"></textarea>
+                    </div>
+                    <div class="template-actions">
+                        <button class="btn-primary" onclick="saveTemplate()">保存</button>
+                        <button class="btn-secondary" onclick="hideTemplateEditor()">キャンセル</button>
+                    </div>
+                </div>
+                <!-- ★ END PATCH v16.0 - テンプレート編集画面追加 ★ -->
             </div>
         </div>
     </div>
@@ -2090,13 +2198,18 @@
         }
         /* ★ END PATCH v14.0 ★ */
 
-        // ★ BEGIN PATCH v15.0 - JavaScript変更 ★ */
+        // ★ BEGIN PATCH v15.0 - JavaScript変更 ★
         // グローバル変数追加
         let currentCardImageFile = null;
         let viewMode = localStorage.getItem('viewMode') || 'card';
         let filterVisible = localStorage.getItem('filterVisible') === 'true';
         let cameraStream = null;
         /* ★ END PATCH v15.0 ★ */
+
+        // ★ BEGIN PATCH v16.0 - グローバル変数追加 ★
+        let selectedFirstMeetingFiles = [];
+        let hasFirstMeeting = {};  // 連絡先IDをキーとして初回ミーティングの有無を管理
+        // ★ END PATCH v16.0 - グローバル変数追加 ★
         
         // ★ v12.0: Dropbox共有リンクを直接アクセス可能な形式に変換
         function toDirectLink(url) {
@@ -2444,6 +2557,39 @@
             }
         }
         /* ★ END PATCH v15.0 - 新規関数追加 ★ */
+
+        // ★ BEGIN PATCH v16.0 - テンプレート機能追加 ★
+        // テンプレート編集画面表示
+        function showTemplateEditor() {
+            const settingsList = document.querySelector('.settings-list');
+            const templateEditor = document.getElementById('templateEditor');
+            
+            settingsList.style.display = 'none';
+            templateEditor.style.display = 'block';
+            
+            // 既存のテンプレートを読み込み
+            const savedTemplate = localStorage.getItem('meetingTemplate') || '';
+            document.getElementById('templateContent').value = savedTemplate;
+        }
+
+        // テンプレート編集画面を隠す
+        function hideTemplateEditor() {
+            const settingsList = document.querySelector('.settings-list');
+            const templateEditor = document.getElementById('templateEditor');
+            
+            settingsList.style.display = 'block';
+            templateEditor.style.display = 'none';
+        }
+
+        // テンプレートを保存
+        function saveTemplate() {
+            const templateContent = document.getElementById('templateContent').value;
+            localStorage.setItem('meetingTemplate', templateContent);
+            
+            showNotification('テンプレートを保存しました');
+            hideTemplateEditor();
+        }
+        // ★ END PATCH v16.0 - テンプレート機能追加 ★
         
         // ===== Dropbox認証 =====
         // ★ BEGIN PATCH v14.0 - PKCE認証フロー ★
@@ -3234,6 +3380,7 @@
         }
         
         // ===== 連絡先保存 =====
+        // ★ BEGIN PATCH v16.0 - saveContactForm修正（初回ミーティング自動保存） ★
         async function saveContactForm(event) {
             event.preventDefault();
             showLoading();
@@ -3250,7 +3397,7 @@
                 referredBy: formData.get('referredBy'),
                 strengths: formData.get('strengths'),
                 careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'), // 切り出し方を追加
+                cutout: formData.get('cutout'),
                 types: getSelectedValues('types'),
                 affiliations: getSelectedValues('affiliations'),
                 wantToConnect: getSelectedValues('wantToConnect'),
@@ -3270,10 +3417,8 @@
                 if (existing) {
                     contact.photo = existing.photo;
                     contact.photoUrl = existing.photoUrl;
-                    // ★ BEGIN PATCH v15.0 - 既存のカード画像も保持 ★
                     contact.cardImage = existing.cardImage;
                     contact.cardImageUrl = existing.cardImageUrl;
-                    /* ★ END PATCH v15.0 ★ */
                     contact.attachments = existing.attachments || [];
                 }
             }
@@ -3288,7 +3433,7 @@
                     contact.photoUrl = photoResult.url;
                 }
                 
-                // ★ BEGIN PATCH v15.0 - 名刺画像をアップロード ★
+                // 名刺画像をアップロード
                 if (currentCardImageFile) {
                     const timestamp = new Date().getTime();
                     const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
@@ -3296,7 +3441,6 @@
                     contact.cardImage = cardImageResult.path;
                     contact.cardImageUrl = cardImageResult.url;
                 }
-                /* ★ END PATCH v15.0 ★ */
                 
                 // 添付ファイルをアップロード
                 for (const file of selectedFiles) {
@@ -3324,6 +3468,58 @@
                     contacts.push(contact);
                 }
                 
+                // 初回ミーティング情報の処理
+                const firstMeetingDatetime = formData.get('firstMeetingDatetime');
+                const firstMeetingContent = formData.get('firstMeetingContent');
+                const firstMeetingSection = document.getElementById('firstMeetingSection');
+                
+                if (firstMeetingSection.style.display !== 'none' && 
+                    (firstMeetingDatetime || firstMeetingContent)) {
+                    
+                    // タスク情報を収集
+                    const taskTexts = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskText[]"]')).map(input => input.value);
+                    const taskDues = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskDue[]"]')).map(input => input.value);
+                    
+                    const tasks = [];
+                    taskTexts.forEach((text, index) => {
+                        if (text.trim()) {
+                            tasks.push({
+                                text: text.trim(),
+                                due: taskDues[index] || null,
+                                done: false
+                            });
+                        }
+                    });
+                    
+                    const firstMeeting = {
+                        id: generateId(),
+                        contactId: contact.id,
+                        datetime: firstMeetingDatetime || new Date().toISOString(),
+                        content: firstMeetingContent || '',
+                        tasks: tasks,
+                        attachments: [],
+                        isFirstMeeting: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    
+                    // 初回ミーティングの添付ファイルをアップロード
+                    for (const file of selectedFirstMeetingFiles) {
+                        const timestamp = new Date().getTime();
+                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                        const fileResult = await uploadFile(file, fileName);
+                        firstMeeting.attachments.push({
+                            name: file.name,
+                            path: fileResult.path,
+                            url: fileResult.url,
+                            uploadedAt: new Date().toISOString()
+                        });
+                    }
+                    
+                    // ミーティングを保存
+                    meetings.push(firstMeeting);
+                }
+                
                 // 紹介元リンクを更新
                 updateAllReferrerLinks();
                 
@@ -3344,8 +3540,10 @@
                 hideLoading();
             }
         }
+        // ★ END PATCH v16.0 - saveContactForm修正 ★
         
         // ★ BEGIN PATCH v14.0 - ミーティング保存（ドラフト削除対応） ★
+        // ★ BEGIN PATCH v16.0 - saveMeetingForm修正（過去の経歴処理削除） ★
         async function saveMeetingForm(event) {
             event.preventDefault();
             showLoading();
@@ -3353,20 +3551,6 @@
             const formData = new FormData(event.target);
             const taskTexts = formData.getAll('taskText[]');
             const taskDues = formData.getAll('taskDue[]');
-            
-            // ★ BEGIN PATCH v15.0 - 過去の経歴を保存 ★
-            const careerHistorySection = document.getElementById('careerHistorySection');
-            if (careerHistorySection.classList.contains('show')) {
-                const careerHistory = formData.get('careerHistory');
-                if (careerHistory) {
-                    const contact = contacts.find(c => c.id === currentEditingContactId);
-                    if (contact) {
-                        contact.careerHistory = careerHistory;
-                        contact.updatedAt = new Date().toISOString();
-                    }
-                }
-            }
-            /* ★ END PATCH v15.0 ★ */
             
             // タスク配列を作成
             const tasks = [];
@@ -3456,6 +3640,7 @@
                 hideLoading();
             }
         }
+        // ★ END PATCH v16.0 - saveMeetingForm修正 ★
         /* ★ END PATCH v14.0 ★ */
         
         // ===== 連絡先削除 =====
@@ -3519,6 +3704,7 @@
         }
         
         // ===== UI関数 =====
+        // ★ BEGIN PATCH v16.0 - showContactForm修正（初回ミーティング対応） ★
         function showContactForm(contactId = null) {
             // 詳細モーダルを閉じる
             closeModal('contactDetailModal');
@@ -3540,7 +3726,7 @@
                     form.referredBy.value = contact.referredBy || '';
                     form.strengths.value = contact.strengths || '';
                     form.careerHistory.value = contact.careerHistory || '';
-                    form.cutout.value = contact.cutout || ''; // 切り出し方を追加
+                    form.cutout.value = contact.cutout || '';
                     form.area.value = contact.area || '';
                     form.residence.value = contact.residence || '';
                     
@@ -3550,12 +3736,11 @@
                             `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
                     }
                     
-                    // ★ BEGIN PATCH v15.0 - 名刺画像プレビュー ★
+                    // 名刺画像プレビュー
                     if (contact.cardImageUrl) {
                         document.getElementById('cardImagePreview').innerHTML = 
                             `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '名刺')">`;
                     }
-                    /* ★ END PATCH v15.0 ★ */
                     
                     // マルチセレクト設定
                     setSelectedValues('types', contact.types || []);
@@ -3565,16 +3750,34 @@
                     
                     // 既存の添付ファイル
                     displayExistingAttachments(contact.attachments || []);
+                    
+                    // 初回ミーティング情報の表示判定
+                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
+                    
+                    if (contactMeetings.length === 0) {
+                        // まだミーティングがない場合は初回ミーティング欄を表示
+                        document.getElementById('firstMeetingSection').style.display = 'block';
+                        // 現在時刻を設定
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
+                        
+                        // テンプレートを適用
+                        const template = localStorage.getItem('meetingTemplate') || '';
+                        form.firstMeetingContent.value = template;
+                    }
                 }
             } else {
                 document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
             }
             
             setupMultiSelect();
+            setupFirstMeetingFileDrop();
             document.getElementById('contactFormModal').style.display = 'block';
-            // モーダルを最上部にスクロール
             document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
         }
+        // ★ END PATCH v16.0 - showContactForm修正 ★
         
         // ★ BEGIN PATCH v15.0 - showContactDetailの修正（タブ表示） ★
         function showContactDetail(contactId) {
@@ -3909,7 +4112,7 @@
         }
         
         // ★ BEGIN PATCH v14.0 - ミーティングフォーム表示（ドラフト復元対応） ★
-        // ★ BEGIN PATCH v15.0 - showMeetingFormの修正（過去の経歴欄制御） ★
+        // ★ BEGIN PATCH v16.0 - showMeetingForm修正（過去の経歴欄削除、テンプレート適用） ★
         function showMeetingForm(contactId, meetingId = null) {
             currentEditingContactId = contactId;
             currentEditingMeetingId = meetingId;
@@ -3918,17 +4121,6 @@
             const contact = contacts.find(c => c.id === contactId);
             document.getElementById('meetingFormTitle').textContent = 
                 `${contact.name}さんとのミーティング記録${meetingId ? '編集' : ''}`;
-            
-            // 過去の経歴欄の表示制御
-            const contactMeetings = meetings.filter(m => m.contactId === contactId);
-            const careerHistorySection = document.getElementById('careerHistorySection');
-            
-            if (!meetingId && contactMeetings.length === 0 && !contact.careerHistory) {
-                // 初回ミーティングかつ過去の経歴が未記入の場合のみ表示
-                careerHistorySection.classList.add('show');
-            } else {
-                careerHistorySection.classList.remove('show');
-            }
             
             if (meetingId) {
                 const meeting = meetings.find(m => m.id === meetingId);
@@ -3954,10 +4146,15 @@
                     displayExistingMeetingAttachments(meeting.attachments || []);
                 }
             } else {
-                // 新規の場合は現在時刻を設定
+                // 新規の場合
                 const now = new Date();
                 now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
                 document.getElementById('meetingForm').datetime.value = now.toISOString().slice(0, 16);
+                
+                // テンプレートを適用
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.getElementById('meetingForm').content.value = template;
+                
                 // 空のタスク入力を1つ表示
                 displayTaskInputs([]);
             }
@@ -3978,7 +4175,7 @@
             // モーダルを最上部にスクロール
             document.querySelector('#meetingFormModal .modal-content').scrollTop = 0;
         }
-        /* ★ END PATCH v15.0 - showMeetingFormの修正 ★ */
+        // ★ END PATCH v16.0 - showMeetingForm修正 ★
         /* ★ END PATCH v14.0 ★ */
         
         // タスク入力フィールド表示関数
@@ -4044,6 +4241,66 @@
                 showMeetingForm(meeting.contactId, meetingId);
             }
         }
+
+        // ★ BEGIN PATCH v16.0 - 初回ミーティング関連関数追加 ★
+        // 初回ミーティングのタスク追加
+        function addFirstMeetingTask() {
+            const container = document.getElementById('firstMeetingTaskContainer');
+            const newRow = document.createElement('div');
+            newRow.className = 'task-input-row';
+            newRow.innerHTML = `
+                <input type="text" name="firstTaskText[]" placeholder="タスク内容">
+                <input type="datetime-local" name="firstTaskDue[]" placeholder="期限">
+                <button type="button" class="btn-small btn-danger" onclick="removeTaskInput(this)">削除</button>
+            `;
+            container.appendChild(newRow);
+        }
+
+        // 初回ミーティングファイルドロップ設定
+        function setupFirstMeetingFileDrop() {
+            const dropZone = document.getElementById('firstMeetingAttachmentDropZone');
+            const fileInput = document.getElementById('firstMeetingAttachmentUpload');
+            
+            if (!dropZone || !fileInput) return;
+            
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', handleDragOver);
+            dropZone.addEventListener('dragleave', handleDragLeave);
+            dropZone.addEventListener('drop', (e) => handleFirstMeetingDrop(e));
+            fileInput.addEventListener('change', (e) => handleFirstMeetingFileSelect(e));
+        }
+
+        function handleFirstMeetingDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files);
+            selectedFirstMeetingFiles.push(...files);
+            displayFirstMeetingAttachments();
+        }
+
+        function handleFirstMeetingFileSelect(e) {
+            const files = Array.from(e.target.files);
+            selectedFirstMeetingFiles.push(...files);
+            displayFirstMeetingAttachments();
+        }
+
+        function displayFirstMeetingAttachments() {
+            const container = document.getElementById('firstMeetingAttachments');
+            container.innerHTML = selectedFirstMeetingFiles.map((file, index) => `
+                <div class="file-item">
+                    <span>${escapeHtml(file.name)}</span>
+                    <button type="button" class="btn-small btn-danger" onclick="removeFirstMeetingAttachment(${index})">削除</button>
+                </div>
+            `).join('');
+        }
+
+        function removeFirstMeetingAttachment(index) {
+            selectedFirstMeetingFiles.splice(index, 1);
+            displayFirstMeetingAttachments();
+        }
+        // ★ END PATCH v16.0 - 初回ミーティング関連関数追加 ★
         
         // ===== 検索・フィルター・ソート =====
         function filterContacts() {
@@ -4855,27 +5112,36 @@
         }
         
         // ===== フォームリセット =====
+        // ★ BEGIN PATCH v16.0 - resetContactForm修正（マルチセレクト完全リセット） ★
         function resetContactForm() {
             document.getElementById('contactForm').reset();
             document.getElementById('photoPreview').innerHTML = '';
-            // ★ BEGIN PATCH v15.0 - 名刺画像プレビューもリセット ★
             document.getElementById('cardImagePreview').innerHTML = '';
-            /* ★ END PATCH v15.0 ★ */
             document.getElementById('existingAttachments').innerHTML = '';
             document.getElementById('newAttachments').innerHTML = '';
             currentPhotoFile = null;
-            // ★ BEGIN PATCH v15.0 - 名刺画像ファイルもリセット ★
             currentCardImageFile = null;
-            /* ★ END PATCH v15.0 ★ */
             selectedFiles = [];
             deletedAttachments = [];
             
-            // マルチセレクトをリセット
+            // マルチセレクトを完全にリセット
             ['types', 'affiliations', 'wantToConnect', 'goldenEgg'].forEach(field => {
+                // チェックボックスをすべて外す
+                const checkboxes = document.querySelectorAll(`#${field}-dropdown input[type="checkbox"]`);
+                checkboxes.forEach(cb => cb.checked = false);
+                
+                // 表示をリセット
                 const display = document.querySelector(`#${field}-dropdown`).previousElementSibling;
                 display.innerHTML = '<span style="color: #aaaaaa;">選択してください</span>';
             });
+            
+            // 初回ミーティング関連をリセット
+            selectedFirstMeetingFiles = [];
+            document.getElementById('firstMeetingSection').style.display = 'none';
+            document.getElementById('firstMeetingTaskContainer').innerHTML = '';
+            document.getElementById('firstMeetingAttachments').innerHTML = '';
         }
+        // ★ END PATCH v16.0 - resetContactForm修正 ★
         
         function resetMeetingForm() {
             document.getElementById('meetingForm').reset();
@@ -4895,7 +5161,7 @@
 
             try {
                 const exportData = {
-                    version: '2.6',  // ★ BEGIN PATCH v15.0 - バージョン更新 ★
+                    version: '2.7',  // ★ BEGIN PATCH v16.0 - バージョン更新 ★
                     exportDate: new Date().toISOString(),
                     contacts: contacts,
                     meetings: meetings,
@@ -5078,19 +5344,17 @@
         });
         
         // Production readiness
-        // ★ BEGIN PATCH v15.0 - コンソールログ更新 ★
-        console.log('=== 1to1 Meeting System v15.0 (UI改善版) ===');
-        console.log('✅ 名刺画像保存機能: カメラ撮影対応');
-        console.log('✅ 表示切り替え: カード/リスト表示');
-        console.log('✅ 設定モーダル: 機能を集約');
-        console.log('✅ Dropbox接続状態表示: 視覚的フィードバック');
-        console.log('✅ 検索フィルター折りたたみ: スペース効率化');
-        console.log('✅ 過去の経歴入力: 初回ミーティング時のみ');
-        console.log('✅ 連絡先詳細UI: タブ表示で視認性向上');
-        console.log('✅ 既存機能互換性: v14.0までの全機能を継承');
+        // ★ BEGIN PATCH v16.0 - コンソールログ更新 ★
+        console.log('=== 1to1 Meeting System v16.0 (改善版) ===');
+        console.log('✅ 連絡先フォーム2段組レイアウト: CSS Gridで視認性向上');
+        console.log('✅ 初回ミーティング編集対応: 連絡先編集時に入力可能');
+        console.log('✅ 過去の経歴欄削除: ミーティングフォームから恒久削除');
+        console.log('✅ マルチセレクトバグ修正: 新規登録時の初期化問題解決');
+        console.log('✅ テンプレート機能: ミーティング内容の定型文対応');
+        console.log('✅ 既存機能互換性: v15.0までの全機能を継承');
         console.log('================================');
-        console.log('📋 納品準備完了 - v15.0');
-        /* ★ END PATCH v15.0 - コンソールログ更新 ★ */
+        console.log('📋 納品準備完了 - v16.0');
+        // ★ END PATCH v16.0 - コンソールログ更新 ★
     </script>
 </body>
 </html>
