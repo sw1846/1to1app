@@ -28,28 +28,35 @@
     
     ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== 修正内容 v14.0 =====
+    ===== 修正内容 v15.0 =====
     
-    1. トークン永続化
-       - PKCE認証フローへの移行
-       - Refresh Tokenを使用した自動更新
-       - 2時間以上の連続編集に対応
+    1. 名刺画像の保存機能
+       - カメラ撮影対応
+       - 専用フォルダ /1to1App/attachments/cards/ に保存
     
-    2. ローカルドラフト自動保存
-       - 5秒ごとにsessionStorageに自動保存
-       - モーダル再表示時に自動復元
-       - 保存成功後に自動削除
+    2. 表示切り替え機能
+       - カード表示 / リスト表示の切り替え
+       - 選択状態をlocalStorageに保存
     
-    3. リロード前警告
-       - 未保存のドラフトがある場合に警告表示
-       - データ損失を防止
+    3. 設定モーダル
+       - ヘッダーの機能ボタンを設定モーダルに集約
+       - Dropbox接続状態表示
     
-    4. UIフィードバック
-       - トークンリフレッシュ中の視覚的フィードバック
-       - サイレントリフレッシュで中断なし
+    4. 検索フィルターの折りたたみ
+       - 表示/非表示切り替え可能
+       - 状態をlocalStorageに保存
     
-    5. 既存機能の完全互換性維持
-       - v13.0までの全機能を継承
+    5. 過去の経歴入力制御
+       - 初回ミーティング時のみ表示
+    
+    6. 連絡先詳細のUI改善
+       - タブ表示で情報を整理
+    
+    7. v14.0までの全機能を継承
+       - PKCE認証フロー
+       - トークン自動更新
+       - ドラフト自動保存
+       - その他既存機能
     
     -->
     
@@ -1072,6 +1079,387 @@
             border-width: 2px;
         }
         /* ★ END PATCH v14.0 ★ */
+
+        /* ★ BEGIN PATCH v15.0 - CSS追加 ★ */
+        /* 表示モード切り替えボタン */
+        .view-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #333333;
+            border-radius: 6px;
+            padding: 4px;
+            border: 1px solid #444444;
+        }
+
+        .view-toggle button {
+            padding: 6px 12px;
+            background: transparent;
+            border: none;
+            color: #aaaaaa;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .view-toggle button.active {
+            background: #4c8bf5;
+            color: white;
+        }
+
+        .view-toggle button:hover:not(.active) {
+            background: #3a3a3a;
+        }
+
+        /* リスト表示スタイル */
+        .contact-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .contact-list-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #3a3a3a;
+        }
+
+        .contact-list-item:hover {
+            border-color: #4c8bf5;
+            box-shadow: 0 0 20px rgba(76, 139, 245, 0.1);
+        }
+
+        .contact-list-photo {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #333333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            font-weight: 300;
+            color: #aaaaaa;
+            border: 1px solid #444444;
+        }
+
+        .contact-list-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .contact-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .contact-list-name {
+            font-size: 16px;
+            font-weight: 400;
+            color: #f0f0f0;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .contact-list-company {
+            font-size: 14px;
+            color: #aaaaaa;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .contact-list-meeting {
+            font-size: 13px;
+            color: #4c8bf5;
+            white-space: nowrap;
+        }
+
+        /* 設定アイコン・接続状態 */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+        }
+
+        .connection-indicator {
+            position: relative;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .connection-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+        }
+
+        .connection-dot.connected {
+            background-color: #4c8bf5;
+            box-shadow: 0 0 8px rgba(76, 139, 245, 0.5);
+        }
+
+        .connection-dot.disconnected {
+            background-color: #d93025;
+            box-shadow: 0 0 8px rgba(217, 48, 37, 0.5);
+        }
+
+        .connection-tooltip {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333333;
+            color: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            border: 1px solid #444444;
+        }
+
+        .connection-indicator:hover .connection-tooltip {
+            opacity: 1;
+        }
+
+        .settings-icon {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #333333;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #444444;
+        }
+
+        .settings-icon:hover {
+            background: #3a3a3a;
+            border-color: #4c8bf5;
+        }
+
+        /* 設定モーダル */
+        .settings-modal .modal-content {
+            max-width: 500px;
+        }
+
+        .settings-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: #333333;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #444444;
+        }
+
+        .settings-item:hover {
+            background: #3a3a3a;
+            border-color: #4c8bf5;
+        }
+
+        .settings-item-icon {
+            font-size: 20px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .settings-item-content {
+            flex: 1;
+        }
+
+        .settings-item-title {
+            font-size: 16px;
+            color: #f0f0f0;
+            margin-bottom: 4px;
+        }
+
+        .settings-item-description {
+            font-size: 13px;
+            color: #aaaaaa;
+        }
+
+        /* 検索フィルターのトグル */
+        .search-filters.collapsed {
+            max-height: 60px;
+            overflow: hidden;
+        }
+
+        .filter-toggle {
+            cursor: pointer;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: #4c8bf5;
+            font-size: 14px;
+        }
+
+        .filter-toggle:hover {
+            opacity: 0.8;
+        }
+
+        .filter-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .filter-content.show {
+            max-height: 500px;
+        }
+
+        /* 名刺画像アップロード */
+        .card-image-zone {
+            border: 2px dashed #444444;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #333333;
+            color: #aaaaaa;
+            margin-top: 10px;
+        }
+
+        .card-image-zone:hover,
+        .card-image-zone.dragover {
+            border-color: #4c8bf5;
+            background: #2a2a2a;
+            color: #f0f0f0;
+        }
+
+        .camera-button {
+            margin-top: 10px;
+            display: none;
+        }
+
+        .camera-supported .camera-button {
+            display: inline-block;
+        }
+
+        /* カメラプレビュー */
+        .camera-preview {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            display: none;
+        }
+
+        .camera-preview video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .camera-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+        }
+
+        /* 連絡先詳細のタブ表示 */
+        .detail-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #444444;
+            margin-bottom: 20px;
+        }
+
+        .detail-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: #aaaaaa;
+            font-size: 14px;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .detail-tab:hover {
+            color: #f0f0f0;
+        }
+
+        .detail-tab.active {
+            color: #4c8bf5;
+        }
+
+        .detail-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #4c8bf5;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .tab-panel {
+            padding: 20px 0;
+        }
+
+        /* 過去の経歴入力表示制御 */
+        .career-history-section {
+            display: none;
+        }
+
+        .career-history-section.show {
+            display: block;
+        }
+        /* ★ END PATCH v15.0 - CSS追加 ★ */
     </style>
 </head>
 <body>
@@ -1090,31 +1478,35 @@
 
         <!-- メインコンテンツ -->
         <div id="mainContainer" class="container" style="display: none;">
+            <!-- ★ BEGIN PATCH v15.0 - HTMLヘッダー変更 ★ -->
             <header>
                 <div class="header-content">
                     <h1>1to1ミーティング管理システム</h1>
-                    <div class="header-buttons">
-                        <span id="connection-status" style="color: #4c8bf5; margin-right: 16px; font-size: 14px;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;">
-                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    <div class="header-right">
+                        <div class="connection-indicator">
+                            <div class="connection-dot" id="connectionDot"></div>
+                            <div class="connection-tooltip" id="connectionTooltip">未接続</div>
+                        </div>
+                        <div class="settings-icon" onclick="showSettingsModal()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97c0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1c0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z"/>
                             </svg>
-                            Dropbox接続済み
-                        </span>
-                        <button class="btn-secondary" onclick="syncData()">
-                            <span id="sync-status">🔄 同期</span>
-                        </button>
-                        <button class="btn-secondary" onclick="exportData()">📤 データエクスポート</button>
-                        <button class="btn-secondary" onclick="document.getElementById('importInput').click()">📥 データインポート</button>
-                        <input type="file" id="importInput" accept=".json" style="display: none;" onchange="importData(event)">
-                        <button class="btn-primary" onclick="showContactForm()">新規連絡先登録</button>
-                        <button class="btn-secondary" onclick="logout()" style="margin-left: auto;">ログアウト</button>
+                        </div>
                     </div>
+                    <button class="btn-primary" onclick="showContactForm()">新規連絡先登録</button>
                 </div>
             </header>
+            <!-- ★ END PATCH v15.0 - HTMLヘッダー変更 ★ -->
 
-            <div class="search-filters">
+            <!-- ★ BEGIN PATCH v15.0 - 検索フィルター変更 ★ -->
+            <div class="search-filters" id="searchFilters">
                 <div class="search-header">
-                    <h3>検索・フィルター</h3>
+                    <h3>
+                        <span class="filter-toggle" onclick="toggleFilters()">
+                            <span id="filterToggleIcon">▼</span>
+                            検索・フィルター
+                        </span>
+                    </h3>
                     <div class="sort-controls">
                         <label>並び替え:</label>
                         <select id="sortOrder" onchange="applySorting()">
@@ -1127,55 +1519,58 @@
                         </select>
                     </div>
                 </div>
-                <div class="filter-row">
-                    <div class="filter-group search-group">
-                        <label>フリーワード検索</label>
-                        <input type="text" id="searchName" placeholder="名前、よみ、会社、メール、タグ、内容などを検索..." onkeyup="filterContacts()">
-                    </div>
-                    <div class="filter-group">
-                        <label>種別</label>
-                        <select id="filterType" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>所属・チャプター</label>
-                        <select id="filterAffiliation" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>繋がりたい人・業種</label>
-                        <select id="filterWantToConnect" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>金の卵</label>
-                        <select id="filterGoldenEgg" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>紹介元</label>
-                        <select id="filterReferredBy" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>エリア</label>
-                        <select id="filterArea" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>居住地</label>
-                        <select id="filterResidence" onchange="filterContacts()">
-                            <option value="">すべて</option>
-                        </select>
+                <div class="filter-content" id="filterContent">
+                    <div class="filter-row">
+                        <div class="filter-group search-group">
+                            <label>フリーワード検索</label>
+                            <input type="text" id="searchName" placeholder="名前、よみ、会社、メール、タグ、内容などを検索..." onkeyup="filterContacts()">
+                        </div>
+                        <div class="filter-group">
+                            <label>種別</label>
+                            <select id="filterType" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>所属・チャプター</label>
+                            <select id="filterAffiliation" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>繋がりたい人・業種</label>
+                            <select id="filterWantToConnect" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>金の卵</label>
+                            <select id="filterGoldenEgg" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>紹介元</label>
+                            <select id="filterReferredBy" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>エリア</label>
+                            <select id="filterArea" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>居住地</label>
+                            <select id="filterResidence" onchange="filterContacts()">
+                                <option value="">すべて</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
+            <!-- ★ END PATCH v15.0 - 検索フィルター変更 ★ -->
 
             <!-- Outstanding Actions Dashboard -->
             <div id="outstandingActions" class="search-filters" style="margin-bottom: 24px;">
@@ -1189,6 +1584,25 @@
                     <!-- Outstanding actions will be rendered here -->
                 </div>
             </div>
+
+            <!-- ★ BEGIN PATCH v15.0 - 表示切り替えボタン追加 ★ -->
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                <div class="view-toggle">
+                    <button id="cardViewBtn" class="active" onclick="setViewMode('card')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 3h8v8H3V3m10 0h8v8h-8V3M3 13h8v8H3v-8m10 0h8v8h-8v-8Z"/>
+                        </svg>
+                        カード表示
+                    </button>
+                    <button id="listViewBtn" onclick="setViewMode('list')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 4h18v2H3V4m0 7h18v2H3v-2m0 7h18v2H3v-2Z"/>
+                        </svg>
+                        リスト表示
+                    </button>
+                </div>
+            </div>
+            <!-- ★ END PATCH v15.0 - 表示切り替えボタン追加 ★ -->
 
             <div id="contactGrid" class="contact-grid">
                 <!-- 連絡先カードがここに表示される -->
@@ -1223,6 +1637,20 @@
                         <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
                         <div id="photoPreview"></div>
                     </div>
+
+                    <!-- ★ BEGIN PATCH v15.0 - 連絡先フォームに名刺画像追加 ★ -->
+                    <div class="form-group">
+                        <label>名刺画像</label>
+                        <div class="file-drop-zone card-image-zone" id="cardImageDropZone">
+                            名刺画像をアップロード（クリックまたはドラッグ＆ドロップ）
+                        </div>
+                        <button type="button" class="btn-secondary camera-button" onclick="openCamera()">
+                            📷 カメラで撮影
+                        </button>
+                        <input type="file" id="cardImageUpload" accept="image/*" style="display: none;" onchange="handleCardImageUpload(event)">
+                        <div id="cardImagePreview"></div>
+                    </div>
+                    <!-- ★ END PATCH v15.0 - 連絡先フォームに名刺画像追加 ★ -->
 
                     <div class="form-group">
                         <label>会社名</label>
@@ -1365,6 +1793,13 @@
                         <textarea name="content" rows="5" required placeholder="Markdown記法が使えます"></textarea>
                     </div>
 
+                    <!-- ★ BEGIN PATCH v15.0 - ミーティングフォームの過去の経歴欄 ★ -->
+                    <div class="form-group career-history-section" id="careerHistorySection">
+                        <label>過去の経歴</label>
+                        <textarea name="careerHistory" rows="3" placeholder="初回ミーティング時に過去の経歴を記録します"></textarea>
+                    </div>
+                    <!-- ★ END PATCH v15.0 - ミーティングフォームの過去の経歴欄 ★ -->
+
                     <div class="form-group">
                         <label>次回アクション</label>
                         <div id="taskInputContainer"></div>
@@ -1390,6 +1825,52 @@
         </div>
     </div>
 
+    <!-- ★ BEGIN PATCH v15.0 - 設定モーダル追加 ★ -->
+    <div id="settingsModal" class="modal settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>設定</h2>
+                <span class="close-modal" onclick="closeModal('settingsModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="settings-list">
+                    <div class="settings-item" onclick="syncData()">
+                        <div class="settings-item-icon">🔄</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">同期</div>
+                            <div class="settings-item-description">Dropboxと最新のデータを同期します</div>
+                        </div>
+                    </div>
+                    <div class="settings-item" onclick="exportData()">
+                        <div class="settings-item-icon">📤</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">データエクスポート</div>
+                            <div class="settings-item-description">すべてのデータをJSONファイルとして保存します</div>
+                        </div>
+                    </div>
+                    <div class="settings-item" onclick="document.getElementById('importInput').click()">
+                        <div class="settings-item-icon">📥</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">データインポート</div>
+                            <div class="settings-item-description">JSONファイルからデータを読み込みます</div>
+                        </div>
+                    </div>
+                    <div class="settings-item" onclick="logout()">
+                        <div class="settings-item-icon">🚪</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">ログアウト</div>
+                            <div class="settings-item-description">Dropboxとの接続を解除します</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- ★ END PATCH v15.0 - 設定モーダル追加 ★ -->
+
+    <!-- インポート用の隠しinput -->
+    <input type="file" id="importInput" accept=".json" style="display: none;" onchange="importData(event)">
+
     <!-- ローディングオーバーレイ -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="loading-content">
@@ -1408,6 +1889,16 @@
         <span>Dropbox再認証中...</span>
     </div>
     <!-- ★ END PATCH v14.0 ★ -->
+
+    <!-- ★ BEGIN PATCH v15.0 - カメラプレビュー追加 ★ -->
+    <div id="cameraPreview" class="camera-preview">
+        <video id="cameraVideo"></video>
+        <div class="camera-controls">
+            <button class="btn-primary" onclick="capturePhoto()">撮影</button>
+            <button class="btn-secondary" onclick="closeCamera()">キャンセル</button>
+        </div>
+    </div>
+    <!-- ★ END PATCH v15.0 - カメラプレビュー追加 ★ -->
 
     <script>
         // ===== グローバル変数 =====
@@ -1598,6 +2089,14 @@
             }
         }
         /* ★ END PATCH v14.0 ★ */
+
+        // ★ BEGIN PATCH v15.0 - JavaScript変更 ★ */
+        // グローバル変数追加
+        let currentCardImageFile = null;
+        let viewMode = localStorage.getItem('viewMode') || 'card';
+        let filterVisible = localStorage.getItem('filterVisible') === 'true';
+        let cameraStream = null;
+        /* ★ END PATCH v15.0 ★ */
         
         // ★ v12.0: Dropbox共有リンクを直接アクセス可能な形式に変換
         function toDirectLink(url) {
@@ -1650,6 +2149,13 @@
         window.onload = async function() {
             try {
                 console.log('=== アプリケーション初期化開始 ===');
+
+                // ★ BEGIN PATCH v15.0 - 初期設定追加 ★ */
+                initializeViewMode();
+                initializeFilterVisibility();
+                checkCameraSupport();
+                updateConnectionStatus();
+                /* ★ END PATCH v15.0 ★ */
                 
                 // ★ BEGIN PATCH v14.0 - PKCE認証フロー対応 ★
                 // URLからコードを取得（PKCE用）
@@ -1753,6 +2259,191 @@
                 showAuthScreen();
             }
         };
+
+        // ★ BEGIN PATCH v15.0 - 新規関数追加 ★
+        // 表示モード初期化
+        function initializeViewMode() {
+            if (viewMode === 'list') {
+                document.getElementById('cardViewBtn').classList.remove('active');
+                document.getElementById('listViewBtn').classList.add('active');
+            }
+        }
+
+        // フィルター表示状態初期化
+        function initializeFilterVisibility() {
+            const filterContent = document.getElementById('filterContent');
+            const toggleIcon = document.getElementById('filterToggleIcon');
+            
+            if (!filterVisible) {
+                filterContent.classList.remove('show');
+                toggleIcon.textContent = '▶';
+            } else {
+                filterContent.classList.add('show');
+                toggleIcon.textContent = '▼';
+            }
+        }
+
+        // カメラサポートチェック
+        function checkCameraSupport() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                document.querySelector('.card-image-zone').parentElement.classList.add('camera-supported');
+            }
+        }
+
+        // 接続状態更新
+        function updateConnectionStatus() {
+            const dot = document.getElementById('connectionDot');
+            const tooltip = document.getElementById('connectionTooltip');
+            
+            if (dropbox) {
+                dot.classList.add('connected');
+                dot.classList.remove('disconnected');
+                tooltip.textContent = '接続済み';
+            } else {
+                dot.classList.remove('connected');
+                dot.classList.add('disconnected');
+                tooltip.textContent = '未接続';
+            }
+        }
+
+        // 設定モーダル表示
+        function showSettingsModal() {
+            closeModal('settingsModal'); // 一旦閉じる
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        // 表示モード切り替え
+        function setViewMode(mode) {
+            viewMode = mode;
+            localStorage.setItem('viewMode', mode);
+            
+            if (mode === 'card') {
+                document.getElementById('cardViewBtn').classList.add('active');
+                document.getElementById('listViewBtn').classList.remove('active');
+            } else {
+                document.getElementById('listViewBtn').classList.add('active');
+                document.getElementById('cardViewBtn').classList.remove('active');
+            }
+            
+            renderContactList();
+        }
+
+        // フィルター表示切り替え
+        function toggleFilters() {
+            const filterContent = document.getElementById('filterContent');
+            const toggleIcon = document.getElementById('filterToggleIcon');
+            
+            filterVisible = !filterVisible;
+            localStorage.setItem('filterVisible', filterVisible);
+            
+            if (filterVisible) {
+                filterContent.classList.add('show');
+                toggleIcon.textContent = '▼';
+            } else {
+                filterContent.classList.remove('show');
+                toggleIcon.textContent = '▶';
+            }
+        }
+
+        // 名刺画像アップロード
+        function handleCardImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processCardImageFile(file);
+            }
+        }
+
+        function processCardImageFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showNotification('画像ファイルを選択してください', 'error');
+                return;
+            }
+            
+            currentCardImageFile = file;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('cardImagePreview').innerHTML = 
+                    `<img src="${e.target.result}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // カメラ機能
+        function openCamera() {
+            const preview = document.getElementById('cameraPreview');
+            const video = document.getElementById('cameraVideo');
+            
+            preview.style.display = 'block';
+            
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    cameraStream = stream;
+                    video.srcObject = stream;
+                })
+                .catch(err => {
+                    console.error('カメラの起動に失敗しました:', err);
+                    showNotification('カメラの起動に失敗しました', 'error');
+                    closeCamera();
+                });
+        }
+
+        function closeCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            document.getElementById('cameraPreview').style.display = 'none';
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0);
+            
+            canvas.toBlob(blob => {
+                currentCardImageFile = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('cardImagePreview').innerHTML = 
+                        `<img src="${e.target.result}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;">`;
+                };
+                reader.readAsDataURL(blob);
+                
+                closeCamera();
+            }, 'image/jpeg');
+        }
+
+        // タブ切り替え関数
+        function switchTab(event, tabName) {
+            // すべてのタブとコンテンツを非アクティブに
+            const tabs = document.querySelectorAll('.detail-tab');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            contents.forEach(content => content.classList.remove('active'));
+            
+            // クリックされたタブとコンテンツをアクティブに
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        // 名刺画像専用のドロップハンドラ
+        function handleCardImageDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                processCardImageFile(files[0]);
+            }
+        }
+        /* ★ END PATCH v15.0 - 新規関数追加 ★ */
         
         // ===== Dropbox認証 =====
         // ★ BEGIN PATCH v14.0 - PKCE認証フロー ★
@@ -1900,6 +2591,10 @@
                 
                 updateDropdownOptions();
                 renderContactList();
+
+                // ★ BEGIN PATCH v15.0 - 接続状態更新 ★
+                updateConnectionStatus();
+                /* ★ END PATCH v15.0 ★ */
                 
                 hideLoading();
                 console.log('✅ Dropbox初期化完了');
@@ -2117,12 +2812,20 @@
         function showAuthScreen() {
             // 再認証フラグをリセット
             isReauthInProgress = false;
+
+            // ★ BEGIN PATCH v15.0 - 接続状態更新 ★
+            updateConnectionStatus();
+            /* ★ END PATCH v15.0 ★ */
             
             document.getElementById('authContainer').style.display = 'block';
             document.getElementById('mainContainer').style.display = 'none';
         }
         
         function logout() {
+            // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
+            closeModal('settingsModal');
+            /* ★ END PATCH v15.0 ★ */
+
             // トークンを削除
             localStorage.removeItem('dropbox_access_token');
             localStorage.removeItem('dropbox_refresh_token'); // ★ v14.0
@@ -2136,7 +2839,10 @@
         async function createFolderStructure() {
             const folders = [
                 '/1to1App',
-                '/1to1App/attachments'
+                '/1to1App/attachments',
+                // ★ BEGIN PATCH v15.0 - 名刺画像用フォルダ追加 ★
+                '/1to1App/attachments/cards'
+                /* ★ END PATCH v15.0 ★ */
             ];
             
             for (const folder of folders) {
@@ -2224,10 +2930,20 @@
                     contact.cutout = '';
                     needsSave = true;
                 }
+                // ★ BEGIN PATCH v15.0 - cardImage関連フィールド追加 ★
+                if (!contact.hasOwnProperty('cardImage')) {
+                    contact.cardImage = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cardImageUrl')) {
+                    contact.cardImageUrl = '';
+                    needsSave = true;
+                }
+                /* ★ END PATCH v15.0 ★ */
             });
             
             if (needsSave) {
-                console.log('連絡先データに「よみ」「切り出し方」フィールドを追加しました');
+                console.log('連絡先データに新しいフィールドを追加しました');
             }
         }
         
@@ -2353,6 +3069,10 @@
         // ===== 同期機能 =====
         async function syncData() {
             try {
+                // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
+                closeModal('settingsModal');
+                /* ★ END PATCH v15.0 ★ */
+
                 document.getElementById('sync-status').textContent = '🔄 同期中...';
                 await loadData();
                 
@@ -2362,6 +3082,9 @@
                 renderContactList();
                 updateDropdownOptions();
                 document.getElementById('sync-status').textContent = '✅ 同期完了';
+                // ★ BEGIN PATCH v15.0 - 通知追加 ★
+                showNotification('同期が完了しました');
+                /* ★ END PATCH v15.0 ★ */
                 setTimeout(() => {
                     document.getElementById('sync-status').textContent = '🔄 同期';
                 }, 2000);
@@ -2380,9 +3103,11 @@
         
         // ★ v12.0: ファイルアップロード修正（toDirectLink使用）
         // ===== ファイルアップロード（最終修正版） =====
-        async function uploadFile(file, customName = null) {
+        // ★ BEGIN PATCH v15.0 - uploadFile関数の修正（カスタムパス対応） ★
+        async function uploadFile(file, customName = null, customPath = null) {
             const fileName = sanitizeFileName(customName || file.name);
-            const path = `/1to1App/attachments/${fileName}`;
+            const basePath = customPath || '/1to1App/attachments/';
+            const path = `${basePath}${fileName}`;
             
             console.log(`📤 ファイルアップロード開始: ${fileName}`);
             console.log(`   - ファイルタイプ: ${file.type}`);
@@ -2451,7 +3176,7 @@
                     }
                 }
                 
-                // ★ v12.0: すべてのURLを直接アクセス形式に変換
+                // すべてのURLを直接アクセス形式に変換
                 shareUrl = toDirectLink(shareUrl);
                 console.log('   🔗 直接アクセスURL:', shareUrl);
                 
@@ -2482,6 +3207,7 @@
                 throw error;
             }
         }
+        /* ★ END PATCH v15.0 - uploadFile関数の修正 ★ */
         
         // ★ v11.0: 顔写真のドラッグ＆ドロップ対応
         // ===== 顔写真アップロード =====
@@ -2544,6 +3270,10 @@
                 if (existing) {
                     contact.photo = existing.photo;
                     contact.photoUrl = existing.photoUrl;
+                    // ★ BEGIN PATCH v15.0 - 既存のカード画像も保持 ★
+                    contact.cardImage = existing.cardImage;
+                    contact.cardImageUrl = existing.cardImageUrl;
+                    /* ★ END PATCH v15.0 ★ */
                     contact.attachments = existing.attachments || [];
                 }
             }
@@ -2557,6 +3287,16 @@
                     contact.photo = photoResult.path;
                     contact.photoUrl = photoResult.url;
                 }
+                
+                // ★ BEGIN PATCH v15.0 - 名刺画像をアップロード ★
+                if (currentCardImageFile) {
+                    const timestamp = new Date().getTime();
+                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName, '/1to1App/attachments/cards/');
+                    contact.cardImage = cardImageResult.path;
+                    contact.cardImageUrl = cardImageResult.url;
+                }
+                /* ★ END PATCH v15.0 ★ */
                 
                 // 添付ファイルをアップロード
                 for (const file of selectedFiles) {
@@ -2613,6 +3353,20 @@
             const formData = new FormData(event.target);
             const taskTexts = formData.getAll('taskText[]');
             const taskDues = formData.getAll('taskDue[]');
+            
+            // ★ BEGIN PATCH v15.0 - 過去の経歴を保存 ★
+            const careerHistorySection = document.getElementById('careerHistorySection');
+            if (careerHistorySection.classList.contains('show')) {
+                const careerHistory = formData.get('careerHistory');
+                if (careerHistory) {
+                    const contact = contacts.find(c => c.id === currentEditingContactId);
+                    if (contact) {
+                        contact.careerHistory = careerHistory;
+                        contact.updatedAt = new Date().toISOString();
+                    }
+                }
+            }
+            /* ★ END PATCH v15.0 ★ */
             
             // タスク配列を作成
             const tasks = [];
@@ -2796,6 +3550,13 @@
                             `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
                     }
                     
+                    // ★ BEGIN PATCH v15.0 - 名刺画像プレビュー ★
+                    if (contact.cardImageUrl) {
+                        document.getElementById('cardImagePreview').innerHTML = 
+                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '名刺')">`;
+                    }
+                    /* ★ END PATCH v15.0 ★ */
+                    
                     // マルチセレクト設定
                     setSelectedValues('types', contact.types || []);
                     setSelectedValues('affiliations', contact.affiliations || []);
@@ -2815,6 +3576,7 @@
             document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
         }
         
+        // ★ BEGIN PATCH v15.0 - showContactDetailの修正（タブ表示） ★
         function showContactDetail(contactId) {
             const contact = contacts.find(c => c.id === contactId);
             if (!contact) return;
@@ -2833,85 +3595,109 @@
                     ${contact.company ? `<p style="color: #aaaaaa; margin-bottom: 20px;">${escapeHtml(contact.company)}</p>` : ''}
                 </div>
                 
-                <table style="width: 100%; margin-bottom: 20px;">
-                    ${contact.email ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">メール:</td><td style="padding: 8px 0;">${escapeHtml(contact.email)}</td></tr>` : ''}
-                    ${contact.phone ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">電話:</td><td style="padding: 8px 0;">${escapeHtml(contact.phone)}</td></tr>` : ''}
-                    ${contact.homepage ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">HP:</td><td style="padding: 8px 0;"><a href="${escapeHtml(contact.homepage)}" target="_blank">${escapeHtml(contact.homepage)}</a></td></tr>` : ''}
-                    ${contact.area ? `
-                        <tr><td style="padding: 8px 0; color: #aaaaaa;">エリア:</td><td style="padding: 8px 0;">${escapeHtml(contact.area)}</td></tr>
-                    ` : ''}
-                    
-                    ${contact.residence ? `
-                        <tr><td style="padding: 8px 0; color: #aaaaaa;">居住地:</td><td style="padding: 8px 0;">${escapeHtml(contact.residence)}</td></tr>
-                    ` : ''}
-                    ${contact.referredBy ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">紹介元:</td><td style="padding: 8px 0;">${getReferrerDisplay(contact)}</td></tr>` : ''}
-                </table>
+                <div class="detail-tabs">
+                    <button class="detail-tab active" onclick="switchTab(event, 'basic')">基本情報</button>
+                    <button class="detail-tab" onclick="switchTab(event, 'strength')">強み・経歴</button>
+                    <button class="detail-tab" onclick="switchTab(event, 'files')">ファイル</button>
+                </div>
                 
-                ${contact.types && contact.types.length > 0 ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>種別:</strong> ${contact.types.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join(' ')}
-                    </div>
-                ` : ''}
-                
-                ${contact.affiliations && contact.affiliations.length > 0 ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>所属・チャプター:</strong> ${contact.affiliations.map(a => `<span class="tag">${escapeHtml(a)}</span>`).join(' ')}
-                    </div>
-                ` : ''}
-                
-                ${contact.wantToConnect && contact.wantToConnect.length > 0 ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>繋がりたい人・業種:</strong> ${contact.wantToConnect.map(w => `<span class="tag">${escapeHtml(w)}</span>`).join(' ')}
-                    </div>
-                ` : ''}
-                
-                ${contact.goldenEgg && contact.goldenEgg.length > 0 ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>金の卵:</strong> ${contact.goldenEgg.map(g => `<span class="tag">${escapeHtml(g)}</span>`).join(' ')}
-                    </div>
-                ` : ''}
-                
-                ${contact.strengths ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>強み:</strong>
-                        <div class="markdown">${renderMarkdown(contact.strengths)}</div>
-                    </div>
-                ` : ''}
-                
-                ${contact.careerHistory ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>過去の経歴:</strong>
-                        <div class="career-history-wrapper">
-                            <div class="markdown career-history-content ${contact.careerHistory.split('\n').length > 7 ? 'collapsed' : ''}" id="career-${contact.id}">
-                                ${renderMarkdown(contact.careerHistory)}
+                <div id="basic" class="tab-content active">
+                    <div class="tab-panel">
+                        <table style="width: 100%; margin-bottom: 20px;">
+                            ${contact.email ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">メール:</td><td style="padding: 8px 0;">${escapeHtml(contact.email)}</td></tr>` : ''}
+                            ${contact.phone ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">電話:</td><td style="padding: 8px 0;">${escapeHtml(contact.phone)}</td></tr>` : ''}
+                            ${contact.homepage ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">HP:</td><td style="padding: 8px 0;"><a href="${escapeHtml(contact.homepage)}" target="_blank">${escapeHtml(contact.homepage)}</a></td></tr>` : ''}
+                            ${contact.area ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">エリア:</td><td style="padding: 8px 0;">${escapeHtml(contact.area)}</td></tr>` : ''}
+                            ${contact.residence ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">居住地:</td><td style="padding: 8px 0;">${escapeHtml(contact.residence)}</td></tr>` : ''}
+                            ${contact.referredBy ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">紹介元:</td><td style="padding: 8px 0;">${getReferrerDisplay(contact)}</td></tr>` : ''}
+                        </table>
+                        
+                        ${contact.types && contact.types.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>種別:</strong> ${contact.types.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join(' ')}
                             </div>
-                            ${contact.careerHistory.split('\n').length > 7 ? `
-                                <a href="#" class="career-history-toggle" onclick="toggleCareerHistory('${contact.id}'); return false;">続きを見る</a>
-                            ` : ''}
-                        </div>
+                        ` : ''}
+                        
+                        ${contact.affiliations && contact.affiliations.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>所属・チャプター:</strong> ${contact.affiliations.map(a => `<span class="tag">${escapeHtml(a)}</span>`).join(' ')}
+                            </div>
+                        ` : ''}
+                        
+                        ${contact.wantToConnect && contact.wantToConnect.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>繋がりたい人・業種:</strong> ${contact.wantToConnect.map(w => `<span class="tag">${escapeHtml(w)}</span>`).join(' ')}
+                            </div>
+                        ` : ''}
+                        
+                        ${contact.goldenEgg && contact.goldenEgg.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>金の卵:</strong> ${contact.goldenEgg.map(g => `<span class="tag">${escapeHtml(g)}</span>`).join(' ')}
+                            </div>
+                        ` : ''}
+                        
+                        ${contact.cutout ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>切り出し方:</strong>
+                                <div class="markdown">${renderMarkdown(contact.cutout)}</div>
+                            </div>
+                        ` : ''}
                     </div>
-                ` : ''}
+                </div>
                 
-                ${contact.cutout ? `
-                    <div style="margin-bottom: 15px;">
-                        <strong>切り出し方:</strong>
-                        <div class="markdown">${renderMarkdown(contact.cutout)}</div>
+                <div id="strength" class="tab-content">
+                    <div class="tab-panel">
+                        ${contact.strengths ? `
+                            <div style="margin-bottom: 20px;">
+                                <strong>強み:</strong>
+                                <div class="markdown">${renderMarkdown(contact.strengths)}</div>
+                            </div>
+                        ` : ''}
+                        
+                        ${contact.careerHistory ? `
+                            <div>
+                                <strong>過去の経歴:</strong>
+                                <div class="markdown">${renderMarkdown(contact.careerHistory)}</div>
+                            </div>
+                        ` : ''}
+                        
+                        ${!contact.strengths && !contact.careerHistory ? 
+                            '<p style="color: #aaaaaa;">まだ情報が登録されていません。</p>' : ''}
                     </div>
-                ` : ''}
+                </div>
                 
-                ${contact.attachments && contact.attachments.length > 0 ? `
-                    <div style="margin-bottom: 20px;">
-                        <strong>添付ファイル:</strong>
-                        <div class="file-list" style="margin-top: 10px;">
-                            ${contact.attachments.map(att => `
-                                <div class="file-item">
-                                    <span>${escapeHtml(att.name)}</span>
-                                    <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" class="btn-small btn-secondary">開く</a>
+                <div id="files" class="tab-content">
+                    <div class="tab-panel">
+                        ${contact.cardImageUrl ? `
+                            <div style="margin-bottom: 20px;">
+                                <strong>名刺画像:</strong>
+                                <div style="margin-top: 10px;">
+                                    <img src="${contact.cardImageUrl}" style="max-width: 100%; border-radius: 8px; cursor: pointer;" 
+                                         onclick="window.open('${contact.cardImageUrl}', '_blank')"
+                                         crossorigin="anonymous" 
+                                         onerror="handleImageError(this, '名刺')">
                                 </div>
-                            `).join('')}
-                        </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${contact.attachments && contact.attachments.length > 0 ? `
+                            <div>
+                                <strong>添付ファイル:</strong>
+                                <div class="file-list" style="margin-top: 10px;">
+                                    ${contact.attachments.map(att => `
+                                        <div class="file-item">
+                                            <span>${escapeHtml(att.name)}</span>
+                                            <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" class="btn-small btn-secondary">開く</a>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${!contact.cardImageUrl && (!contact.attachments || contact.attachments.length === 0) ?
+                            '<p style="color: #aaaaaa;">ファイルがアップロードされていません。</p>' : ''}
                     </div>
-                ` : ''}
+                </div>
                 
                 <div class="action-buttons">
                     <button class="btn-primary" onclick="showContactForm('${contact.id}')">編集</button>
@@ -2962,6 +3748,7 @@
             // モーダルを最上部にスクロール
             document.querySelector('#contactDetailModal .modal-content').scrollTop = 0;
         }
+        /* ★ END PATCH v15.0 - showContactDetailの修正 ★ */
         
         // 過去の経歴の折りたたみ切り替え
         function toggleCareerHistory(contactId) {
@@ -3122,6 +3909,7 @@
         }
         
         // ★ BEGIN PATCH v14.0 - ミーティングフォーム表示（ドラフト復元対応） ★
+        // ★ BEGIN PATCH v15.0 - showMeetingFormの修正（過去の経歴欄制御） ★
         function showMeetingForm(contactId, meetingId = null) {
             currentEditingContactId = contactId;
             currentEditingMeetingId = meetingId;
@@ -3130,6 +3918,17 @@
             const contact = contacts.find(c => c.id === contactId);
             document.getElementById('meetingFormTitle').textContent = 
                 `${contact.name}さんとのミーティング記録${meetingId ? '編集' : ''}`;
+            
+            // 過去の経歴欄の表示制御
+            const contactMeetings = meetings.filter(m => m.contactId === contactId);
+            const careerHistorySection = document.getElementById('careerHistorySection');
+            
+            if (!meetingId && contactMeetings.length === 0 && !contact.careerHistory) {
+                // 初回ミーティングかつ過去の経歴が未記入の場合のみ表示
+                careerHistorySection.classList.add('show');
+            } else {
+                careerHistorySection.classList.remove('show');
+            }
             
             if (meetingId) {
                 const meeting = meetings.find(m => m.id === meetingId);
@@ -3179,6 +3978,7 @@
             // モーダルを最上部にスクロール
             document.querySelector('#meetingFormModal .modal-content').scrollTop = 0;
         }
+        /* ★ END PATCH v15.0 - showMeetingFormの修正 ★ */
         /* ★ END PATCH v14.0 ★ */
         
         // タスク入力フィールド表示関数
@@ -3478,6 +4278,7 @@
         }
         
         // ===== レンダリング =====
+        // ★ BEGIN PATCH v15.0 - renderContactListの修正（リスト表示対応） ★
         function renderContactList(filterFunc = null) {
             const grid = document.getElementById('contactGrid');
             let filteredContacts = filterFunc ? contacts.filter(filterFunc) : contacts;
@@ -3492,40 +4293,73 @@
                 actionsHeader.textContent = `未完了のアクション${outstandingCount > 0 ? ' (' + outstandingCount + ')' : ''}`;
             }
             
-            grid.innerHTML = filteredContacts.map(contact => {
-                const lastMeetingDate = getLastMeetingDate(contact.id);
-                const lastMeetingText = lastMeetingDate ? 
-                    `最終打合せ: ${formatDate(lastMeetingDate)}` : 
-                    'ミーティング未実施';
-                
-                if (contact.photoUrl) {
-                    console.log(`連絡先カード画像URL (${contact.name}):`, contact.photoUrl);
-                }
-                
-                return `
-                    <div class="contact-card" onclick="showContactDetail('${contact.id}')">
-                        <div class="contact-photo">
-                            ${contact.photoUrl ? 
-                                `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
-                                `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`
-                            }
+            if (viewMode === 'list') {
+                // リスト表示
+                grid.className = 'contact-list';
+                grid.innerHTML = filteredContacts.map(contact => {
+                    const lastMeetingDate = getLastMeetingDate(contact.id);
+                    const lastMeetingText = lastMeetingDate ? 
+                        `最終: ${formatDate(lastMeetingDate)}` : 
+                        '未実施';
+                    
+                    return `
+                        <div class="contact-list-item" onclick="showContactDetail('${contact.id}')">
+                            <div class="contact-list-photo">
+                                ${contact.photoUrl ? 
+                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
+                                    `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`
+                                }
+                            </div>
+                            <div class="contact-list-info">
+                                <div class="contact-list-name">
+                                    ${escapeHtml(contact.name)}
+                                    ${contact.yomi ? `<span style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</span>` : ''}
+                                </div>
+                                <div class="contact-list-company">${contact.company || 'ー'}</div>
+                            </div>
+                            <div class="contact-list-meeting">${lastMeetingText}</div>
                         </div>
-                        <div class="contact-name">${escapeHtml(contact.name)}</div>
-                        ${contact.yomi ? `<div class="contact-info" style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</div>` : ''}
-                        ${contact.company ? `<div class="contact-info">会社: ${escapeHtml(contact.company)}</div>` : ''}
-                        ${contact.email ? `<div class="contact-info">📧 ${escapeHtml(contact.email)}</div>` : ''}
-                        ${contact.phone ? `<div class="contact-info">📱 ${escapeHtml(contact.phone)}</div>` : ''}
-                        ${contact.homepage ? `<div class="contact-info">🌐 ${escapeHtml(contact.homepage)}</div>` : ''}
-                        <div class="last-meeting-info">${lastMeetingText}</div>
-                        <div class="tags">
-                            ${(contact.types || []).map(type => `<span class="tag">${escapeHtml(type)}</span>`).join('')}
-                            ${(contact.affiliations || []).map(aff => `<span class="tag">${escapeHtml(aff)}</span>`).join('')}
-                            ${contact.referredBy ? `<span class="tag">紹介: ${escapeHtml(contact.referredBy)}</span>` : ''}
+                    `;
+                }).join('');
+            } else {
+                // カード表示（既存）
+                grid.className = 'contact-grid';
+                grid.innerHTML = filteredContacts.map(contact => {
+                    const lastMeetingDate = getLastMeetingDate(contact.id);
+                    const lastMeetingText = lastMeetingDate ? 
+                        `最終打合せ: ${formatDate(lastMeetingDate)}` : 
+                        'ミーティング未実施';
+                    
+                    if (contact.photoUrl) {
+                        console.log(`連絡先カード画像URL (${contact.name}):`, contact.photoUrl);
+                    }
+                    
+                    return `
+                        <div class="contact-card" onclick="showContactDetail('${contact.id}')">
+                            <div class="contact-photo">
+                                ${contact.photoUrl ? 
+                                    `<img src="${contact.photoUrl}" alt="${contact.name}" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
+                                    `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`
+                                }
+                            </div>
+                            <div class="contact-name">${escapeHtml(contact.name)}</div>
+                            ${contact.yomi ? `<div class="contact-info" style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</div>` : ''}
+                            ${contact.company ? `<div class="contact-info">会社: ${escapeHtml(contact.company)}</div>` : ''}
+                            ${contact.email ? `<div class="contact-info">📧 ${escapeHtml(contact.email)}</div>` : ''}
+                            ${contact.phone ? `<div class="contact-info">📱 ${escapeHtml(contact.phone)}</div>` : ''}
+                            ${contact.homepage ? `<div class="contact-info">🌐 ${escapeHtml(contact.homepage)}</div>` : ''}
+                            <div class="last-meeting-info">${lastMeetingText}</div>
+                            <div class="tags">
+                                ${(contact.types || []).map(type => `<span class="tag">${escapeHtml(type)}</span>`).join('')}
+                                ${(contact.affiliations || []).map(aff => `<span class="tag">${escapeHtml(aff)}</span>`).join('')}
+                                ${contact.referredBy ? `<span class="tag">紹介: ${escapeHtml(contact.referredBy)}</span>` : ''}
+                            </div>
                         </div>
-                    </div>
-                `;
-            }).join('');
+                    `;
+                }).join('');
+            }
         }
+        /* ★ END PATCH v15.0 - renderContactListの修正 ★ */
         
         // 画像エラーハンドリング
         function handleImageError(img, contactName) {
@@ -3876,6 +4710,16 @@
             photoZone.addEventListener('dragleave', handleDragLeave);
             photoZone.addEventListener('drop', (e) => handlePhotoDrop(e));
             
+            // ★ BEGIN PATCH v15.0 - 名刺画像のドラッグ＆ドロップ ★
+            const cardImageZone = document.getElementById('cardImageDropZone');
+            const cardImageInput = document.getElementById('cardImageUpload');
+            
+            cardImageZone.addEventListener('click', () => cardImageInput.click());
+            cardImageZone.addEventListener('dragover', handleDragOver);
+            cardImageZone.addEventListener('dragleave', handleDragLeave);
+            cardImageZone.addEventListener('drop', (e) => handleCardImageDrop(e));
+            /* ★ END PATCH v15.0 ★ */
+            
             // 連絡先の添付ファイル
             const attachmentZone = document.getElementById('attachmentDropZone');
             const attachmentInput = document.getElementById('attachmentUpload');
@@ -4014,9 +4858,15 @@
         function resetContactForm() {
             document.getElementById('contactForm').reset();
             document.getElementById('photoPreview').innerHTML = '';
+            // ★ BEGIN PATCH v15.0 - 名刺画像プレビューもリセット ★
+            document.getElementById('cardImagePreview').innerHTML = '';
+            /* ★ END PATCH v15.0 ★ */
             document.getElementById('existingAttachments').innerHTML = '';
             document.getElementById('newAttachments').innerHTML = '';
             currentPhotoFile = null;
+            // ★ BEGIN PATCH v15.0 - 名刺画像ファイルもリセット ★
+            currentCardImageFile = null;
+            /* ★ END PATCH v15.0 ★ */
             selectedFiles = [];
             deletedAttachments = [];
             
@@ -4039,9 +4889,13 @@
         
         // ===== データエクスポート/インポート =====
         async function exportData() {
+            // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
+            closeModal('settingsModal');
+            /* ★ END PATCH v15.0 ★ */
+
             try {
                 const exportData = {
-                    version: '2.5',  // v14.0: バージョン更新
+                    version: '2.6',  // ★ BEGIN PATCH v15.0 - バージョン更新 ★
                     exportDate: new Date().toISOString(),
                     contacts: contacts,
                     meetings: meetings,
@@ -4095,6 +4949,14 @@
                         if (!contact.hasOwnProperty('cutout')) {
                             contact.cutout = '';
                         }
+                        // ★ BEGIN PATCH v15.0 - cardImage関連フィールド初期化 ★
+                        if (!contact.hasOwnProperty('cardImage')) {
+                            contact.cardImage = '';
+                        }
+                        if (!contact.hasOwnProperty('cardImageUrl')) {
+                            contact.cardImageUrl = '';
+                        }
+                        /* ★ END PATCH v15.0 ★ */
                         // 顔写真URLを変換
                         if (contact.photoUrl && contact.photoUrl.includes('www.dropbox.com')) {
                             contact.photoUrl = toDirectLink(contact.photoUrl);
@@ -4216,16 +5078,19 @@
         });
         
         // Production readiness
-        console.log('=== 1to1 Meeting System v14.0 (トークン永続化対応版) ===');
-        console.log('✅ PKCE認証フロー: Refresh Token対応');
-        console.log('✅ トークン自動更新: 2時間以上の連続編集可能');
-        console.log('✅ ドラフト自動保存: 5秒ごとにsessionStorageに保存');
-        console.log('✅ ページ離脱警告: 未保存データの損失防止');
-        console.log('✅ UIフィードバック: トークンリフレッシュ中の表示');
-        console.log('✅ 既存機能互換性: v13.0までの全機能を継承');
+        // ★ BEGIN PATCH v15.0 - コンソールログ更新 ★
+        console.log('=== 1to1 Meeting System v15.0 (UI改善版) ===');
+        console.log('✅ 名刺画像保存機能: カメラ撮影対応');
+        console.log('✅ 表示切り替え: カード/リスト表示');
+        console.log('✅ 設定モーダル: 機能を集約');
+        console.log('✅ Dropbox接続状態表示: 視覚的フィードバック');
+        console.log('✅ 検索フィルター折りたたみ: スペース効率化');
+        console.log('✅ 過去の経歴入力: 初回ミーティング時のみ');
+        console.log('✅ 連絡先詳細UI: タブ表示で視認性向上');
+        console.log('✅ 既存機能互換性: v14.0までの全機能を継承');
         console.log('================================');
-        console.log('📋 納品準備完了 - v14.0');
+        console.log('📋 納品準備完了 - v15.0');
+        /* ★ END PATCH v15.0 - コンソールログ更新 ★ */
     </script>
 </body>
 </html>
-                
