@@ -281,7 +281,7 @@
         /* 表示コントロールバー */
         .view-controls {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
             margin-bottom: 16px;
             flex-wrap: wrap;
@@ -290,8 +290,7 @@
 
         @media (max-width: 768px) {
             .view-controls {
-                flex-direction: column;
-                align-items: stretch;
+                justify-content: center;
             }
         }
 
@@ -1577,12 +1576,37 @@
             gap: 10px;
             margin-top: 20px;
         }
+
+        /* セットアップ画面の戻るボタン */
+        .back-to-main {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #333333;
+            border: 1px solid #444444;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #f0f0f0;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .back-to-main:hover {
+            background: #3a3a3a;
+            border-color: #4c8bf5;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <!-- セットアップウィザード -->
-        <div id="setupWizard" class="setup-wizard">
+        <div id="setupWizard" class="setup-wizard" style="display: none;">
+            <!-- 設定画面から来た場合の戻るボタン -->
+            <button class="back-to-main" id="backToMainBtn" style="display: none;" onclick="closeSetupAndReturn()">
+                ✕ 閉じる
+            </button>
+            
             <div class="setup-header">
                 <h1>1to1ミーティング管理システム</h1>
                 <p>Google Driveと連携して、安全にデータを管理します</p>
@@ -1768,37 +1792,6 @@
                 <input type="text" id="searchName" placeholder="名前、よみ、会社、メール、タグ、内容などを検索..." onkeyup="filterContacts()">
             </div>
 
-            <!-- 表示コントロールバー -->
-            <div class="view-controls">
-                <div class="view-sort-wrapper">
-                    <div class="sort-controls">
-                        <label>並び替え:</label>
-                        <select id="sortOrder" onchange="applySorting()">
-                            <option value="meeting-desc">最終打合せ日 (新しい順)</option>
-                            <option value="meeting-asc">最終打合せ日 (古い順)</option>
-                            <option value="name-asc">名前 (A→Z)</option>
-                            <option value="name-desc">名前 (Z→A)</option>
-                            <option value="yomi-asc">よみ (あ→ん)</option>
-                            <option value="yomi-desc">よみ (ん→あ)</option>
-                        </select>
-                    </div>
-                    <div class="view-toggle">
-                        <button id="cardViewBtn" class="active" onclick="setViewMode('card')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 3h8v8H3V3m10 0h8v8h-8V3M3 13h8v8H3v-8m10 0h8v8h-8v-8Z"/>
-                            </svg>
-                            カード表示
-                        </button>
-                        <button id="listViewBtn" onclick="setViewMode('list')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 4h18v2H3V4m0 7h18v2H3v-2m0 7h18v2H3v-2Z"/>
-                            </svg>
-                            リスト表示
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <!-- 検索フィルター -->
             <div class="search-filters" id="searchFilters">
                 <div class="search-header">
@@ -1867,6 +1860,37 @@
                 </div>
                 <div id="outstandingActionsList" style="display: none; margin-top: 20px;">
                     <!-- Outstanding actions will be rendered here -->
+                </div>
+            </div>
+
+            <!-- 表示コントロールバー（位置変更） -->
+            <div class="view-controls">
+                <div class="view-sort-wrapper">
+                    <div class="sort-controls">
+                        <label>並び替え:</label>
+                        <select id="sortOrder" onchange="applySorting()">
+                            <option value="meeting-desc">最終打合せ日 (新しい順)</option>
+                            <option value="meeting-asc">最終打合せ日 (古い順)</option>
+                            <option value="name-asc">名前 (A→Z)</option>
+                            <option value="name-desc">名前 (Z→A)</option>
+                            <option value="yomi-asc">よみ (あ→ん)</option>
+                            <option value="yomi-desc">よみ (ん→あ)</option>
+                        </select>
+                    </div>
+                    <div class="view-toggle">
+                        <button id="cardViewBtn" class="active" onclick="setViewMode('card')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 3h8v8H3V3m10 0h8v8h-8V3M3 13h8v8H3v-8m10 0h8v8h-8v-8Z"/>
+                            </svg>
+                            カード表示
+                        </button>
+                        <button id="listViewBtn" onclick="setViewMode('list')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 4h18v2H3V4m0 7h18v2H3v-2m0 7h18v2H3v-2Z"/>
+                            </svg>
+                            リスト表示
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -2146,7 +2170,7 @@
                             <div class="settings-item-description">ミーティング内容のテンプレートを編集します</div>
                         </div>
                     </div>
-                    <div class="settings-item" onclick="showSetupWizard()">
+                    <div class="settings-item" onclick="showSetupWizardFromSettings()">
                         <div class="settings-item-icon">⚙️</div>
                         <div class="settings-item-content">
                             <div class="settings-item-title">セットアップ</div>
@@ -2239,6 +2263,9 @@
             meetingTemplate: ''
         };
 
+        // セットアップ完了フラグ
+        let isSetupCompleted = false;
+
         // ===== セットアップウィザード =====
         let currentStep = 1;
 
@@ -2249,6 +2276,7 @@
             document.getElementById('authContainer').style.display = 'none';
             document.getElementById('mainContainer').style.display = 'none';
             document.getElementById('setupWizard').style.display = 'block';
+            document.getElementById('backToMainBtn').style.display = 'none';
             
             // 現在のURLを表示
             let origin = window.location.origin;
@@ -2268,6 +2296,35 @@
             } else {
                 document.getElementById('origin-url').textContent = origin;
             }
+        }
+
+        // 設定画面からセットアップウィザードを開く
+        function showSetupWizardFromSettings() {
+            closeModal('settingsModal');
+            document.getElementById('mainContainer').style.display = 'none';
+            document.getElementById('setupWizard').style.display = 'block';
+            document.getElementById('backToMainBtn').style.display = 'block';
+            
+            // 現在のURLを表示
+            let origin = window.location.origin;
+            if (!origin || origin === 'null' || origin === 'file://') {
+                origin = 'http://localhost:8000';
+            }
+            document.getElementById('origin-url').textContent = origin;
+        }
+
+        // セットアップウィザードを閉じて元の画面に戻る
+        function closeSetupAndReturn() {
+            document.getElementById('setupWizard').style.display = 'none';
+            document.getElementById('mainContainer').style.display = 'block';
+            // ステップを初期状態に戻す
+            currentStep = 1;
+            document.querySelectorAll('.setup-step').forEach(step => step.classList.remove('active'));
+            document.getElementById('step1').classList.add('active');
+            document.querySelectorAll('.step-dot').forEach(dot => {
+                dot.classList.remove('active', 'completed');
+            });
+            document.getElementById('step1Dot').classList.add('active');
         }
 
         function nextStep() {
@@ -2326,6 +2383,10 @@
         }
 
         function completeSetup() {
+            // セットアップ完了フラグを設定
+            localStorage.setItem('setup_completed', 'true');
+            isSetupCompleted = true;
+            
             document.getElementById('setupWizard').style.display = 'none';
             
             // CLIENT_IDが設定されたので、Google APIを初期化
@@ -2387,6 +2448,9 @@
         function initializeApp() {
             console.log('=== アプリケーション初期化開始 ===');
             console.log('CLIENT_ID:', CLIENT_ID ? '設定済み' : '未設定');
+            
+            // セットアップ完了状態をチェック
+            isSetupCompleted = localStorage.getItem('setup_completed') === 'true';
             
             // 表示モードとフィルター設定を初期化
             initializeViewMode();
@@ -2768,25 +2832,29 @@
             }
         }
 
+        // 最適化された保存処理
         async function saveData() {
             try {
-                showLoading();
+                // ローディング表示をしない（バックグラウンドで保存）
+                const savePromises = [];
                 
-                await saveJsonFile('contacts.json', contacts);
-                await saveJsonFile('meetings.json', meetings);
+                // 並行して保存処理を実行
+                savePromises.push(saveJsonFile('contacts.json', contacts));
+                savePromises.push(saveJsonFile('meetings.json', meetings));
                 
                 // オプションとユーザー設定を保存
                 const optionsData = {
                     dropdownOptions: dropdownOptions,
                     userSettings: userSettings
                 };
-                await saveJsonFile('options.json', optionsData);
+                savePromises.push(saveJsonFile('options.json', optionsData));
                 
-                hideLoading();
+                // すべての保存処理を並行実行
+                await Promise.all(savePromises);
+                
                 showNotification('データを保存しました');
             } catch (error) {
                 console.error('Error saving data:', error);
-                hideLoading();
                 showNotification('データの保存に失敗しました', 'error');
                 throw error;
             }
@@ -2986,6 +3054,8 @@
                     }
                     
                     // マルチセレクト設定
+                    // ドロップダウンオプションを事前に更新
+                    ensureMultiSelectOptions(contact);
                     setSelectedValues('types', contact.types || []);
                     setSelectedValues('affiliations', contact.affiliations || []);
                     setSelectedValues('wantToConnect', contact.wantToConnect || []);
@@ -2994,135 +3064,7 @@
                     // 既存の添付ファイル
                     displayExistingAttachments(contact.attachments || []);
                     
-                    // 初回ミーティング情報の表示判定
-                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
-                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
-                    
-                    if (contactMeetings.length === 0) {
-                        // まだミーティングがない場合は初回ミーティング欄を表示
-                        document.getElementById('firstMeetingSection').style.display = 'block';
-                        // 現在時刻を設定
-                        const now = new Date();
-                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
-                        
-                        // テンプレートを適用
-                        const template = localStorage.getItem('meetingTemplate') || '';
-                        form.firstMeetingContent.value = template;
-                    }
-                }
-            } else {
-                // 新規登録モード
-                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
-                
-                // 初回ミーティングセクションを表示
-                document.getElementById('firstMeetingSection').style.display = 'block';
-                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
-                
-                // 現在時刻を設定
-                const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
-                
-                // テンプレートを適用
-                const template = localStorage.getItem('meetingTemplate') || '';
-                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
-            }
-            
-            setupMultiSelect();
-            setupFirstMeetingFileDrop();
-            document.getElementById('contactFormModal').style.display = 'block';
-            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
-        }
-
-        async function saveContactForm(event) {
-            event.preventDefault();
-            showLoading();
-            
-            const formData = new FormData(event.target);
-            const contact = {
-                id: currentEditingContactId || generateId(),
-                name: formData.get('name'),
-                yomi: formData.get('yomi'),
-                company: formData.get('company'),
-                email: formData.get('email'),
-                phone: formData.get('phone'),
-                homepage: formData.get('homepage'),
-                referredBy: formData.get('referredBy'),
-                strengths: formData.get('strengths'),
-                careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'),
-                types: getSelectedValues('types'),
-                affiliations: getSelectedValues('affiliations'),
-                wantToConnect: getSelectedValues('wantToConnect'),
-                goldenEgg: getSelectedValues('goldenEgg'),
-                area: formData.get('area'),
-                residence: formData.get('residence'),
-                attachments: [],
-                createdAt: currentEditingContactId ? 
-                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            // 既存の連絡先の場合、既存データを保持
-            if (currentEditingContactId) {
-                const existing = contacts.find(c => c.id === currentEditingContactId);
-                if (existing) {
-                    contact.photo = existing.photo;
-                    contact.photoUrl = existing.photoUrl;
-                    contact.cardImage = existing.cardImage;
-                    contact.cardImageUrl = existing.cardImageUrl;
-                    contact.attachments = existing.attachments || [];
-                }
-            }
-            
-            try {
-                // 顔写真をアップロード
-                if (currentPhotoFile) {
-                    const timestamp = new Date().getTime();
-                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, photoName);
-                    contact.photo = photoResult.id;
-                    contact.photoUrl = photoResult.url;
-                }
-                
-                // 名刺画像をアップロード
-                if (currentCardImageFile) {
-                    const timestamp = new Date().getTime();
-                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
-                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
-                    contact.cardImage = cardImageResult.id;
-                    contact.cardImageUrl = cardImageResult.url;
-                }
-                
-                // 添付ファイルをアップロード
-                for (const file of selectedFiles) {
-                    const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
-                    contact.attachments.push({
-                        name: file.name,
-                        id: fileResult.id,
-                        url: fileResult.url,
-                        uploadedAt: new Date().toISOString()
-                    });
-                }
-                
-                // 削除されたファイルを処理
-                contact.attachments = contact.attachments.filter(att => 
-                    !deletedAttachments.includes(att.id)
-                );
-                
-                // 連絡先を保存
-                const index = contacts.findIndex(c => c.id === contact.id);
-                if (index >= 0) {
-                    contacts[index] = contact;
-                } else {
-                    contacts.push(contact);
-                }
-                
-                // 初回ミーティング情報の処理
+                    // 初回ミーティング情報の処理
                 const firstMeetingDatetime = formData.get('firstMeetingDatetime');
                 const firstMeetingContent = formData.get('firstMeetingContent');
                 const firstMeetingSection = document.getElementById('firstMeetingSection');
@@ -4440,9 +4382,15 @@
             const extension = filename.split('.').pop().toLowerCase();
             const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
             const pdfExtensions = ['pdf'];
-            const textExtensions = ['txt', 'md', 'csv', 'log'];
+            const textExtensions = ['txt', 'md', 'csv', 'log', 'json', 'xml', 'html', 'js', 'css', 'py', 'java', 'cpp', 'h'];
+            const videoExtensions = ['mp4', 'webm', 'ogg', 'mov'];
+            const audioExtensions = ['mp3', 'wav', 'ogg', 'm4a'];
             
-            if (imageExtensions.includes(extension) || pdfExtensions.includes(extension) || textExtensions.includes(extension)) {
+            if (imageExtensions.includes(extension) || 
+                pdfExtensions.includes(extension) || 
+                textExtensions.includes(extension) ||
+                videoExtensions.includes(extension) ||
+                audioExtensions.includes(extension)) {
                 // ブラウザで開く
                 window.open(url, '_blank');
             } else {
@@ -5105,4 +5053,164 @@
         }
     </script>
 </body>
-</html>
+</html>ング情報の表示判定
+                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
+                    
+                    if (contactMeetings.length === 0) {
+                        // まだミーティングがない場合は初回ミーティング欄を表示
+                        document.getElementById('firstMeetingSection').style.display = 'block';
+                        // 現在時刻を設定
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
+                        
+                        // テンプレートを適用
+                        const template = localStorage.getItem('meetingTemplate') || '';
+                        form.firstMeetingContent.value = template;
+                    }
+                }
+            } else {
+                // 新規登録モード
+                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+                
+                // 初回ミーティングセクションを表示
+                document.getElementById('firstMeetingSection').style.display = 'block';
+                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
+                
+                // 現在時刻を設定
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
+                
+                // テンプレートを適用
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
+            }
+            
+            setupMultiSelect();
+            setupFirstMeetingFileDrop();
+            document.getElementById('contactFormModal').style.display = 'block';
+            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
+        }
+
+        // ドロップダウンオプションに連絡先の値を追加
+        function ensureMultiSelectOptions(contact) {
+            if (contact.types) {
+                contact.types.forEach(type => {
+                    if (!dropdownOptions.types.includes(type)) {
+                        dropdownOptions.types.push(type);
+                    }
+                });
+            }
+            if (contact.affiliations) {
+                contact.affiliations.forEach(aff => {
+                    if (!dropdownOptions.affiliations.includes(aff)) {
+                        dropdownOptions.affiliations.push(aff);
+                    }
+                });
+            }
+            if (contact.wantToConnect) {
+                contact.wantToConnect.forEach(want => {
+                    if (!dropdownOptions.wantToConnect.includes(want)) {
+                        dropdownOptions.wantToConnect.push(want);
+                    }
+                });
+            }
+            if (contact.goldenEgg) {
+                contact.goldenEgg.forEach(egg => {
+                    if (!dropdownOptions.goldenEgg.includes(egg)) {
+                        dropdownOptions.goldenEgg.push(egg);
+                    }
+                });
+            }
+        }
+
+        async function saveContactForm(event) {
+            event.preventDefault();
+            showLoading();
+            
+            const formData = new FormData(event.target);
+            const contact = {
+                id: currentEditingContactId || generateId(),
+                name: formData.get('name'),
+                yomi: formData.get('yomi'),
+                company: formData.get('company'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                homepage: formData.get('homepage'),
+                referredBy: formData.get('referredBy'),
+                strengths: formData.get('strengths'),
+                careerHistory: formData.get('careerHistory'),
+                cutout: formData.get('cutout'),
+                types: getSelectedValues('types'),
+                affiliations: getSelectedValues('affiliations'),
+                wantToConnect: getSelectedValues('wantToConnect'),
+                goldenEgg: getSelectedValues('goldenEgg'),
+                area: formData.get('area'),
+                residence: formData.get('residence'),
+                attachments: [],
+                createdAt: currentEditingContactId ? 
+                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
+                    new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // 既存の連絡先の場合、既存データを保持
+            if (currentEditingContactId) {
+                const existing = contacts.find(c => c.id === currentEditingContactId);
+                if (existing) {
+                    contact.photo = existing.photo;
+                    contact.photoUrl = existing.photoUrl;
+                    contact.cardImage = existing.cardImage;
+                    contact.cardImageUrl = existing.cardImageUrl;
+                    contact.attachments = existing.attachments || [];
+                }
+            }
+            
+            try {
+                // 顔写真をアップロード
+                if (currentPhotoFile) {
+                    const timestamp = new Date().getTime();
+                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName);
+                    contact.photo = photoResult.id;
+                    contact.photoUrl = photoResult.url;
+                }
+                
+                // 名刺画像をアップロード
+                if (currentCardImageFile) {
+                    const timestamp = new Date().getTime();
+                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
+                    contact.cardImage = cardImageResult.id;
+                    contact.cardImageUrl = cardImageResult.url;
+                }
+                
+                // 添付ファイルをアップロード
+                for (const file of selectedFiles) {
+                    const timestamp = new Date().getTime();
+                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
+                    contact.attachments.push({
+                        name: file.name,
+                        id: fileResult.id,
+                        url: fileResult.url,
+                        uploadedAt: new Date().toISOString()
+                    });
+                }
+                
+                // 削除されたファイルを処理
+                contact.attachments = contact.attachments.filter(att => 
+                    !deletedAttachments.includes(att.id)
+                );
+                
+                // 連絡先を保存
+                const index = contacts.findIndex(c => c.id === contact.id);
+                if (index >= 0) {
+                    contacts[index] = contact;
+                } else {
+                    contacts.push(contact);
+                }
+                
+                // 初回ミーティ
