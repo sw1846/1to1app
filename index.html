@@ -3064,7 +3064,167 @@
                     // 既存の添付ファイル
                     displayExistingAttachments(contact.attachments || []);
                     
-                    // 初回ミーティング情報の処理
+                    // 初回ミーティング情報の表示判定
+                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
+                    
+                    if (contactMeetings.length === 0) {
+                        // まだミーティングがない場合は初回ミーティング欄を表示
+                        document.getElementById('firstMeetingSection').style.display = 'block';
+                        // 現在時刻を設定
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
+                        
+                        // テンプレートを適用
+                        const template = localStorage.getItem('meetingTemplate') || '';
+                        form.firstMeetingContent.value = template;
+                    }
+                }
+            } else {
+                // 新規登録モード
+                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+                
+                // 初回ミーティングセクションを表示
+                document.getElementById('firstMeetingSection').style.display = 'block';
+                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
+                
+                // 現在時刻を設定
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
+                
+                // テンプレートを適用
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
+            }
+            
+            setupMultiSelect();
+            setupFirstMeetingFileDrop();
+            document.getElementById('contactFormModal').style.display = 'block';
+            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
+        }
+
+        // ドロップダウンオプションに連絡先の値を追加
+        function ensureMultiSelectOptions(contact) {
+            if (contact.types) {
+                contact.types.forEach(type => {
+                    if (!dropdownOptions.types.includes(type)) {
+                        dropdownOptions.types.push(type);
+                    }
+                });
+            }
+            if (contact.affiliations) {
+                contact.affiliations.forEach(aff => {
+                    if (!dropdownOptions.affiliations.includes(aff)) {
+                        dropdownOptions.affiliations.push(aff);
+                    }
+                });
+            }
+            if (contact.wantToConnect) {
+                contact.wantToConnect.forEach(want => {
+                    if (!dropdownOptions.wantToConnect.includes(want)) {
+                        dropdownOptions.wantToConnect.push(want);
+                    }
+                });
+            }
+            if (contact.goldenEgg) {
+                contact.goldenEgg.forEach(egg => {
+                    if (!dropdownOptions.goldenEgg.includes(egg)) {
+                        dropdownOptions.goldenEgg.push(egg);
+                    }
+                });
+            }
+        }
+
+        async function saveContactForm(event) {
+            event.preventDefault();
+            showLoading();
+            
+            const formData = new FormData(event.target);
+            const contact = {
+                id: currentEditingContactId || generateId(),
+                name: formData.get('name'),
+                yomi: formData.get('yomi'),
+                company: formData.get('company'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                homepage: formData.get('homepage'),
+                referredBy: formData.get('referredBy'),
+                strengths: formData.get('strengths'),
+                careerHistory: formData.get('careerHistory'),
+                cutout: formData.get('cutout'),
+                types: getSelectedValues('types'),
+                affiliations: getSelectedValues('affiliations'),
+                wantToConnect: getSelectedValues('wantToConnect'),
+                goldenEgg: getSelectedValues('goldenEgg'),
+                area: formData.get('area'),
+                residence: formData.get('residence'),
+                attachments: [],
+                createdAt: currentEditingContactId ? 
+                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
+                    new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // 既存の連絡先の場合、既存データを保持
+            if (currentEditingContactId) {
+                const existing = contacts.find(c => c.id === currentEditingContactId);
+                if (existing) {
+                    contact.photo = existing.photo;
+                    contact.photoUrl = existing.photoUrl;
+                    contact.cardImage = existing.cardImage;
+                    contact.cardImageUrl = existing.cardImageUrl;
+                    contact.attachments = existing.attachments || [];
+                }
+            }
+            
+            try {
+                // 顔写真をアップロード
+                if (currentPhotoFile) {
+                    const timestamp = new Date().getTime();
+                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName);
+                    contact.photo = photoResult.id;
+                    contact.photoUrl = photoResult.url;
+                }
+                
+                // 名刺画像をアップロード
+                if (currentCardImageFile) {
+                    const timestamp = new Date().getTime();
+                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
+                    contact.cardImage = cardImageResult.id;
+                    contact.cardImageUrl = cardImageResult.url;
+                }
+                
+                // 添付ファイルをアップロード
+                for (const file of selectedFiles) {
+                    const timestamp = new Date().getTime();
+                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
+                    contact.attachments.push({
+                        name: file.name,
+                        id: fileResult.id,
+                        url: fileResult.url,
+                        uploadedAt: new Date().toISOString()
+                    });
+                }
+                
+                // 削除されたファイルを処理
+                contact.attachments = contact.attachments.filter(att => 
+                    !deletedAttachments.includes(att.id)
+                );
+                
+                // 連絡先を保存
+                const index = contacts.findIndex(c => c.id === contact.id);
+                if (index >= 0) {
+                    contacts[index] = contact;
+                } else {
+                    contacts.push(contact);
+                }
+                
+                // 初回ミーティング情報の処理
                 const firstMeetingDatetime = formData.get('firstMeetingDatetime');
                 const firstMeetingContent = formData.get('firstMeetingContent');
                 const firstMeetingSection = document.getElementById('firstMeetingSection');
@@ -5053,164 +5213,4 @@
         }
     </script>
 </body>
-</html>ング情報の表示判定
-                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
-                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
-                    
-                    if (contactMeetings.length === 0) {
-                        // まだミーティングがない場合は初回ミーティング欄を表示
-                        document.getElementById('firstMeetingSection').style.display = 'block';
-                        // 現在時刻を設定
-                        const now = new Date();
-                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
-                        
-                        // テンプレートを適用
-                        const template = localStorage.getItem('meetingTemplate') || '';
-                        form.firstMeetingContent.value = template;
-                    }
-                }
-            } else {
-                // 新規登録モード
-                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
-                
-                // 初回ミーティングセクションを表示
-                document.getElementById('firstMeetingSection').style.display = 'block';
-                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
-                
-                // 現在時刻を設定
-                const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
-                
-                // テンプレートを適用
-                const template = localStorage.getItem('meetingTemplate') || '';
-                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
-            }
-            
-            setupMultiSelect();
-            setupFirstMeetingFileDrop();
-            document.getElementById('contactFormModal').style.display = 'block';
-            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
-        }
-
-        // ドロップダウンオプションに連絡先の値を追加
-        function ensureMultiSelectOptions(contact) {
-            if (contact.types) {
-                contact.types.forEach(type => {
-                    if (!dropdownOptions.types.includes(type)) {
-                        dropdownOptions.types.push(type);
-                    }
-                });
-            }
-            if (contact.affiliations) {
-                contact.affiliations.forEach(aff => {
-                    if (!dropdownOptions.affiliations.includes(aff)) {
-                        dropdownOptions.affiliations.push(aff);
-                    }
-                });
-            }
-            if (contact.wantToConnect) {
-                contact.wantToConnect.forEach(want => {
-                    if (!dropdownOptions.wantToConnect.includes(want)) {
-                        dropdownOptions.wantToConnect.push(want);
-                    }
-                });
-            }
-            if (contact.goldenEgg) {
-                contact.goldenEgg.forEach(egg => {
-                    if (!dropdownOptions.goldenEgg.includes(egg)) {
-                        dropdownOptions.goldenEgg.push(egg);
-                    }
-                });
-            }
-        }
-
-        async function saveContactForm(event) {
-            event.preventDefault();
-            showLoading();
-            
-            const formData = new FormData(event.target);
-            const contact = {
-                id: currentEditingContactId || generateId(),
-                name: formData.get('name'),
-                yomi: formData.get('yomi'),
-                company: formData.get('company'),
-                email: formData.get('email'),
-                phone: formData.get('phone'),
-                homepage: formData.get('homepage'),
-                referredBy: formData.get('referredBy'),
-                strengths: formData.get('strengths'),
-                careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'),
-                types: getSelectedValues('types'),
-                affiliations: getSelectedValues('affiliations'),
-                wantToConnect: getSelectedValues('wantToConnect'),
-                goldenEgg: getSelectedValues('goldenEgg'),
-                area: formData.get('area'),
-                residence: formData.get('residence'),
-                attachments: [],
-                createdAt: currentEditingContactId ? 
-                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            // 既存の連絡先の場合、既存データを保持
-            if (currentEditingContactId) {
-                const existing = contacts.find(c => c.id === currentEditingContactId);
-                if (existing) {
-                    contact.photo = existing.photo;
-                    contact.photoUrl = existing.photoUrl;
-                    contact.cardImage = existing.cardImage;
-                    contact.cardImageUrl = existing.cardImageUrl;
-                    contact.attachments = existing.attachments || [];
-                }
-            }
-            
-            try {
-                // 顔写真をアップロード
-                if (currentPhotoFile) {
-                    const timestamp = new Date().getTime();
-                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, photoName);
-                    contact.photo = photoResult.id;
-                    contact.photoUrl = photoResult.url;
-                }
-                
-                // 名刺画像をアップロード
-                if (currentCardImageFile) {
-                    const timestamp = new Date().getTime();
-                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
-                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
-                    contact.cardImage = cardImageResult.id;
-                    contact.cardImageUrl = cardImageResult.url;
-                }
-                
-                // 添付ファイルをアップロード
-                for (const file of selectedFiles) {
-                    const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
-                    contact.attachments.push({
-                        name: file.name,
-                        id: fileResult.id,
-                        url: fileResult.url,
-                        uploadedAt: new Date().toISOString()
-                    });
-                }
-                
-                // 削除されたファイルを処理
-                contact.attachments = contact.attachments.filter(att => 
-                    !deletedAttachments.includes(att.id)
-                );
-                
-                // 連絡先を保存
-                const index = contacts.findIndex(c => c.id === contact.id);
-                if (index >= 0) {
-                    contacts[index] = contact;
-                } else {
-                    contacts.push(contact);
-                }
-                
-                // 初回ミーティ
+</html>
