@@ -2609,18 +2609,18 @@
                 
                 let fileId;
                 let metadata;
+                let multipartRequestBody;
                 
                 if (searchResponse.result.files && searchResponse.result.files.length > 0) {
                     // 既存ファイルの更新の場合
                     fileId = searchResponse.result.files[0].id;
                     
-                    // 更新時はparentsフィールドを含めない
+                    // 更新時はname フィールドのみを含め、mimeTypeは含めない
                     metadata = {
-                        name: fileName,
-                        mimeType: 'application/json'
+                        name: fileName
                     };
                     
-                    const multipartRequestBody =
+                    multipartRequestBody =
                         delimiter +
                         'Content-Type: application/json\r\n\r\n' +
                         JSON.stringify(metadata) +
@@ -2647,7 +2647,7 @@
                         parents: [appFolderId]
                     };
                     
-                    const multipartRequestBody =
+                    multipartRequestBody =
                         delimiter +
                         'Content-Type: application/json\r\n\r\n' +
                         JSON.stringify(metadata) +
