@@ -2600,21 +2600,6 @@
             const delimiter = "\r\n--" + boundary + "\r\n";
             const close_delim = "\r\n--" + boundary + "--";
             
-            const metadata = {
-                name: fileName,
-                mimeType: 'application/json',
-                parents: [appFolderId]
-            };
-            
-            const multipartRequestBody =
-                delimiter +
-                'Content-Type: application/json\r\n\r\n' +
-                JSON.stringify(metadata) +
-                delimiter +
-                'Content-Type: application/json\r\n\r\n' +
-                JSON.stringify(data, null, 2) +
-                close_delim;
-            
             try {
                 // 既存のファイルを検索
                 const searchResponse = await gapi.client.drive.files.list({
@@ -2623,8 +2608,26 @@
                 });
                 
                 let fileId;
+                let metadata;
+                
                 if (searchResponse.result.files && searchResponse.result.files.length > 0) {
+                    // 既存ファイルの更新の場合
                     fileId = searchResponse.result.files[0].id;
+                    
+                    // 更新時はparentsフィールドを含めない
+                    metadata = {
+                        name: fileName,
+                        mimeType: 'application/json'
+                    };
+                    
+                    const multipartRequestBody =
+                        delimiter +
+                        'Content-Type: application/json\r\n\r\n' +
+                        JSON.stringify(metadata) +
+                        delimiter +
+                        'Content-Type: application/json\r\n\r\n' +
+                        JSON.stringify(data, null, 2) +
+                        close_delim;
                     
                     // 既存ファイルを更新
                     await gapi.client.request({
@@ -2638,6 +2641,21 @@
                     });
                 } else {
                     // 新規ファイルを作成
+                    metadata = {
+                        name: fileName,
+                        mimeType: 'application/json',
+                        parents: [appFolderId]
+                    };
+                    
+                    const multipartRequestBody =
+                        delimiter +
+                        'Content-Type: application/json\r\n\r\n' +
+                        JSON.stringify(metadata) +
+                        delimiter +
+                        'Content-Type: application/json\r\n\r\n' +
+                        JSON.stringify(data, null, 2) +
+                        close_delim;
+                    
                     await gapi.client.request({
                         path: '/upload/drive/v3/files',
                         method: 'POST',
