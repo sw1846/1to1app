@@ -28,45 +28,20 @@
     
     ⚠️ Without these permissions, you will get 401 errors!
     
-    ===== 修正内容 v17.0 =====
+    ===== 修正内容 v17.1 =====
     
-    1. 新規連絡先登録時に初回ミーティングも同時登録
-       - 新規登録モーダルでも初回ミーティングセクション表示
-       - isFirstMeetingフラグで管理
+    1. validateAttachments関数の修正
+       - 空パスや不正パスの事前チェック追加
+       - 400エラーを正常ケースとして処理
+       - 無効な添付ファイルのスキップ処理強化
     
-    2. スマホ/タブレットで顔写真表示問題を修正
-       - キャッシュバスティング実装
-       - 画像属性の最適化
+    2. データ保存時の検証強化
+       - 空の添付ファイルを保存対象から除外
+       - パスの妥当性チェック追加
     
-    3. カメラで撮影ボタンを廃止
-       - タップで直接カメラ起動（capture属性）
-    
-    4. モバイル時アップロード説明文簡略化
-       - メディアクエリで制御
-    
-    5. Markdown内URL・メール自動リンク化
-       - linkifyText関数実装
-    
-    6. 並び替えセレクタ位置変更
-       - ビュー切り替えボタンの右隣へ
-    
-    7. フリーワード検索を常時表示
-       - 検索バーを独立化
-    
-    8. 連絡先一覧のメール/HPを直接リンク
-       - クリックイベント制御
-    
-    9. 設定内容をデバイス間で同期
-       - options.jsonに保存
-    
-    10. ミーティング履歴の視覚的改善
-        - カード型デザイン
-    
-    11. 強み・経歴タブ内の長文折りたたみ
-        - 7行超えで省略表示
-    
-    12. 添付ファイルの実体チェック
-        - 404ファイルを自動除去
+    3. エラーハンドリングの改善
+       - 400エラーのログ出力を抑制
+       - エラーメッセージの明確化
     
     -->
     
@@ -301,7 +276,6 @@
             font-size: 13px;
         }
 
-        /* ★ BEGIN PATCH v17.0 - CSS追加・変更 ★ */
         /* フリーワード検索を常時表示 */
         .search-bar {
             background: #2a2a2a;
@@ -417,7 +391,6 @@
             background: #2d2d2d;
             border: 1px solid #3d3d3d;
         }
-        /* ★ END PATCH v17.0 - CSS追加・変更 ★ */
 
         /* 検索・フィルター */
         .search-filters {
@@ -1159,7 +1132,7 @@
             background: #555555;
         }
 
-        /* ★ BEGIN PATCH v14.0 - ドラフト保存インジケーター ★ */
+        /* ドラフト保存インジケーター */
         .draft-status {
             position: fixed;
             bottom: 20px;
@@ -1206,9 +1179,7 @@
             height: 16px;
             border-width: 2px;
         }
-        /* ★ END PATCH v14.0 ★ */
 
-        /* ★ BEGIN PATCH v15.0 - CSS追加 ★ */
         /* 表示モード切り替えボタン */
         .view-toggle {
             display: flex;
@@ -1587,9 +1558,7 @@
         .career-history-section.show {
             display: block;
         }
-        /* ★ END PATCH v15.0 - CSS追加 ★ */
 
-        /* ★ BEGIN PATCH v16.0 - CSS追加 ★ */
         /* 連絡先フォーム2段組レイアウト */
         .form-grid {
             display: grid;
@@ -1642,7 +1611,6 @@
             gap: 10px;
             margin-top: 20px;
         }
-        /* ★ END PATCH v16.0 - CSS追加 ★ */
     </style>
 </head>
 <body>
@@ -1661,7 +1629,6 @@
 
         <!-- メインコンテンツ -->
         <div id="mainContainer" class="container" style="display: none;">
-            <!-- ★ BEGIN PATCH v15.0 - HTMLヘッダー変更 ★ -->
             <header>
                 <div class="header-content">
                     <h1>1to1ミーティング管理システム</h1>
@@ -1679,9 +1646,7 @@
                     <button class="btn-primary" onclick="showContactForm()">新規連絡先登録</button>
                 </div>
             </header>
-            <!-- ★ END PATCH v15.0 - HTMLヘッダー変更 ★ -->
 
-            <!-- ★ BEGIN PATCH v17.0 - HTML変更 ★ -->
             <!-- 検索バーを独立 -->
             <div class="search-bar">
                 <label>フリーワード検索</label>
@@ -1776,7 +1741,6 @@
                     </div>
                 </div>
             </div>
-            <!-- ★ END PATCH v17.0 - HTML変更 ★ -->
 
             <!-- Outstanding Actions Dashboard -->
             <div id="outstandingActions" class="search-filters" style="margin-bottom: 24px;">
@@ -1804,7 +1768,6 @@
                 <h2 id="contactFormTitle">新規連絡先登録</h2>
                 <span class="close-modal" onclick="closeModal('contactFormModal')">&times;</span>
             </div>
-            <!-- ★ BEGIN PATCH v16.0 - 連絡先フォームレイアウト変更 ★ -->
             <div class="modal-body">
                 <form id="contactForm" onsubmit="saveContactForm(event)">
                     <!-- 基本情報（2段組） -->
@@ -1898,24 +1861,19 @@
                     <!-- 全幅項目 -->
                     <div class="form-group">
                         <label>顔写真</label>
-                        <!-- ★ BEGIN PATCH v17.0 - アップロード文言変更 ★ -->
                         <div class="file-drop-zone" id="photoDropZone">
                             写真をアップロード<span class="upload-hint">（クリックまたはドラッグ＆ドロップ）</span>
                         </div>
-                        <!-- ★ END PATCH v17.0 ★ -->
                         <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
                         <div id="photoPreview"></div>
                     </div>
 
                     <div class="form-group">
                         <label>名刺画像</label>
-                        <!-- ★ BEGIN PATCH v17.0 - カメラボタン削除、文言変更 ★ -->
                         <div class="file-drop-zone card-image-zone" id="cardImageDropZone">
                             名刺画像をアップロード<span class="upload-hint">（クリックまたはドラッグ＆ドロップ）</span>
                         </div>
-                        <!-- カメラボタンを削除 -->
                         <input type="file" id="cardImageUpload" accept="image/*" style="display: none;" onchange="handleCardImageUpload(event)">
-                        <!-- ★ END PATCH v17.0 ★ -->
                         <div id="cardImagePreview"></div>
                     </div>
 
@@ -1945,7 +1903,6 @@
                     </div>
 
                     <!-- 初回ミーティングセクション（編集時のみ表示） -->
-                    <!-- ★ BEGIN PATCH v17.0 - 初回ミーティングセクション常時表示対応 ★ -->
                     <div class="first-meeting-section" id="firstMeetingSection" style="display: none;">
                         <h4>初回ミーティング情報</h4>
                         <div class="form-group">
@@ -1970,7 +1927,6 @@
                             <div id="firstMeetingAttachments" class="file-list"></div>
                         </div>
                     </div>
-                    <!-- ★ END PATCH v17.0 ★ -->
 
                     <div class="action-buttons">
                         <button type="submit" class="btn-primary">保存</button>
@@ -1978,7 +1934,6 @@
                     </div>
                 </form>
             </div>
-            <!-- ★ END PATCH v16.0 - 連絡先フォームレイアウト変更 ★ -->
         </div>
     </div>
 
@@ -2014,16 +1969,6 @@
                         <textarea name="content" rows="5" required placeholder="Markdown記法が使えます"></textarea>
                     </div>
 
-                    <!-- ★ BEGIN PATCH v16.0 - ミーティングフォームから過去の経歴欄を削除 ★ -->
-                    <!-- 以下の部分を削除 -->
-                    <!-- 
-                    <div class="form-group career-history-section" id="careerHistorySection">
-                        <label>過去の経歴</label>
-                        <textarea name="careerHistory" rows="3" placeholder="初回ミーティング時に過去の経歴を記録します"></textarea>
-                    </div>
-                    -->
-                    <!-- ★ END PATCH v16.0 - ミーティングフォームから過去の経歴欄を削除 ★ -->
-
                     <div class="form-group">
                         <label>次回アクション</label>
                         <div id="taskInputContainer"></div>
@@ -2049,7 +1994,6 @@
         </div>
     </div>
 
-    <!-- ★ BEGIN PATCH v15.0 - 設定モーダル追加 ★ -->
     <div id="settingsModal" class="modal settings-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -2079,7 +2023,6 @@
                             <div class="settings-item-description">JSONファイルからデータを読み込みます</div>
                         </div>
                     </div>
-                    <!-- ★ BEGIN PATCH v16.0 - 設定モーダルにテンプレート編集追加 ★ -->
                     <div class="settings-item" onclick="showTemplateEditor()">
                         <div class="settings-item-icon">📝</div>
                         <div class="settings-item-content">
@@ -2087,7 +2030,6 @@
                             <div class="settings-item-description">ミーティング内容のテンプレートを編集します</div>
                         </div>
                     </div>
-                    <!-- ★ END PATCH v16.0 - 設定モーダルにテンプレート編集追加 ★ -->
                     <div class="settings-item" onclick="logout()">
                         <div class="settings-item-icon">🚪</div>
                         <div class="settings-item-content">
@@ -2096,7 +2038,6 @@
                         </div>
                     </div>
                 </div>
-                <!-- ★ BEGIN PATCH v16.0 - テンプレート編集画面追加 ★ -->
                 <div class="template-editor" id="templateEditor">
                     <h3 style="margin-bottom: 20px;">ミーティング内容テンプレート</h3>
                     <div class="form-group">
@@ -2108,11 +2049,9 @@
                         <button class="btn-secondary" onclick="hideTemplateEditor()">キャンセル</button>
                     </div>
                 </div>
-                <!-- ★ END PATCH v16.0 - テンプレート編集画面追加 ★ -->
             </div>
         </div>
     </div>
-    <!-- ★ END PATCH v15.0 - 設定モーダル追加 ★ -->
 
     <!-- インポート用の隠しinput -->
     <input type="file" id="importInput" accept=".json" style="display: none;" onchange="importData(event)">
@@ -2125,7 +2064,6 @@
         </div>
     </div>
 
-    <!-- ★ BEGIN PATCH v14.0 - ドラフト保存インジケーター ★ -->
     <div id="draftStatus" class="draft-status">
         下書きを保存しました
     </div>
@@ -2134,9 +2072,7 @@
         <div class="loading"></div>
         <span>Dropbox再認証中...</span>
     </div>
-    <!-- ★ END PATCH v14.0 ★ -->
 
-    <!-- ★ BEGIN PATCH v15.0 - カメラプレビュー追加 ★ -->
     <div id="cameraPreview" class="camera-preview">
         <video id="cameraVideo"></video>
         <div class="camera-controls">
@@ -2144,7 +2080,6 @@
             <button class="btn-secondary" onclick="closeCamera()">キャンセル</button>
         </div>
     </div>
-    <!-- ★ END PATCH v15.0 - カメラプレビュー追加 ★ -->
 
     <script>
         // ===== グローバル変数 =====
@@ -2185,7 +2120,7 @@
         let isReauthInProgress = false;
         let pendingOperationAfterAuth = null; // 再認証後に実行する操作を保存
 
-        // ★ BEGIN PATCH v14.0 - ドラフト管理用変数 ★
+        // ドラフト管理用変数
         let draftSaveTimer = null;
         let hasUnsavedDraft = false;
         
@@ -2334,30 +2269,23 @@
                 throw error;
             }
         }
-        /* ★ END PATCH v14.0 ★ */
 
-        // ★ BEGIN PATCH v15.0 - JavaScript変更 ★
         // グローバル変数追加
         let currentCardImageFile = null;
         let viewMode = localStorage.getItem('viewMode') || 'card';
         let filterVisible = localStorage.getItem('filterVisible') === 'true';
         let cameraStream = null;
-        /* ★ END PATCH v15.0 ★ */
 
-        // ★ BEGIN PATCH v16.0 - グローバル変数追加 ★
         let selectedFirstMeetingFiles = [];
         let hasFirstMeeting = {};  // 連絡先IDをキーとして初回ミーティングの有無を管理
-        // ★ END PATCH v16.0 - グローバル変数追加 ★
 
-        // ★ BEGIN PATCH v17.0 - グローバル変数追加 ★
         let userSettings = {
             viewMode: 'card',
             filterVisible: false,
             meetingTemplate: ''
         };
-        // ★ END PATCH v17.0 ★
         
-        // ★ v12.0: Dropbox共有リンクを直接アクセス可能な形式に変換
+        // Dropbox共有リンクを直接アクセス可能な形式に変換
         function toDirectLink(url) {
             if (!url) return url;
             
@@ -2373,7 +2301,7 @@
                 .replace('?raw=1', '');
         }
         
-        // ★ v12.0: 既存の顔写真URLをマイグレーション
+        // 既存の顔写真URLをマイグレーション
         function migratePhotoUrls() {
             console.log('=== 顔写真URLのマイグレーション開始 ===');
             let migratedCount = 0;
@@ -2409,17 +2337,11 @@
             try {
                 console.log('=== アプリケーション初期化開始 ===');
 
-                // ★ BEGIN PATCH v15.0 - 初期設定追加 ★ */
                 initializeViewMode();
                 initializeFilterVisibility();
-                // ★ BEGIN PATCH v17.0 - カメラサポートチェック削除、代替処理追加 ★
-                // checkCameraSupport(); // 削除
                 setupCardImageInput();
-                // ★ END PATCH v17.0 ★
                 updateConnectionStatus();
-                /* ★ END PATCH v15.0 ★ */
                 
-                // ★ BEGIN PATCH v14.0 - PKCE認証フロー対応 ★
                 // URLからコードを取得（PKCE用）
                 const urlParams = new URLSearchParams(window.location.search);
                 const authCode = urlParams.get('code');
@@ -2472,7 +2394,6 @@
                         return;
                     }
                 }
-                /* ★ END PATCH v14.0 ★ */
                 
                 // URLからアクセストークンを取得（旧implicit flow用の互換性維持）
                 const urlToken = getAccessTokenFromUrl();
@@ -2522,7 +2443,6 @@
             }
         };
 
-        // ★ BEGIN PATCH v15.0 - 新規関数追加 ★
         // 表示モード初期化
         function initializeViewMode() {
             if (viewMode === 'list') {
@@ -2579,9 +2499,7 @@
             viewMode = mode;
             localStorage.setItem('viewMode', mode);
             
-            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
             saveOptions();
-            // ★ END PATCH v17.0 ★
             
             if (mode === 'card') {
                 document.getElementById('cardViewBtn').classList.add('active');
@@ -2602,9 +2520,7 @@
             filterVisible = !filterVisible;
             localStorage.setItem('filterVisible', filterVisible);
             
-            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
             saveOptions();
-            // ★ END PATCH v17.0 ★
             
             if (filterVisible) {
                 filterContent.classList.add('show');
@@ -2713,9 +2629,7 @@
                 processCardImageFile(files[0]);
             }
         }
-        /* ★ END PATCH v15.0 - 新規関数追加 ★ */
 
-        // ★ BEGIN PATCH v16.0 - テンプレート機能追加 ★
         // テンプレート編集画面表示
         function showTemplateEditor() {
             const settingsList = document.querySelector('.settings-list');
@@ -2743,16 +2657,13 @@
             const templateContent = document.getElementById('templateContent').value;
             localStorage.setItem('meetingTemplate', templateContent);
             
-            // ★ BEGIN PATCH v17.0 - 設定保存追加 ★
             saveOptions();
-            // ★ END PATCH v17.0 ★
             
             showNotification('テンプレートを保存しました');
             hideTemplateEditor();
         }
-        // ★ END PATCH v16.0 - テンプレート機能追加 ★
 
-        // ★ BEGIN PATCH v17.0 - 設定保存・読み込み関数 ★
+        // 設定保存・読み込み関数
         async function saveOptions() {
             try {
                 userSettings.viewMode = viewMode;
@@ -2847,7 +2758,7 @@
             }
         }
 
-        // 添付ファイルの実体チェック
+        // ===== 修正版 validateAttachments 関数 =====
         async function validateAttachments() {
             let needsSave = false;
             
@@ -2856,15 +2767,31 @@
                 if (contact.attachments && contact.attachments.length > 0) {
                     const validAttachments = [];
                     for (const att of contact.attachments) {
+                        // ★ パスの事前検証
+                        if (!att.path || typeof att.path !== 'string' || att.path.trim() === '') {
+                            console.log(`添付ファイル無効（空パス）: ${contact.name}`);
+                            needsSave = true;
+                            continue;
+                        }
+                        
+                        // ★ /で始まらないパスをスキップ
+                        if (att.path[0] !== '/') {
+                            console.log(`添付ファイル無効（不正パス）: ${att.path}`);
+                            needsSave = true;
+                            continue;
+                        }
+                        
                         try {
                             await callDropboxSafe(dropbox.filesGetMetadata, [{ path: att.path }]);
                             validAttachments.push(att);
                         } catch (error) {
-                            if (error.status === 409) {
-                                console.log(`ファイルが存在しません: ${att.path}`);
+                            // ★ 400エラーと409エラーを正常ケースとして処理
+                            if (error.status === 400 || error.status === 409) {
+                                console.log(`添付ファイル無効: ${att.path}`);
                                 needsSave = true;
                             } else {
-                                validAttachments.push(att); // エラーでも保持
+                                // その他のエラーは上位へ伝播
+                                throw error;
                             }
                         }
                     }
@@ -2877,15 +2804,31 @@
                 if (meeting.attachments && meeting.attachments.length > 0) {
                     const validAttachments = [];
                     for (const att of meeting.attachments) {
+                        // ★ パスの事前検証
+                        if (!att.path || typeof att.path !== 'string' || att.path.trim() === '') {
+                            console.log(`ミーティング添付ファイル無効（空パス）: meeting id=${meeting.id}`);
+                            needsSave = true;
+                            continue;
+                        }
+                        
+                        // ★ /で始まらないパスをスキップ
+                        if (att.path[0] !== '/') {
+                            console.log(`ミーティング添付ファイル無効（不正パス）: ${att.path}`);
+                            needsSave = true;
+                            continue;
+                        }
+                        
                         try {
                             await callDropboxSafe(dropbox.filesGetMetadata, [{ path: att.path }]);
                             validAttachments.push(att);
                         } catch (error) {
-                            if (error.status === 409) {
-                                console.log(`ファイルが存在しません: ${att.path}`);
+                            // ★ 400エラーと409エラーを正常ケースとして処理
+                            if (error.status === 400 || error.status === 409) {
+                                console.log(`ミーティング添付ファイル無効: ${att.path}`);
                                 needsSave = true;
                             } else {
-                                validAttachments.push(att);
+                                // その他のエラーは上位へ伝播
+                                throw error;
                             }
                         }
                     }
@@ -2894,13 +2837,12 @@
             }
             
             if (needsSave) {
+                console.log('無効な添付ファイルを削除してデータを保存します');
                 await saveData();
             }
         }
-        // ★ END PATCH v17.0 - 新規関数 ★
         
         // ===== Dropbox認証 =====
-        // ★ BEGIN PATCH v14.0 - PKCE認証フロー ★
         async function authenticateDropbox() {
             // 古いトークンをクリア
             localStorage.removeItem('dropbox_access_token');
@@ -2930,7 +2872,6 @@
                 
             window.location.href = authUrl;
         }
-        /* ★ END PATCH v14.0 ★ */
         
         function getAccessTokenFromUrl() {
             const hash = window.location.hash;
@@ -3033,13 +2974,11 @@
                 console.log('データを読み込み中...');
                 await loadData();
                 
-                // ★ BEGIN PATCH v17.0 - 設定適用 ★
                 // 設定を適用
                 initializeViewMode();
                 initializeFilterVisibility();
-                // ★ END PATCH v17.0 ★
                 
-                // ★ v12.0: 顔写真URLのマイグレーションを実行
+                // 顔写真URLのマイグレーションを実行
                 migratePhotoUrls();
                 
                 // UI初期化
@@ -3052,9 +2991,7 @@
                 updateDropdownOptions();
                 renderContactList();
 
-                // ★ BEGIN PATCH v15.0 - 接続状態更新 ★
                 updateConnectionStatus();
-                /* ★ END PATCH v15.0 ★ */
                 
                 hideLoading();
                 console.log('✅ Dropbox初期化完了');
@@ -3097,7 +3034,7 @@
             }
         }
         
-        // ★ オプション2の修正版 callDropboxSafe 関数 ★
+        // ===== 修正版 callDropboxSafe 関数 =====
         async function callDropboxSafe(apiMethod, args, retryCount = 0) {
             const maxRetries = 1;
             
@@ -3107,7 +3044,7 @@
             }
             
             try {
-                // ★ 重要な修正：引数の渡し方を修正
+                // 引数の渡し方を修正
                 let result;
                 
                 // args が配列で、要素が1つの場合は、その要素を直接渡す
@@ -3123,18 +3060,9 @@
                 
                 return result;
             } catch (error) {
-                // 409エラー（ファイルが存在しない）は正常なケースなのでログ出力を抑制
-                if (error.status !== 409) {
+                // ★ 400エラーと409エラーのログ出力を抑制
+                if (error.status !== 400 && error.status !== 409) {
                     console.error(`Dropbox API error (${apiMethod.name}):`, error);
-                    
-                    // 400エラーの場合は詳細情報を出力
-                    if (error.status === 400) {
-                        console.error('Bad Request Details:', {
-                            method: apiMethod.name,
-                            args: args,
-                            errorResponse: error.error || error
-                        });
-                    }
                 }
                 
                 // 401: 認証エラー
@@ -3174,7 +3102,7 @@
                 // 4xx: クライアントエラー
                 if (error.status >= 400 && error.status < 500) {
                     const errorMessage = error.error?.error_summary || 'リクエストエラーが発生しました';
-                    if (error.status !== 409) { // 409エラーは通知しない
+                    if (error.status !== 400 && error.status !== 409) { // ★ 400, 409エラーは通知しない
                         showNotification(errorMessage, 'error');
                     }
                     throw error;
@@ -3293,22 +3221,18 @@
             // 再認証フラグをリセット
             isReauthInProgress = false;
 
-            // ★ BEGIN PATCH v15.0 - 接続状態更新 ★
             updateConnectionStatus();
-            /* ★ END PATCH v15.0 ★ */
             
             document.getElementById('authContainer').style.display = 'block';
             document.getElementById('mainContainer').style.display = 'none';
         }
         
         function logout() {
-            // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
             closeModal('settingsModal');
-            /* ★ END PATCH v15.0 ★ */
 
             // トークンを削除
             localStorage.removeItem('dropbox_access_token');
-            localStorage.removeItem('dropbox_refresh_token'); // ★ v14.0
+            localStorage.removeItem('dropbox_refresh_token');
             sessionStorage.removeItem('dropbox_access_token');
             
             // ページをリロード
@@ -3320,9 +3244,7 @@
             const folders = [
                 '/1to1App',
                 '/1to1App/attachments',
-                // ★ BEGIN PATCH v15.0 - 名刺画像用フォルダ追加 ★
                 '/1to1App/attachments/cards'
-                /* ★ END PATCH v15.0 ★ */
             ];
             
             for (const folder of folders) {
@@ -3336,7 +3258,6 @@
                 } catch (error) {
                     // 409エラー（既存）は正常
                     if (error.status === 409) {
-                        // ★ v11.0: 409エラーのコンソール出力を情報レベルに変更
                         console.log(`✓ フォルダは既に存在: ${folder}`);
                     } 
                     // AUTH_REQUIREDエラーは上位で処理
@@ -3365,10 +3286,8 @@
                     throw new Error('インターネット接続がありません');
                 }
                 
-                // ★ BEGIN PATCH v17.0 - 設定読み込み追加 ★
                 // 設定を読み込み
                 await loadOptions();
-                // ★ END PATCH v17.0 ★
                 
                 // 連絡先データを読み込み
                 const contactsData = await loadJsonFile('/1to1App/contacts.json');
@@ -3393,10 +3312,8 @@
                 // 紹介元リンクを更新
                 updateAllReferrerLinks();
                 
-                // ★ BEGIN PATCH v17.0 - ファイル検証追加 ★
                 // ファイル実体チェック
                 await validateAttachments();
-                // ★ END PATCH v17.0 ★
             } catch (error) {
                 console.error('データ読み込みエラー:', error);
                 if (error.message === 'インターネット接続がありません') {
@@ -3422,7 +3339,6 @@
                     contact.cutout = '';
                     needsSave = true;
                 }
-                // ★ BEGIN PATCH v15.0 - cardImage関連フィールド追加 ★
                 if (!contact.hasOwnProperty('cardImage')) {
                     contact.cardImage = '';
                     needsSave = true;
@@ -3431,7 +3347,6 @@
                     contact.cardImageUrl = '';
                     needsSave = true;
                 }
-                /* ★ END PATCH v15.0 ★ */
             });
             
             if (needsSave) {
@@ -3514,6 +3429,23 @@
                 
                 console.log('📊 データ保存開始...');
                 
+                // ★ 添付ファイルのパス検証を追加
+                contacts.forEach(contact => {
+                    if (contact.attachments && contact.attachments.length > 0) {
+                        contact.attachments = contact.attachments.filter(att => 
+                            att.path && att.path.trim() !== '' && att.path[0] === '/'
+                        );
+                    }
+                });
+                
+                meetings.forEach(meeting => {
+                    if (meeting.attachments && meeting.attachments.length > 0) {
+                        meeting.attachments = meeting.attachments.filter(att => 
+                            att.path && att.path.trim() !== '' && att.path[0] === '/'
+                        );
+                    }
+                });
+                
                 // 連絡先データを保存
                 await saveJsonFile('/1to1App/contacts.json', contacts);
                 console.log('   ✅ contacts.json 保存完了');
@@ -3522,7 +3454,6 @@
                 await saveJsonFile('/1to1App/meetings.json', meetings);
                 console.log('   ✅ meetings.json 保存完了');
                 
-                // ★ BEGIN PATCH v17.0 - options.json保存変更 ★
                 // ドロップダウンオプションと設定を保存
                 const optionsData = {
                     dropdownOptions: dropdownOptions,
@@ -3530,7 +3461,6 @@
                 };
                 await saveJsonFile('/1to1App/options.json', optionsData);
                 console.log('   ✅ options.json 保存完了（設定含む）');
-                // ★ END PATCH v17.0 ★
                 
                 hideLoading();
                 console.log('📊 データ保存完了');
@@ -3567,21 +3497,17 @@
         // ===== 同期機能 =====
         async function syncData() {
             try {
-                // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
                 closeModal('settingsModal');
-                /* ★ END PATCH v15.0 ★ */
 
                 showNotification('同期中...', 'info');
                 await loadData();
                 
-                // ★ v12.0: 同期時にもマイグレーションを実行
+                // 同期時にもマイグレーションを実行
                 migratePhotoUrls();
                 
                 renderContactList();
                 updateDropdownOptions();
-                // ★ BEGIN PATCH v15.0 - 通知追加 ★
                 showNotification('同期が完了しました');
-                /* ★ END PATCH v15.0 ★ */
             } catch (error) {
                 console.error('同期エラー:', error);
                 showNotification('同期に失敗しました', 'error');
@@ -3594,10 +3520,7 @@
             return fileName.replace(/[\/\\:?*<>|"]/g, '_');
         }
         
-        // ★ v12.0: ファイルアップロード修正（toDirectLink使用）
         // ===== ファイルアップロード（最終修正版） =====
-        // ★ BEGIN PATCH v15.0 - uploadFile関数の修正（カスタムパス対応） ★
-        // ★ BEGIN PATCH v17.0 - uploadFile関数修正（モバイル対応） ★
         async function uploadFile(file, customName = null, customPath = null) {
             // モバイル判定
             const isMobile = window.matchMedia("(max-width: 768px)").matches;
@@ -3709,10 +3632,7 @@
                 throw error;
             }
         }
-        // ★ END PATCH v17.0 - uploadFile関数修正 ★
-        /* ★ END PATCH v15.0 - uploadFile関数の修正 ★ */
         
-        // ★ v11.0: 顔写真のドラッグ＆ドロップ対応
         // ===== 顔写真アップロード =====
         function handlePhotoUpload(event) {
             const file = event.target.files[0];
@@ -3737,7 +3657,6 @@
         }
         
         // ===== 連絡先保存 =====
-        // ★ BEGIN PATCH v16.0 - saveContactForm修正（初回ミーティング自動保存） ★
         async function saveContactForm(event) {
             event.preventDefault();
             showLoading();
@@ -3897,10 +3816,7 @@
                 hideLoading();
             }
         }
-        // ★ END PATCH v16.0 - saveContactForm修正 ★
         
-        // ★ BEGIN PATCH v14.0 - ミーティング保存（ドラフト削除対応） ★
-        // ★ BEGIN PATCH v16.0 - saveMeetingForm修正（過去の経歴処理削除） ★
         async function saveMeetingForm(event) {
             event.preventDefault();
             showLoading();
@@ -3997,8 +3913,6 @@
                 hideLoading();
             }
         }
-        // ★ END PATCH v16.0 - saveMeetingForm修正 ★
-        /* ★ END PATCH v14.0 ★ */
         
         // ===== 連絡先削除 =====
         async function deleteContact(contactId) {
@@ -4061,8 +3975,6 @@
         }
         
         // ===== UI関数 =====
-        // ★ BEGIN PATCH v16.0 - showContactForm修正（初回ミーティング対応） ★
-        // ★ BEGIN PATCH v17.0 - showContactForm修正（新規登録時も初回ミーティング表示） ★
         function showContactForm(contactId = null) {
             // 詳細モーダルを閉じる
             closeModal('contactDetailModal');
@@ -4149,11 +4061,7 @@
             document.getElementById('contactFormModal').style.display = 'block';
             document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
         }
-        // ★ END PATCH v17.0 - showContactForm修正 ★
-        // ★ END PATCH v16.0 - showContactForm修正 ★
         
-        // ★ BEGIN PATCH v15.0 - showContactDetailの修正（タブ表示） ★
-        // ★ BEGIN PATCH v17.0 - showContactDetail修正（折りたたみ、リンク化） ★
         function showContactDetail(contactId) {
             const contact = contacts.find(c => c.id === contactId);
             if (!contact) return;
@@ -4343,8 +4251,6 @@
                 </div>
             `).join('');
         }
-        // ★ END PATCH v17.0 - showContactDetail修正 ★
-        /* ★ END PATCH v15.0 - showContactDetailの修正 ★ */
         
         // 過去の経歴の折りたたみ切り替え
         function toggleCareerHistory(contactId) {
@@ -4504,8 +4410,6 @@
             }
         }
         
-        // ★ BEGIN PATCH v14.0 - ミーティングフォーム表示（ドラフト復元対応） ★
-        // ★ BEGIN PATCH v16.0 - showMeetingForm修正（過去の経歴欄削除、テンプレート適用） ★
         function showMeetingForm(contactId, meetingId = null) {
             currentEditingContactId = contactId;
             currentEditingMeetingId = meetingId;
@@ -4568,8 +4472,6 @@
             // モーダルを最上部にスクロール
             document.querySelector('#meetingFormModal .modal-content').scrollTop = 0;
         }
-        // ★ END PATCH v16.0 - showMeetingForm修正 ★
-        /* ★ END PATCH v14.0 ★ */
         
         // タスク入力フィールド表示関数
         function displayTaskInputs(tasks = []) {
@@ -4587,14 +4489,12 @@
                 addTaskInput();
             }
             
-            // ★ BEGIN PATCH v14.0 - タスク入力の自動保存 ★
             container.querySelectorAll('input').forEach(input => {
                 input.addEventListener('input', () => {
                     clearTimeout(draftSaveTimer);
                     draftSaveTimer = setTimeout(saveDraft, 5000);
                 });
             });
-            /* ★ END PATCH v14.0 ★ */
         }
         
         // タスク入力追加関数
@@ -4609,23 +4509,19 @@
             `;
             container.appendChild(newRow);
             
-            // ★ BEGIN PATCH v14.0 - 新規タスク入力の自動保存 ★
             newRow.querySelectorAll('input').forEach(input => {
                 input.addEventListener('input', () => {
                     clearTimeout(draftSaveTimer);
                     draftSaveTimer = setTimeout(saveDraft, 5000);
                 });
             });
-            /* ★ END PATCH v14.0 ★ */
         }
         
         // タスク入力削除関数
         function removeTaskInput(button) {
             button.closest('.task-input-row').remove();
-            // ★ BEGIN PATCH v14.0 - 削除後も自動保存 ★
             clearTimeout(draftSaveTimer);
             draftSaveTimer = setTimeout(saveDraft, 1000);
-            /* ★ END PATCH v14.0 ★ */
         }
         
         function editMeeting(meetingId) {
@@ -4635,7 +4531,6 @@
             }
         }
 
-        // ★ BEGIN PATCH v16.0 - 初回ミーティング関連関数追加 ★
         // 初回ミーティングのタスク追加
         function addFirstMeetingTask() {
             const container = document.getElementById('firstMeetingTaskContainer');
@@ -4693,7 +4588,6 @@
             selectedFirstMeetingFiles.splice(index, 1);
             displayFirstMeetingAttachments();
         }
-        // ★ END PATCH v16.0 - 初回ミーティング関連関数追加 ★
         
         // ===== 検索・フィルター・ソート =====
         function filterContacts() {
@@ -4928,8 +4822,6 @@
         }
         
         // ===== レンダリング =====
-        // ★ BEGIN PATCH v15.0 - renderContactListの修正（リスト表示対応） ★
-        // ★ BEGIN PATCH v17.0 - renderContactList修正（リンククリック対応） ★
         function renderContactList(filterFunc = null) {
             const grid = document.getElementById('contactGrid');
             let filteredContacts = filterFunc ? contacts.filter(filterFunc) : contacts;
@@ -5014,10 +4906,7 @@
                 }).join('');
             }
         }
-        // ★ END PATCH v17.0 - renderContactList修正 ★
-        /* ★ END PATCH v15.0 - renderContactListの修正 ★ */
         
-        // ★ BEGIN PATCH v17.0 - 画像エラーハンドリング修正 ★
         function handleImageError(img, contactName) {
             console.error('画像読み込みエラー:', {
                 url: img.src,
@@ -5064,7 +4953,6 @@
                 parentDiv.innerHTML = `<span style="font-size: ${parentDiv.style.width === '120px' ? '48px' : '32px'};">${contactName.charAt(0)}</span>`;
             }
         }
-        // ★ END PATCH v17.0 - 画像エラーハンドリング修正 ★
         
         // ===== 紹介元リンク =====
         function updateAllReferrerLinks() {
@@ -5138,7 +5026,6 @@
             document.getElementById('loadingOverlay').style.display = 'none';
         }
         
-        // ★ BEGIN PATCH v14.0 - モーダルクローズ（ドラフトチェック） ★
         function closeModal(modalId) {
             if (modalId === 'meetingFormModal' && hasUnsavedDraft) {
                 if (!confirm('保存されていない下書きがあります。閉じてもよろしいですか？')) {
@@ -5154,7 +5041,6 @@
                 draftSaveTimer = null;
             }
         }
-        /* ★ END PATCH v14.0 ★ */
         
         function toggleContent(meetingId) {
             const content = document.getElementById(`content-${meetingId}`);
@@ -5170,7 +5056,6 @@
         }
         
         // ===== Markdownレンダリング =====
-        // ★ BEGIN PATCH v17.0 - renderMarkdown修正（URL・メール自動リンク化） ★
         function renderMarkdown(text) {
             if (!text) return '';
             
@@ -5236,7 +5121,6 @@
             
             return processedText;
         }
-        // ★ END PATCH v17.0 - renderMarkdown修正 ★
         
         // ===== ドロップダウンオプション管理 =====
         function updateDropdownOptions() {
@@ -5379,11 +5263,7 @@
             photoZone.addEventListener('dragleave', handleDragLeave);
             photoZone.addEventListener('drop', (e) => handlePhotoDrop(e));
             
-            // ★ BEGIN PATCH v15.0 - 名刺画像のドラッグ＆ドロップ ★
-            // ★ BEGIN PATCH v17.0 - setupCardImageInput呼び出しに変更 ★
             setupCardImageInput();
-            // ★ END PATCH v17.0 ★
-            /* ★ END PATCH v15.0 ★ */
             
             // 連絡先の添付ファイル
             const attachmentZone = document.getElementById('attachmentDropZone');
@@ -5520,7 +5400,6 @@
         }
         
         // ===== フォームリセット =====
-        // ★ BEGIN PATCH v16.0 - resetContactForm修正（マルチセレクト完全リセット） ★
         function resetContactForm() {
             document.getElementById('contactForm').reset();
             document.getElementById('photoPreview').innerHTML = '';
@@ -5549,7 +5428,6 @@
             document.getElementById('firstMeetingTaskContainer').innerHTML = '';
             document.getElementById('firstMeetingAttachments').innerHTML = '';
         }
-        // ★ END PATCH v16.0 - resetContactForm修正 ★
         
         function resetMeetingForm() {
             document.getElementById('meetingForm').reset();
@@ -5558,18 +5436,16 @@
             document.getElementById('taskInputContainer').innerHTML = '';
             selectedMeetingFiles = [];
             deletedMeetingAttachments = [];
-            hasUnsavedDraft = false; // ★ v14.0
+            hasUnsavedDraft = false;
         }
         
         // ===== データエクスポート/インポート =====
         async function exportData() {
-            // ★ BEGIN PATCH v15.0 - 設定モーダルを閉じる ★
             closeModal('settingsModal');
-            /* ★ END PATCH v15.0 ★ */
 
             try {
                 const exportData = {
-                    version: '2.8',  // ★ BEGIN PATCH v17.0 - バージョン更新 ★
+                    version: '2.9',  // バージョンアップ
                     exportDate: new Date().toISOString(),
                     contacts: contacts,
                     meetings: meetings,
@@ -5623,14 +5499,12 @@
                         if (!contact.hasOwnProperty('cutout')) {
                             contact.cutout = '';
                         }
-                        // ★ BEGIN PATCH v15.0 - cardImage関連フィールド初期化 ★
                         if (!contact.hasOwnProperty('cardImage')) {
                             contact.cardImage = '';
                         }
                         if (!contact.hasOwnProperty('cardImageUrl')) {
                             contact.cardImageUrl = '';
                         }
-                        /* ★ END PATCH v15.0 ★ */
                         // 顔写真URLを変換
                         if (contact.photoUrl && contact.photoUrl.includes('www.dropbox.com')) {
                             contact.photoUrl = toDirectLink(contact.photoUrl);
@@ -5686,7 +5560,6 @@
             }
         }
         
-        // ★ BEGIN PATCH v14.0 - ページ離脱前警告 ★
         window.onbeforeunload = function(e) {
             // 未保存のドラフトがある場合のみ警告を表示
             if (hasUnsavedDraft) {
@@ -5695,21 +5568,18 @@
                 return message; // Firefox
             }
         };
-        /* ★ END PATCH v14.0 ★ */
         
         // ===== イベントリスナー設定 =====
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 setupFileDragDrop();
-                // ★ BEGIN PATCH v17.0 - 名刺画像入力設定追加 ★
                 setupCardImageInput();
-                // ★ END PATCH v17.0 ★
                 
                 // モーダルの外側クリックで閉じる
                 document.querySelectorAll('.modal').forEach(modal => {
                     modal.addEventListener('click', (e) => {
                         if (e.target === modal) {
-                            closeModal(modal.id); // ★ v14.0
+                            closeModal(modal.id);
                         }
                     });
                 });
@@ -5754,4 +5624,4 @@
         });
     </script>
 </body>
-</html>
+</html> 
