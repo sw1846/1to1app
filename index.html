@@ -2286,6 +2286,7 @@
         const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
         const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
         const APP_FOLDER_NAME = '1to1MeetingManager';
+        const ATTACHMENTS_FOLDER_NAME = 'attachments';
         
         let tokenClient = null;
         let gapiInited = false;
@@ -2314,6 +2315,7 @@
         let viewMode = localStorage.getItem('viewMode') || 'card';
         let filterVisible = localStorage.getItem('filterVisible') === 'true';
         let appFolderId = null;
+        let attachmentsFolderId = null;
         
         // ドラフト管理用変数
         let draftSaveTimer = null;
@@ -2702,6 +2704,7 @@
         // ===== Google Drive 操作 =====
         async function ensureAppFolder() {
             try {
+                // アプリフォルダを確認・作成
                 const response = await gapi.client.drive.files.list({
                     q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
                     fields: 'files(id, name)',
@@ -2722,8 +2725,70 @@
                 }
                 
                 console.log('App folder ID:', appFolderId);
+                
+                // attachmentsフォルダを確認・作成
+                await ensureAttachmentsFolder();
             } catch (error) {
                 console.error('Error creating app folder:', error);
+                throw error;
+            }
+        }
+
+        async function ensureAttachmentsFolder() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `name='${ATTACHMENTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and '${appFolderId}' in parents and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                });
+                
+                if (response.result.files && response.result.files.length > 0) {
+                    attachmentsFolderId = response.result.files[0].id;
+                } else {
+                    const folderResponse = await gapi.client.drive.files.create({
+                        resource: {
+                            name: ATTACHMENTS_FOLDER_NAME,
+                            mimeType: 'application/vnd.google-apps.folder',
+                            parents: [appFolderId]
+                        },
+                        fields: 'id'
+                    });
+                    attachmentsFolderId = folderResponse.result.id;
+                }
+                
+                console.log('Attachments folder ID:', attachmentsFolderId);
+            } catch (error) {
+                console.error('Error creating attachments folder:', error);
+                throw error;
+            }
+        }
+
+        async function ensureContactFolder(contactName) {
+            try {
+                // 連絡先名をサニタイズ
+                const folderName = sanitizeFileName(contactName);
+                
+                const response = await gapi.client.drive.files.list({
+                    q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${attachmentsFolderId}' in parents and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                });
+                
+                if (response.result.files && response.result.files.length > 0) {
+                    return response.result.files[0].id;
+                } else {
+                    const folderResponse = await gapi.client.drive.files.create({
+                        resource: {
+                            name: folderName,
+                            mimeType: 'application/vnd.google-apps.folder',
+                            parents: [attachmentsFolderId]
+                        },
+                        fields: 'id'
+                    });
+                    return folderResponse.result.id;
+                }
+            } catch (error) {
+                console.error('Error creating contact folder:', error);
                 throw error;
             }
         }
@@ -2825,11 +2890,17 @@
             }
         }
 
-        async function uploadFile(file, customName = null) {
+        async function uploadFile(file, customName = null, contactName = null) {
+            // 連絡先名が指定されている場合は、その連絡先フォルダを作成・取得
+            let parentFolderId = appFolderId;
+            if (contactName) {
+                parentFolderId = await ensureContactFolder(contactName);
+            }
+            
             const fileName = customName || file.name;
             const metadata = {
                 name: fileName,
-                parents: [appFolderId]
+                parents: [parentFolderId]
             };
             
             const form = new FormData();
@@ -2849,11 +2920,13 @@
                 
                 const result = await response.json();
                 
-                // Google Driveの直接アクセス可能なURLを生成
-                const shareUrl = `https://drive.google.com/uc?export=view&id=${result.id}`;
-                
-                // 画像の場合は、共有設定を変更
+                // iOS対応の画像URL生成
+                let shareUrl;
                 if (file.type.startsWith('image/')) {
+                    // 画像の場合は直接アクセス可能なURLを生成
+                    shareUrl = `https://drive.google.com/uc?id=${result.id}&export=view`;
+                    
+                    // 画像に対してanyoneへの読み取り権限を付与
                     try {
                         await gapi.client.drive.permissions.create({
                             fileId: result.id,
@@ -2865,6 +2938,9 @@
                     } catch (permError) {
                         console.warn('画像の共有設定に失敗しました:', permError);
                     }
+                } else {
+                    // その他のファイルは通常のURLを使用
+                    shareUrl = `https://drive.google.com/uc?export=view&id=${result.id}`;
                 }
                 
                 return {
@@ -2951,13 +3027,23 @@
         function toDirectLink(url) {
             if (!url) return url;
             
-            if (url.includes('drive.google.com/uc')) {
+            // すでに適切な形式の場合はそのまま返す
+            if (url.includes('drive.google.com/uc?id=') && url.includes('&export=view')) {
                 return url;
             }
             
+            // 旧形式のURLを新形式に変換
             const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
             if (match) {
-                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+                return `https://drive.google.com/uc?id=${match[1]}&export=view`;
+            }
+            
+            // uc?export=viewだけの形式をiOS対応形式に変換
+            if (url.includes('drive.google.com/uc?export=view&id=')) {
+                const idMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
+                if (idMatch) {
+                    return `https://drive.google.com/uc?id=${idMatch[1]}&export=view`;
+                }
             }
             
             return url;
@@ -2969,17 +3055,31 @@
             let needsSave = false;
             
             contacts.forEach(contact => {
-                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc')) {
+                let updated = false;
+                
+                // 顔写真URLを修正
+                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc?id=')) {
                     const oldUrl = contact.photoUrl;
                     contact.photoUrl = toDirectLink(contact.photoUrl);
+                    updated = true;
+                    console.log(`✅ 顔写真URLを変換: ${contact.name}`);
+                }
+                
+                // 名刺画像URLを修正
+                if (contact.cardImageUrl && !contact.cardImageUrl.includes('drive.google.com/uc?id=')) {
+                    contact.cardImageUrl = toDirectLink(contact.cardImageUrl);
+                    updated = true;
+                    console.log(`✅ 名刺画像URLを変換: ${contact.name}`);
+                }
+                
+                if (updated) {
                     needsSave = true;
                     migratedCount++;
-                    console.log(`✅ URLを変換: ${contact.name}`);
                 }
             });
             
             if (needsSave) {
-                console.log(`📊 ${migratedCount}件の顔写真URLを変換しました`);
+                console.log(`📊 ${migratedCount}件の画像URLを変換しました`);
                 saveData().catch(error => {
                     console.error('マイグレーション後の保存エラー:', error);
                 });
@@ -3103,12 +3203,12 @@
                     
                     if (contact.photoUrl) {
                         document.getElementById('photoPreview').innerHTML = 
-                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
+                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
                     }
                     
                     if (contact.cardImageUrl) {
                         document.getElementById('cardImagePreview').innerHTML = 
-                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" crossorigin="anonymous" onerror="handleImageError(this, '名刺')">`;
+                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '名刺')">`;
                     }
                     
                     ensureMultiSelectOptions(contact);
@@ -3227,24 +3327,24 @@
             try {
                 if (currentPhotoFile) {
                     const timestamp = new Date().getTime();
-                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, photoName);
+                    const photoName = `photo_${timestamp}.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName, contact.name);
                     contact.photo = photoResult.id;
                     contact.photoUrl = photoResult.url;
                 }
                 
                 if (currentCardImageFile) {
                     const timestamp = new Date().getTime();
-                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
-                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
+                    const cardImageName = `名刺_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName, contact.name);
                     contact.cardImage = cardImageResult.id;
                     contact.cardImageUrl = cardImageResult.url;
                 }
                 
                 for (const file of selectedFiles) {
                     const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
+                    const fileName = `${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName, contact.name);
                     contact.attachments.push({
                         name: file.name,
                         id: fileResult.id,
@@ -3299,8 +3399,8 @@
                     
                     for (const file of selectedFirstMeetingFiles) {
                         const timestamp = new Date().getTime();
-                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
-                        const fileResult = await uploadFile(file, fileName);
+                        const fileName = `firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                        const fileResult = await uploadFile(file, fileName, contact.name);
                         firstMeeting.attachments.push({
                             name: file.name,
                             id: fileResult.id,
@@ -3456,8 +3556,8 @@
                 const contact = contacts.find(c => c.id === currentEditingContactId);
                 for (const file of selectedMeetingFiles) {
                     const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_meeting_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
+                    const fileName = `meeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName, contact.name);
                     meeting.attachments.push({
                         name: file.name,
                         id: fileResult.id,
@@ -3780,7 +3880,7 @@
             if (contact.photoUrl) {
                 const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
                 photoHtml = `<div class="contact-photo" style="width: 120px; height: 120px; margin-bottom: 20px;">
-                    <img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" crossorigin="anonymous" onerror="handleImageError(this, '${escapedName}')">
+                    <img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">
                 </div>`;
             }
             
@@ -3885,7 +3985,6 @@
                                     <img src="${contact.cardImageUrl}" style="max-width: 100%; border-radius: 8px; cursor: pointer;" 
                                          onclick="window.open('${contact.cardImageUrl}', '_blank')"
                                          loading="lazy"
-                                         crossorigin="anonymous"
                                          onerror="handleImageError(this, '名刺')">
                                 </div>
                             </div>`;
@@ -4000,7 +4099,7 @@
                     let photoHtml = '';
                     if (contact.photoUrl) {
                         const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
-                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" crossorigin="anonymous" onerror="handleImageError(this, '${escapedName}')">`;
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">`;
                     } else {
                         photoHtml = `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`;
                     }
@@ -4037,7 +4136,7 @@
                     let photoHtml = '';
                     if (contact.photoUrl) {
                         const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
-                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" crossorigin="anonymous" onerror="handleImageError(this, '${escapedName}')">`;
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">`;
                     } else {
                         photoHtml = `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`;
                     }
@@ -5331,4 +5430,3 @@
     </script>
 </body>
 </html>
-                
