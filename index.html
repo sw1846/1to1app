@@ -2902,6 +2902,412 @@
                 
                 renderContactList();
                 updateDropdownOptions();
+                renderOutstandingActions();
+                
+                showNotification('同期が完了しました');
+            } catch (error) {
+                console.error('Sync error:', error);
+                showNotification('同期に失敗しました', 'error');
+            }
+        }
+
+        function toDirectLink(url) {
+            if (!url) return url;
+            
+            if (url.includes('drive.google.com/uc')) {
+                return url;
+            }
+            
+            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) {
+                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+            }
+            
+            return url;
+        }
+
+        function migratePhotoUrls() {
+            console.log('=== 顔写真URLのマイグレーション開始 ===');
+            let migratedCount = 0;
+            let needsSave = false;
+            
+            contacts.forEach(contact => {
+                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc')) {
+                    const oldUrl = contact.photoUrl;
+                    contact.photoUrl = toDirectLink(contact.photoUrl);
+                    needsSave = true;
+                    migratedCount++;
+                    console.log(`✅ URLを変換: ${contact.name}`);
+                }
+            });
+            
+            if (needsSave) {
+                console.log(`📊 ${migratedCount}件の顔写真URLを変換しました`);
+                saveData().catch(error => {
+                    console.error('マイグレーション後の保存エラー:', error);
+                });
+            }
+        }
+
+        function migrateContactsData() {
+            let needsSave = false;
+            
+            contacts.forEach(contact => {
+                if (!contact.hasOwnProperty('yomi')) {
+                    contact.yomi = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cutout')) {
+                    contact.cutout = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cardImage')) {
+                    contact.cardImage = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cardImageUrl')) {
+                    contact.cardImageUrl = '';
+                    needsSave = true;
+                }
+            });
+            
+            if (needsSave) {
+                console.log('連絡先データに新しいフィールドを追加しました');
+            }
+        }
+
+        function migrateMeetingsData() {
+            let needsSave = false;
+            
+            meetings.forEach(meeting => {
+                if (!meeting.hasOwnProperty('tasks')) {
+                    meeting.tasks = [];
+                    if (meeting.nextAction) {
+                        const taskLines = meeting.nextAction.split('\n').filter(line => line.trim());
+                        taskLines.forEach((taskText, index) => {
+                            meeting.tasks.push({
+                                text: taskText.trim(),
+                                due: index === 0 ? meeting.nextActionDue : null,
+                                done: meeting.nextActionDoneTasks && meeting.nextActionDoneTasks[index] || false
+                            });
+                        });
+                    }
+                    needsSave = true;
+                }
+            });
+            
+            if (needsSave) {
+                console.log('ミーティングデータを新形式に移行しました');
+            }
+        }
+
+        async function loadOptions() {
+            try {
+                const optionsData = await loadJsonFile('options.json');
+                if (optionsData) {
+                    if (optionsData.dropdownOptions) {
+                        dropdownOptions = optionsData.dropdownOptions;
+                    }
+                    if (optionsData.userSettings) {
+                        userSettings = optionsData.userSettings;
+                        viewMode = userSettings.viewMode || 'card';
+                        filterVisible = userSettings.filterVisible || false;
+                        if (userSettings.meetingTemplate) {
+                            localStorage.setItem('meetingTemplate', userSettings.meetingTemplate);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('設定読み込みエラー:', error);
+            }
+        }
+
+        async function saveOptions() {
+            try {
+                userSettings.viewMode = viewMode;
+                userSettings.filterVisible = filterVisible;
+                userSettings.meetingTemplate = localStorage.getItem('meetingTemplate') || '';
+                
+                const optionsData = {
+                    dropdownOptions: dropdownOptions,
+                    userSettings: userSettings
+                };
+                
+                await saveJsonFile('options.json', optionsData);
+            } catch (error) {
+                console.error('設定保存エラー:', error);
+            }
+        }
+
+        // ===== 連絡先管理 =====
+        function showContactForm(contactId = null) {
+            closeModal('contactDetailModal');
+            
+            currentEditingContactId = contactId;
+            resetContactForm();
+            
+            if (contactId) {
+                const contact = contacts.find(c => c.id === contactId);
+                if (contact) {
+                    document.getElementById('contactFormTitle').textContent = '連絡先編集';
+                    const form = document.getElementById('contactForm');
+                    form.name.value = contact.name || '';
+                    form.yomi.value = contact.yomi || '';
+                    form.company.value = contact.company || '';
+                    form.email.value = contact.email || '';
+                    form.phone.value = contact.phone || '';
+                    form.homepage.value = contact.homepage || '';
+                    form.referredBy.value = contact.referredBy || '';
+                    form.strengths.value = contact.strengths || '';
+                    form.careerHistory.value = contact.careerHistory || '';
+                    form.cutout.value = contact.cutout || '';
+                    form.area.value = contact.area || '';
+                    form.residence.value = contact.residence || '';
+                    
+                    if (contact.photoUrl) {
+                        document.getElementById('photoPreview').innerHTML = 
+                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
+                    }
+                    
+                    if (contact.cardImageUrl) {
+                        document.getElementById('cardImagePreview').innerHTML = 
+                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '名刺')">`;
+                    }
+                    
+                    ensureMultiSelectOptions(contact);
+                    setSelectedValues('types', contact.types || []);
+                    setSelectedValues('affiliations', contact.affiliations || []);
+                    setSelectedValues('wantToConnect', contact.wantToConnect || []);
+                    setSelectedValues('goldenEgg', contact.goldenEgg || []);
+                    
+                    displayExistingAttachments(contact.attachments || []);
+                    
+                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
+                    
+                    if (contactMeetings.length === 0) {
+                        document.getElementById('firstMeetingSection').style.display = 'block';
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
+                        
+                        const template = localStorage.getItem('meetingTemplate') || '';
+                        form.firstMeetingContent.value = template;
+                    }
+                }
+            } else {
+                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+                
+                document.getElementById('firstMeetingSection').style.display = 'block';
+                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
+                
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
+                
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
+            }
+            
+            setupMultiSelect();
+            setupFirstMeetingFileDrop();
+            document.getElementById('contactFormModal').style.display = 'block';
+            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
+        }
+
+        function ensureMultiSelectOptions(contact) {
+            if (contact.types) {
+                contact.types.forEach(type => {
+                    if (!dropdownOptions.types.includes(type)) {
+                        dropdownOptions.types.push(type);
+                    }
+                });
+            }
+            if (contact.affiliations) {
+                contact.affiliations.forEach(aff => {
+                    if (!dropdownOptions.affiliations.includes(aff)) {
+                        dropdownOptions.affiliations.push(aff);
+                    }
+                });
+            }
+            if (contact.wantToConnect) {
+                contact.wantToConnect.forEach(want => {
+                    if (!dropdownOptions.wantToConnect.includes(want)) {
+                        dropdownOptions.wantToConnect.push(want);
+                    }
+                });
+            }
+            if (contact.goldenEgg) {
+                contact.goldenEgg.forEach(egg => {
+                    if (!dropdownOptions.goldenEgg.includes(egg)) {
+                        dropdownOptions.goldenEgg.push(egg);
+                    }
+                });
+            }
+        }
+
+        async function saveContactForm(event) {
+            event.preventDefault();
+            showLoading();
+            
+            const formData = new FormData(event.target);
+            const contact = {
+                id: currentEditingContactId || generateId(),
+                name: formData.get('name'),
+                yomi: formData.get('yomi'),
+                company: formData.get('company'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                homepage: formData.get('homepage'),
+                referredBy: formData.get('referredBy'),
+                strengths: formData.get('strengths'),
+                careerHistory: formData.get('careerHistory'),
+                cutout: formData.get('cutout'),
+                types: getSelectedValues('types'),
+                affiliations: getSelectedValues('affiliations'),
+                wantToConnect: getSelectedValues('wantToConnect'),
+                goldenEgg: getSelectedValues('goldenEgg'),
+                area: formData.get('area'),
+                residence: formData.get('residence'),
+                attachments: [],
+                createdAt: currentEditingContactId ? 
+                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
+                    new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            if (currentEditingContactId) {
+                const existing = contacts.find(c => c.id === currentEditingContactId);
+                if (existing) {
+                    contact.photo = existing.photo;
+                    contact.photoUrl = existing.photoUrl;
+                    contact.cardImage = existing.cardImage;
+                    contact.cardImageUrl = existing.cardImageUrl;
+                    contact.attachments = existing.attachments || [];
+                }
+            }
+            
+            try {
+                if (currentPhotoFile) {
+                    const timestamp = new Date().getTime();
+                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName);
+                    contact.photo = photoResult.id;
+                    contact.photoUrl = photoResult.url;
+                }
+                
+                if (currentCardImageFile) {
+                    const timestamp = new Date().getTime();
+                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
+                    contact.cardImage = cardImageResult.id;
+                    contact.cardImageUrl = cardImageResult.url;
+                }
+                
+                for (const file of selectedFiles) {
+                    const timestamp = new Date().getTime();
+                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
+                    contact.attachments.push({
+                        name: file.name,
+                        id: fileResult.id,
+                        url: fileResult.url,
+                        uploadedAt: new Date().toISOString()
+                    });
+                }
+                
+                contact.attachments = contact.attachments.filter(att => 
+                    !deletedAttachments.includes(att.id)
+                );
+                
+                const index = contacts.findIndex(c => c.id === contact.id);
+                if (index >= 0) {
+                    contacts[index] = contact;
+                } else {
+                    contacts.push(contact);
+                }
+                
+                const firstMeetingDatetime = formData.get('firstMeetingDatetime');
+                const firstMeetingContent = formData.get('firstMeetingContent');
+                const firstMeetingSection = document.getElementById('firstMeetingSection');
+                
+                if (firstMeetingSection.style.display !== 'none' && 
+                    (firstMeetingDatetime || firstMeetingContent)) {
+                    
+                    const taskTexts = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskText[]"]')).map(input => input.value);
+                    const taskDues = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskDue[]"]')).map(input => input.value);
+                    
+                    const tasks = [];
+                    taskTexts.forEach((text, index) => {
+                        if (text.trim()) {
+                            tasks.push({
+                                text: text.trim(),
+                                due: taskDues[index] || null,
+                                done: false
+                            });
+                        }
+                    });
+                    
+                    const firstMeeting = {
+                        id: generateId(),
+                        contactId: contact.id,
+                        datetime: firstMeetingDatetime || new Date().toISOString(),
+                        content: firstMeetingContent || '',
+                        tasks: tasks,
+                        attachments: [],
+                        isFirstMeeting: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    
+                    for (const file of selectedFirstMeetingFiles) {
+                        const timestamp = new Date().getTime();
+                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                        const fileResult = await uploadFile(file, fileName);
+                        firstMeeting.attachments.push({
+                            name: file.name,
+                            id: fileResult.id,
+                            url: fileResult.url,
+                            uploadedAt: new Date().toISOString()
+                        });
+                    }
+                    
+                    meetings.push(firstMeeting);
+                }
+                
+                updateAllReferrerLinks();
+                
+                await saveData();
+                
+                renderContactList();
+                updateDropdownOptions();
+                closeModal('contactFormModal');
+                resetContactForm();
+                
+                hideLoading();
+                showNotification('連絡先を保存しました');
+            } catch (error) {
+                console.error('連絡先保存エラー:', error);
+                showNotification('連絡先の保存に失敗しました', 'error');
+                hideLoading();
+            }
+        }
+
+        async function deleteContact(contactId) {
+            if (!confirm('この連絡先を削除してもよろしいですか？\n関連するミーティング記録も削除されます。')) {
+                return;
+            }
+            
+            showLoading();
+            
+            try {
+                meetings = meetings.filter(m => m.contactId !== contactId);
+                contacts = contacts.filter(c => c.id !== contactId);
+                
+                await saveData();
+                
+                renderContactList();
+                updateDropdownOptions();
                 closeModal('contactDetailModal');
                 
                 hideLoading();
@@ -3333,8 +3739,9 @@
             // 顔写真部分を生成
             let photoHtml = '';
             if (contact.photoUrl) {
+                const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
                 photoHtml = `<div class="contact-photo" style="width: 120px; height: 120px; margin-bottom: 20px;">
-                    <img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">
+                    <img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">
                 </div>`;
             }
             
@@ -3452,10 +3859,11 @@
                                 <div class="file-list" style="margin-top: 10px;">`;
                         
                         contact.attachments.forEach(att => {
+                            const escapedAttName = escapeHtml(att.name).replace(/'/g, "\\'");
                             html += `
                                 <div class="file-item">
                                     <span>${escapeHtml(att.name)}</span>
-                                    <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name).replace(/'/g, "\\'")}'); return false;" class="btn-small btn-secondary">開く</a>
+                                    <a href="#" onclick="openFile('${att.url}', '${escapedAttName}'); return false;" class="btn-small btn-secondary">開く</a>
                                 </div>`;
                         });
                         
@@ -3551,7 +3959,8 @@
                     // 顔写真HTML生成
                     let photoHtml = '';
                     if (contact.photoUrl) {
-                        photoHtml = `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">`;
+                        const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">`;
                     } else {
                         photoHtml = `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`;
                     }
@@ -3587,7 +3996,8 @@
                     // 顔写真HTML生成
                     let photoHtml = '';
                     if (contact.photoUrl) {
-                        photoHtml = `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">`;
+                        const escapedName = escapeHtml(contact.name).replace(/'/g, "\\'");
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" loading="lazy" onerror="handleImageError(this, '${escapedName}')">`;
                     } else {
                         photoHtml = `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`;
                     }
@@ -4131,7 +4541,7 @@
                 <div class="file-item">
                     <span>${escapeHtml(att.name)}</span>
                     <div class="file-item-actions">
-                        <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" class="btn-small btn-secondary">開く</a>
+                        <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name).replace(/'/g, "\\'")}'); return false;" class="btn-small btn-secondary">開く</a>
                         <button type="button" class="btn-small btn-danger" onclick="markAttachmentForDeletion('${att.id}')">削除</button>
                     </div>
                 </div>
@@ -4144,7 +4554,7 @@
                 <div class="file-item">
                     <span>${escapeHtml(att.name)}</span>
                     <div class="file-item-actions">
-                        <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" class="btn-small btn-secondary">開く</a>
+                        <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name).replace(/'/g, "\\'")}'); return false;" class="btn-small btn-secondary">開く</a>
                         <button type="button" class="btn-small btn-danger" onclick="markMeetingAttachmentForDeletion('${att.id}')">削除</button>
                     </div>
                 </div>
@@ -4855,408 +5265,4 @@
         }
     </script>
 </body>
-</html>DropdownOptions();
-                showNotification('同期が完了しました');
-            } catch (error) {
-                console.error('Sync error:', error);
-                showNotification('同期に失敗しました', 'error');
-            }
-        }
-
-        function toDirectLink(url) {
-            if (!url) return url;
-            
-            if (url.includes('drive.google.com/uc')) {
-                return url;
-            }
-            
-            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-            if (match) {
-                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-            }
-            
-            return url;
-        }
-
-        function migratePhotoUrls() {
-            console.log('=== 顔写真URLのマイグレーション開始 ===');
-            let migratedCount = 0;
-            let needsSave = false;
-            
-            contacts.forEach(contact => {
-                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc')) {
-                    const oldUrl = contact.photoUrl;
-                    contact.photoUrl = toDirectLink(contact.photoUrl);
-                    needsSave = true;
-                    migratedCount++;
-                    console.log(`✅ URLを変換: ${contact.name}`);
-                }
-            });
-            
-            if (needsSave) {
-                console.log(`📊 ${migratedCount}件の顔写真URLを変換しました`);
-                saveData().catch(error => {
-                    console.error('マイグレーション後の保存エラー:', error);
-                });
-            }
-        }
-
-        function migrateContactsData() {
-            let needsSave = false;
-            
-            contacts.forEach(contact => {
-                if (!contact.hasOwnProperty('yomi')) {
-                    contact.yomi = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cutout')) {
-                    contact.cutout = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cardImage')) {
-                    contact.cardImage = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cardImageUrl')) {
-                    contact.cardImageUrl = '';
-                    needsSave = true;
-                }
-            });
-            
-            if (needsSave) {
-                console.log('連絡先データに新しいフィールドを追加しました');
-            }
-        }
-
-        function migrateMeetingsData() {
-            let needsSave = false;
-            
-            meetings.forEach(meeting => {
-                if (!meeting.hasOwnProperty('tasks')) {
-                    meeting.tasks = [];
-                    if (meeting.nextAction) {
-                        const taskLines = meeting.nextAction.split('\n').filter(line => line.trim());
-                        taskLines.forEach((taskText, index) => {
-                            meeting.tasks.push({
-                                text: taskText.trim(),
-                                due: index === 0 ? meeting.nextActionDue : null,
-                                done: meeting.nextActionDoneTasks && meeting.nextActionDoneTasks[index] || false
-                            });
-                        });
-                    }
-                    needsSave = true;
-                }
-            });
-            
-            if (needsSave) {
-                console.log('ミーティングデータを新形式に移行しました');
-            }
-        }
-
-        async function loadOptions() {
-            try {
-                const optionsData = await loadJsonFile('options.json');
-                if (optionsData) {
-                    if (optionsData.dropdownOptions) {
-                        dropdownOptions = optionsData.dropdownOptions;
-                    }
-                    if (optionsData.userSettings) {
-                        userSettings = optionsData.userSettings;
-                        viewMode = userSettings.viewMode || 'card';
-                        filterVisible = userSettings.filterVisible || false;
-                        if (userSettings.meetingTemplate) {
-                            localStorage.setItem('meetingTemplate', userSettings.meetingTemplate);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('設定読み込みエラー:', error);
-            }
-        }
-
-        async function saveOptions() {
-            try {
-                userSettings.viewMode = viewMode;
-                userSettings.filterVisible = filterVisible;
-                userSettings.meetingTemplate = localStorage.getItem('meetingTemplate') || '';
-                
-                const optionsData = {
-                    dropdownOptions: dropdownOptions,
-                    userSettings: userSettings
-                };
-                
-                await saveJsonFile('options.json', optionsData);
-            } catch (error) {
-                console.error('設定保存エラー:', error);
-            }
-        }
-
-        // ===== 連絡先管理 =====
-        function showContactForm(contactId = null) {
-            closeModal('contactDetailModal');
-            
-            currentEditingContactId = contactId;
-            resetContactForm();
-            
-            if (contactId) {
-                const contact = contacts.find(c => c.id === contactId);
-                if (contact) {
-                    document.getElementById('contactFormTitle').textContent = '連絡先編集';
-                    const form = document.getElementById('contactForm');
-                    form.name.value = contact.name || '';
-                    form.yomi.value = contact.yomi || '';
-                    form.company.value = contact.company || '';
-                    form.email.value = contact.email || '';
-                    form.phone.value = contact.phone || '';
-                    form.homepage.value = contact.homepage || '';
-                    form.referredBy.value = contact.referredBy || '';
-                    form.strengths.value = contact.strengths || '';
-                    form.careerHistory.value = contact.careerHistory || '';
-                    form.cutout.value = contact.cutout || '';
-                    form.area.value = contact.area || '';
-                    form.residence.value = contact.residence || '';
-                    
-                    if (contact.photoUrl) {
-                        document.getElementById('photoPreview').innerHTML = 
-                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
-                    }
-                    
-                    if (contact.cardImageUrl) {
-                        document.getElementById('cardImagePreview').innerHTML = 
-                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '名刺')">`;
-                    }
-                    
-                    ensureMultiSelectOptions(contact);
-                    setSelectedValues('types', contact.types || []);
-                    setSelectedValues('affiliations', contact.affiliations || []);
-                    setSelectedValues('wantToConnect', contact.wantToConnect || []);
-                    setSelectedValues('goldenEgg', contact.goldenEgg || []);
-                    
-                    displayExistingAttachments(contact.attachments || []);
-                    
-                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
-                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
-                    
-                    if (contactMeetings.length === 0) {
-                        document.getElementById('firstMeetingSection').style.display = 'block';
-                        const now = new Date();
-                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
-                        
-                        const template = localStorage.getItem('meetingTemplate') || '';
-                        form.firstMeetingContent.value = template;
-                    }
-                }
-            } else {
-                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
-                
-                document.getElementById('firstMeetingSection').style.display = 'block';
-                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
-                
-                const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
-                
-                const template = localStorage.getItem('meetingTemplate') || '';
-                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
-            }
-            
-            setupMultiSelect();
-            setupFirstMeetingFileDrop();
-            document.getElementById('contactFormModal').style.display = 'block';
-            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
-        }
-
-        function ensureMultiSelectOptions(contact) {
-            if (contact.types) {
-                contact.types.forEach(type => {
-                    if (!dropdownOptions.types.includes(type)) {
-                        dropdownOptions.types.push(type);
-                    }
-                });
-            }
-            if (contact.affiliations) {
-                contact.affiliations.forEach(aff => {
-                    if (!dropdownOptions.affiliations.includes(aff)) {
-                        dropdownOptions.affiliations.push(aff);
-                    }
-                });
-            }
-            if (contact.wantToConnect) {
-                contact.wantToConnect.forEach(want => {
-                    if (!dropdownOptions.wantToConnect.includes(want)) {
-                        dropdownOptions.wantToConnect.push(want);
-                    }
-                });
-            }
-            if (contact.goldenEgg) {
-                contact.goldenEgg.forEach(egg => {
-                    if (!dropdownOptions.goldenEgg.includes(egg)) {
-                        dropdownOptions.goldenEgg.push(egg);
-                    }
-                });
-            }
-        }
-
-        async function saveContactForm(event) {
-            event.preventDefault();
-            showLoading();
-            
-            const formData = new FormData(event.target);
-            const contact = {
-                id: currentEditingContactId || generateId(),
-                name: formData.get('name'),
-                yomi: formData.get('yomi'),
-                company: formData.get('company'),
-                email: formData.get('email'),
-                phone: formData.get('phone'),
-                homepage: formData.get('homepage'),
-                referredBy: formData.get('referredBy'),
-                strengths: formData.get('strengths'),
-                careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'),
-                types: getSelectedValues('types'),
-                affiliations: getSelectedValues('affiliations'),
-                wantToConnect: getSelectedValues('wantToConnect'),
-                goldenEgg: getSelectedValues('goldenEgg'),
-                area: formData.get('area'),
-                residence: formData.get('residence'),
-                attachments: [],
-                createdAt: currentEditingContactId ? 
-                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            if (currentEditingContactId) {
-                const existing = contacts.find(c => c.id === currentEditingContactId);
-                if (existing) {
-                    contact.photo = existing.photo;
-                    contact.photoUrl = existing.photoUrl;
-                    contact.cardImage = existing.cardImage;
-                    contact.cardImageUrl = existing.cardImageUrl;
-                    contact.attachments = existing.attachments || [];
-                }
-            }
-            
-            try {
-                if (currentPhotoFile) {
-                    const timestamp = new Date().getTime();
-                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, photoName);
-                    contact.photo = photoResult.id;
-                    contact.photoUrl = photoResult.url;
-                }
-                
-                if (currentCardImageFile) {
-                    const timestamp = new Date().getTime();
-                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
-                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
-                    contact.cardImage = cardImageResult.id;
-                    contact.cardImageUrl = cardImageResult.url;
-                }
-                
-                for (const file of selectedFiles) {
-                    const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
-                    contact.attachments.push({
-                        name: file.name,
-                        id: fileResult.id,
-                        url: fileResult.url,
-                        uploadedAt: new Date().toISOString()
-                    });
-                }
-                
-                contact.attachments = contact.attachments.filter(att => 
-                    !deletedAttachments.includes(att.id)
-                );
-                
-                const index = contacts.findIndex(c => c.id === contact.id);
-                if (index >= 0) {
-                    contacts[index] = contact;
-                } else {
-                    contacts.push(contact);
-                }
-                
-                const firstMeetingDatetime = formData.get('firstMeetingDatetime');
-                const firstMeetingContent = formData.get('firstMeetingContent');
-                const firstMeetingSection = document.getElementById('firstMeetingSection');
-                
-                if (firstMeetingSection.style.display !== 'none' && 
-                    (firstMeetingDatetime || firstMeetingContent)) {
-                    
-                    const taskTexts = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskText[]"]')).map(input => input.value);
-                    const taskDues = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskDue[]"]')).map(input => input.value);
-                    
-                    const tasks = [];
-                    taskTexts.forEach((text, index) => {
-                        if (text.trim()) {
-                            tasks.push({
-                                text: text.trim(),
-                                due: taskDues[index] || null,
-                                done: false
-                            });
-                        }
-                    });
-                    
-                    const firstMeeting = {
-                        id: generateId(),
-                        contactId: contact.id,
-                        datetime: firstMeetingDatetime || new Date().toISOString(),
-                        content: firstMeetingContent || '',
-                        tasks: tasks,
-                        attachments: [],
-                        isFirstMeeting: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    
-                    for (const file of selectedFirstMeetingFiles) {
-                        const timestamp = new Date().getTime();
-                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
-                        const fileResult = await uploadFile(file, fileName);
-                        firstMeeting.attachments.push({
-                            name: file.name,
-                            id: fileResult.id,
-                            url: fileResult.url,
-                            uploadedAt: new Date().toISOString()
-                        });
-                    }
-                    
-                    meetings.push(firstMeeting);
-                }
-                
-                updateAllReferrerLinks();
-                
-                await saveData();
-                
-                renderContactList();
-                updateDropdownOptions();
-                closeModal('contactFormModal');
-                resetContactForm();
-                
-                hideLoading();
-                showNotification('連絡先を保存しました');
-            } catch (error) {
-                console.error('連絡先保存エラー:', error);
-                showNotification('連絡先の保存に失敗しました', 'error');
-                hideLoading();
-            }
-        }
-
-        async function deleteContact(contactId) {
-            if (!confirm('この連絡先を削除してもよろしいですか？\n関連するミーティング記録も削除されます。')) {
-                return;
-            }
-            
-            showLoading();
-            
-            try {
-                meetings = meetings.filter(m => m.contactId !== contactId);
-                contacts = contacts.filter(c => c.id !== contactId);
-                
-                await saveData();
-                
-                renderContactList();
-                update
+</html>
