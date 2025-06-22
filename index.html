@@ -2563,18 +2563,30 @@
             }
             
             // 表示モードとボタンの状態を正しく同期
+            const cardViewBtn = document.getElementById('cardViewBtn');
+            const listViewBtn = document.getElementById('listViewBtn');
+            
+            if (!cardViewBtn || !listViewBtn) {
+                return;
+            }
+            
             if (viewMode === 'list') {
-                document.getElementById('cardViewBtn')?.classList.remove('active');
-                document.getElementById('listViewBtn')?.classList.add('active');
+                cardViewBtn.classList.remove('active');
+                listViewBtn.classList.add('active');
             } else {
-                document.getElementById('listViewBtn')?.classList.remove('active');
-                document.getElementById('cardViewBtn')?.classList.add('active');
+                listViewBtn.classList.remove('active');
+                cardViewBtn.classList.add('active');
             }
         }
 
         function initializeFilterVisibility() {
             const filterContent = document.getElementById('filterContent');
             const toggleIcon = document.getElementById('filterToggleIcon');
+            
+            // 要素が存在しない場合は何もしない
+            if (!filterContent || !toggleIcon) {
+                return;
+            }
             
             if (!filterVisible) {
                 filterContent.classList.remove('show');
@@ -4333,7 +4345,14 @@
             });
             
             const parentDiv = img.parentElement;
-            parentDiv.innerHTML = `<span style="font-size: ${parentDiv.style.width === '120px' ? '48px' : '32px'};">${contactName.charAt(0)}</span>`;
+            if (!parentDiv) {
+                return;
+            }
+            
+            // 親要素のサイズを判定してフォントサイズを設定
+            const width = parentDiv.style.width;
+            const fontSize = width === '120px' ? '48px' : '32px';
+            parentDiv.innerHTML = `<span style="font-size: ${fontSize};">${contactName.charAt(0)}</span>`;
         }
 
         // ===== Markdownレンダリング =====
