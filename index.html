@@ -414,12 +414,6 @@
             gap: 12px;
         }
 
-        .sort-controls label {
-            font-size: 14px;
-            color: #aaaaaa;
-            margin: 0;
-        }
-
         .sort-controls select {
             padding: 8px 12px;
             font-size: 14px;
@@ -477,6 +471,73 @@
         textarea {
             resize: vertical;
             min-height: 100px;
+        }
+
+        /* インクリメンタルサーチ付きセレクト */
+        .searchable-select {
+            position: relative;
+        }
+
+        .searchable-select-input {
+            width: 100%;
+            padding: 8px 12px;
+            font-size: 14px;
+            border-radius: 6px;
+            border: 1px solid #444444;
+            background: #333333;
+            color: #f0f0f0;
+            cursor: pointer;
+        }
+
+        .searchable-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #333333;
+            border: 1px solid #444444;
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .searchable-select-dropdown.show {
+            display: block;
+        }
+
+        .searchable-select-search {
+            padding: 8px;
+            border-bottom: 1px solid #444444;
+            position: sticky;
+            top: 0;
+            background: #333333;
+        }
+
+        .searchable-select-search input {
+            width: 100%;
+            padding: 6px 10px;
+            font-size: 13px;
+            border: 1px solid #444444;
+            border-radius: 4px;
+            background: #2a2a2a;
+        }
+
+        .searchable-select-option {
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .searchable-select-option:hover {
+            background: #3a3a3a;
+        }
+
+        .searchable-select-option.selected {
+            background: #4c8bf5;
+            color: white;
         }
 
         /* 連絡先グリッド */
@@ -796,7 +857,7 @@
         }
         
         .career-history-content.collapsed {
-            max-height: calc(1.6em * 7); /* 7行分の高さ */
+            max-height: calc(1.6em * 7);
         }
         
         .career-history-toggle {
@@ -1806,45 +1867,31 @@
                     <div class="filter-row">
                         <div class="filter-group">
                             <label>種別</label>
-                            <select id="filterType" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterTypeWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>所属・チャプター</label>
-                            <select id="filterAffiliation" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterAffiliationWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>繋がりたい人・業種</label>
-                            <select id="filterWantToConnect" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterWantToConnectWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>金の卵</label>
-                            <select id="filterGoldenEgg" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterGoldenEggWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>紹介元</label>
-                            <select id="filterReferredBy" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterReferredByWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>エリア</label>
-                            <select id="filterArea" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterAreaWrapper"></div>
                         </div>
                         <div class="filter-group">
                             <label>居住地</label>
-                            <select id="filterResidence" onchange="filterContacts()">
-                                <option value="">すべて</option>
-                            </select>
+                            <div class="searchable-select" id="filterResidenceWrapper"></div>
                         </div>
                     </div>
                 </div>
@@ -1867,7 +1914,6 @@
             <div class="view-controls">
                 <div class="view-sort-wrapper">
                     <div class="sort-controls">
-                        <label>並び替え:</label>
                         <select id="sortOrder" onchange="applySorting()">
                             <option value="meeting-desc">最終打合せ日 (新しい順)</option>
                             <option value="meeting-asc">最終打合せ日 (古い順)</option>
@@ -2281,10 +2327,8 @@
             // 現在のURLを表示
             let origin = window.location.origin;
             if (!origin || origin === 'null' || origin === 'file://') {
-                // ローカルファイルの場合
                 origin = 'http://localhost:8000';
                 document.getElementById('origin-url').textContent = origin;
-                // 注意書きを追加
                 const codeBlock = document.getElementById('origin-url').parentElement;
                 if (!codeBlock.querySelector('.local-notice')) {
                     const notice = document.createElement('p');
@@ -2298,14 +2342,12 @@
             }
         }
 
-        // 設定画面からセットアップウィザードを開く
         function showSetupWizardFromSettings() {
             closeModal('settingsModal');
             document.getElementById('mainContainer').style.display = 'none';
             document.getElementById('setupWizard').style.display = 'block';
             document.getElementById('backToMainBtn').style.display = 'block';
             
-            // 現在のURLを表示
             let origin = window.location.origin;
             if (!origin || origin === 'null' || origin === 'file://') {
                 origin = 'http://localhost:8000';
@@ -2313,11 +2355,9 @@
             document.getElementById('origin-url').textContent = origin;
         }
 
-        // セットアップウィザードを閉じて元の画面に戻る
         function closeSetupAndReturn() {
             document.getElementById('setupWizard').style.display = 'none';
             document.getElementById('mainContainer').style.display = 'block';
-            // ステップを初期状態に戻す
             currentStep = 1;
             document.querySelectorAll('.setup-step').forEach(step => step.classList.remove('active'));
             document.getElementById('step1').classList.add('active');
@@ -2369,7 +2409,6 @@
             CLIENT_ID = clientId;
             localStorage.setItem('google_client_id', CLIENT_ID);
             
-            // 最終設定を表示
             const config = `クライアントID: ${CLIENT_ID}
 アプリ名: 1to1 Meeting Manager
 データ保存先: Google Drive/${APP_FOLDER_NAME}/
@@ -2383,24 +2422,18 @@
         }
 
         function completeSetup() {
-            // セットアップ完了フラグを設定
             localStorage.setItem('setup_completed', 'true');
             isSetupCompleted = true;
             
             document.getElementById('setupWizard').style.display = 'none';
             
-            // CLIENT_IDが設定されたので、Google APIを初期化
             try {
-                // Google Identity Services を初期化
                 google.accounts.id.initialize({
                     client_id: CLIENT_ID,
                     callback: handleCredentialResponse
                 });
                 
-                // GIS client を初期化
                 initializeGisClient();
-                
-                // Google API Client Library を読み込み
                 gapi.load('client', initializeGapiClient);
             } catch (error) {
                 console.error('Google API初期化エラー:', error);
@@ -2411,7 +2444,6 @@
         function copyToClipboard(elementId) {
             const text = document.getElementById(elementId).textContent;
             
-            // navigator.clipboard APIが利用可能か確認
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(() => {
                     showNotification('コピーしました');
@@ -2420,7 +2452,6 @@
                     fallbackCopyToClipboard(text);
                 });
             } else {
-                // フォールバック方法を使用
                 fallbackCopyToClipboard(text);
             }
         }
@@ -2449,10 +2480,8 @@
             console.log('=== アプリケーション初期化開始 ===');
             console.log('CLIENT_ID:', CLIENT_ID ? '設定済み' : '未設定');
             
-            // セットアップ完了状態をチェック
             isSetupCompleted = localStorage.getItem('setup_completed') === 'true';
             
-            // 表示モードとフィルター設定を初期化
             initializeViewMode();
             initializeFilterVisibility();
             
@@ -2465,17 +2494,12 @@
             console.log('Google APIを初期化します');
             
             try {
-                // CLIENT_IDがある場合のみGoogle APIを初期化
-                // Google Identity Services を初期化
                 google.accounts.id.initialize({
                     client_id: CLIENT_ID,
                     callback: handleCredentialResponse
                 });
                 
-                // GIS client を初期化
                 initializeGisClient();
-                
-                // Google API Client Library を読み込み
                 gapi.load('client', initializeGapiClient);
             } catch (error) {
                 console.error('Google API初期化エラー:', error);
@@ -2510,7 +2534,6 @@
 
         function maybeEnableButtons() {
             if (gapiInited && gisInited) {
-                // 保存されたトークンをチェック
                 const savedToken = localStorage.getItem('google_access_token');
                 if (savedToken) {
                     gapi.client.setToken({ access_token: savedToken });
@@ -2524,7 +2547,6 @@
 
         async function validateTokenAndInitialize() {
             try {
-                // トークンの有効性を確認
                 await gapi.client.drive.about.get({ fields: 'user' });
                 handleAuthSuccess();
             } catch (error) {
@@ -2534,15 +2556,22 @@
             }
         }
 
-        // 表示モード初期化
         function initializeViewMode() {
+            const saved = localStorage.getItem('viewMode');
+            if (saved) {
+                viewMode = saved;
+            }
+            
+            // 表示モードとボタンの状態を正しく同期
             if (viewMode === 'list') {
-                document.getElementById('cardViewBtn').classList.remove('active');
-                document.getElementById('listViewBtn').classList.add('active');
+                document.getElementById('cardViewBtn')?.classList.remove('active');
+                document.getElementById('listViewBtn')?.classList.add('active');
+            } else {
+                document.getElementById('listViewBtn')?.classList.remove('active');
+                document.getElementById('cardViewBtn')?.classList.add('active');
             }
         }
 
-        // フィルター表示状態初期化
         function initializeFilterVisibility() {
             const filterContent = document.getElementById('filterContent');
             const toggleIcon = document.getElementById('filterToggleIcon');
@@ -2581,20 +2610,13 @@
             try {
                 showLoading();
                 
-                // アプリフォルダを作成/取得
                 await ensureAppFolder();
-                
-                // データを読み込み
                 await loadData();
-                
-                // 顔写真URLのマイグレーション
                 migratePhotoUrls();
                 
-                // UIを表示
                 document.getElementById('authContainer').style.display = 'none';
                 document.getElementById('mainContainer').style.display = 'block';
                 
-                // 設定を適用
                 initializeViewMode();
                 initializeFilterVisibility();
                 
@@ -2631,7 +2653,6 @@
         // ===== Google Drive 操作 =====
         async function ensureAppFolder() {
             try {
-                // アプリフォルダを検索
                 const response = await gapi.client.drive.files.list({
                     q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
                     fields: 'files(id, name)',
@@ -2641,7 +2662,6 @@
                 if (response.result.files && response.result.files.length > 0) {
                     appFolderId = response.result.files[0].id;
                 } else {
-                    // フォルダを作成
                     const folderResponse = await gapi.client.drive.files.create({
                         resource: {
                             name: APP_FOLDER_NAME,
@@ -2665,7 +2685,6 @@
             const close_delim = "\r\n--" + boundary + "--";
             
             try {
-                // 既存のファイルを検索
                 const searchResponse = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
                     fields: 'files(id)'
@@ -2676,10 +2695,8 @@
                 let multipartRequestBody;
                 
                 if (searchResponse.result.files && searchResponse.result.files.length > 0) {
-                    // 既存ファイルの更新の場合
                     fileId = searchResponse.result.files[0].id;
                     
-                    // 更新時はname フィールドのみを含め、mimeTypeは含めない
                     metadata = {
                         name: fileName
                     };
@@ -2693,7 +2710,6 @@
                         JSON.stringify(data, null, 2) +
                         close_delim;
                     
-                    // 既存ファイルを更新
                     await gapi.client.request({
                         path: `/upload/drive/v3/files/${fileId}`,
                         method: 'PATCH',
@@ -2704,7 +2720,6 @@
                         body: multipartRequestBody
                     });
                 } else {
-                    // 新規ファイルを作成
                     metadata = {
                         name: fileName,
                         mimeType: 'application/json',
@@ -2738,7 +2753,6 @@
 
         async function loadJsonFile(fileName) {
             try {
-                // ファイルを検索
                 const searchResponse = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
                     fields: 'files(id)'
@@ -2750,7 +2764,6 @@
                 
                 const fileId = searchResponse.result.files[0].id;
                 
-                // ファイルの内容を取得
                 const response = await gapi.client.drive.files.get({
                     fileId: fileId,
                     alt: 'media'
@@ -2787,7 +2800,6 @@
                 
                 const result = await response.json();
                 
-                // 共有可能なURLを生成
                 const shareUrl = `https://drive.google.com/uc?export=view&id=${result.id}`;
                 
                 return {
@@ -2803,7 +2815,6 @@
         // ===== データ管理 =====
         async function loadData() {
             try {
-                // 設定を読み込み
                 await loadOptions();
                 
                 const contactsData = await loadJsonFile('contacts.json');
@@ -2812,11 +2823,9 @@
                 const meetingsData = await loadJsonFile('meetings.json');
                 meetings = meetingsData || [];
                 
-                // データ移行処理
                 migrateMeetingsData();
                 migrateContactsData();
                 
-                // ドロップダウンオプションを読み込み
                 if (Object.keys(dropdownOptions).every(key => dropdownOptions[key].length === 0)) {
                     const optionsData = await loadJsonFile('options.json');
                     if (optionsData && optionsData.dropdownOptions) {
@@ -2824,7 +2833,6 @@
                     }
                 }
                 
-                // 紹介元リンクを更新
                 updateAllReferrerLinks();
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -2832,24 +2840,19 @@
             }
         }
 
-        // 最適化された保存処理
         async function saveData() {
             try {
-                // ローディング表示をしない（バックグラウンドで保存）
                 const savePromises = [];
                 
-                // 並行して保存処理を実行
                 savePromises.push(saveJsonFile('contacts.json', contacts));
                 savePromises.push(saveJsonFile('meetings.json', meetings));
                 
-                // オプションとユーザー設定を保存
                 const optionsData = {
                     dropdownOptions: dropdownOptions,
                     userSettings: userSettings
                 };
                 savePromises.push(saveJsonFile('options.json', optionsData));
                 
-                // すべての保存処理を並行実行
                 await Promise.all(savePromises);
                 
                 showNotification('データを保存しました');
@@ -2866,455 +2869,8 @@
                 showNotification('同期中...', 'info');
                 await loadData();
                 
-                // 同期時にもマイグレーションを実行
                 migratePhotoUrls();
                 
-                renderContactList();
-                updateDropdownOptions();
-                showNotification('同期が完了しました');
-            } catch (error) {
-                console.error('Sync error:', error);
-                showNotification('同期に失敗しました', 'error');
-            }
-        }
-
-        // 顔写真URLをGoogle Drive形式に変換
-        function toDirectLink(url) {
-            if (!url) return url;
-            
-            // すでに直接リンク形式の場合はそのまま返す
-            if (url.includes('drive.google.com/uc')) {
-                return url;
-            }
-            
-            // Google Drive IDを抽出してダイレクトリンクに変換
-            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-            if (match) {
-                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-            }
-            
-            return url;
-        }
-
-        // 既存の顔写真URLをマイグレーション
-        function migratePhotoUrls() {
-            console.log('=== 顔写真URLのマイグレーション開始 ===');
-            let migratedCount = 0;
-            let needsSave = false;
-            
-            contacts.forEach(contact => {
-                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc')) {
-                    const oldUrl = contact.photoUrl;
-                    contact.photoUrl = toDirectLink(contact.photoUrl);
-                    needsSave = true;
-                    migratedCount++;
-                    console.log(`✅ URLを変換: ${contact.name}`);
-                }
-            });
-            
-            if (needsSave) {
-                console.log(`📊 ${migratedCount}件の顔写真URLを変換しました`);
-                // 非同期でデータを保存
-                saveData().catch(error => {
-                    console.error('マイグレーション後の保存エラー:', error);
-                });
-            }
-        }
-
-        // 連絡先データの移行処理
-        function migrateContactsData() {
-            let needsSave = false;
-            
-            contacts.forEach(contact => {
-                // 必須フィールドの初期化
-                if (!contact.hasOwnProperty('yomi')) {
-                    contact.yomi = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cutout')) {
-                    contact.cutout = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cardImage')) {
-                    contact.cardImage = '';
-                    needsSave = true;
-                }
-                if (!contact.hasOwnProperty('cardImageUrl')) {
-                    contact.cardImageUrl = '';
-                    needsSave = true;
-                }
-            });
-            
-            if (needsSave) {
-                console.log('連絡先データに新しいフィールドを追加しました');
-            }
-        }
-
-        // ミーティングデータの移行処理
-        function migrateMeetingsData() {
-            let needsSave = false;
-            
-            meetings.forEach(meeting => {
-                // tasksフィールドが存在しない場合、既存のnextActionから変換
-                if (!meeting.hasOwnProperty('tasks')) {
-                    meeting.tasks = [];
-                    if (meeting.nextAction) {
-                        const taskLines = meeting.nextAction.split('\n').filter(line => line.trim());
-                        taskLines.forEach((taskText, index) => {
-                            meeting.tasks.push({
-                                text: taskText.trim(),
-                                due: index === 0 ? meeting.nextActionDue : null,
-                                done: meeting.nextActionDoneTasks && meeting.nextActionDoneTasks[index] || false
-                            });
-                        });
-                    }
-                    needsSave = true;
-                }
-            });
-            
-            if (needsSave) {
-                console.log('ミーティングデータを新形式に移行しました');
-            }
-        }
-
-        async function loadOptions() {
-            try {
-                const optionsData = await loadJsonFile('options.json');
-                if (optionsData) {
-                    if (optionsData.dropdownOptions) {
-                        dropdownOptions = optionsData.dropdownOptions;
-                    }
-                    if (optionsData.userSettings) {
-                        userSettings = optionsData.userSettings;
-                        viewMode = userSettings.viewMode || 'card';
-                        filterVisible = userSettings.filterVisible || false;
-                        if (userSettings.meetingTemplate) {
-                            localStorage.setItem('meetingTemplate', userSettings.meetingTemplate);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('設定読み込みエラー:', error);
-            }
-        }
-
-        async function saveOptions() {
-            try {
-                userSettings.viewMode = viewMode;
-                userSettings.filterVisible = filterVisible;
-                userSettings.meetingTemplate = localStorage.getItem('meetingTemplate') || '';
-                
-                const optionsData = {
-                    dropdownOptions: dropdownOptions,
-                    userSettings: userSettings
-                };
-                
-                await saveJsonFile('options.json', optionsData);
-            } catch (error) {
-                console.error('設定保存エラー:', error);
-            }
-        }
-
-        // ===== 連絡先管理 =====
-        function showContactForm(contactId = null) {
-            // 詳細モーダルを閉じる
-            closeModal('contactDetailModal');
-            
-            currentEditingContactId = contactId;
-            resetContactForm();
-            
-            if (contactId) {
-                const contact = contacts.find(c => c.id === contactId);
-                if (contact) {
-                    document.getElementById('contactFormTitle').textContent = '連絡先編集';
-                    const form = document.getElementById('contactForm');
-                    form.name.value = contact.name || '';
-                    form.yomi.value = contact.yomi || '';
-                    form.company.value = contact.company || '';
-                    form.email.value = contact.email || '';
-                    form.phone.value = contact.phone || '';
-                    form.homepage.value = contact.homepage || '';
-                    form.referredBy.value = contact.referredBy || '';
-                    form.strengths.value = contact.strengths || '';
-                    form.careerHistory.value = contact.careerHistory || '';
-                    form.cutout.value = contact.cutout || '';
-                    form.area.value = contact.area || '';
-                    form.residence.value = contact.residence || '';
-                    
-                    // 顔写真プレビュー
-                    if (contact.photoUrl) {
-                        document.getElementById('photoPreview').innerHTML = 
-                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
-                    }
-                    
-                    // 名刺画像プレビュー
-                    if (contact.cardImageUrl) {
-                        document.getElementById('cardImagePreview').innerHTML = 
-                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '名刺')">`;
-                    }
-                    
-                    // マルチセレクト設定
-                    // ドロップダウンオプションを事前に更新
-                    ensureMultiSelectOptions(contact);
-                    setSelectedValues('types', contact.types || []);
-                    setSelectedValues('affiliations', contact.affiliations || []);
-                    setSelectedValues('wantToConnect', contact.wantToConnect || []);
-                    setSelectedValues('goldenEgg', contact.goldenEgg || []);
-                    
-                    // 既存の添付ファイル
-                    displayExistingAttachments(contact.attachments || []);
-                    
-                    // 初回ミーティング情報の表示判定
-                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
-                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
-                    
-                    if (contactMeetings.length === 0) {
-                        // まだミーティングがない場合は初回ミーティング欄を表示
-                        document.getElementById('firstMeetingSection').style.display = 'block';
-                        // 現在時刻を設定
-                        const now = new Date();
-                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
-                        
-                        // テンプレートを適用
-                        const template = localStorage.getItem('meetingTemplate') || '';
-                        form.firstMeetingContent.value = template;
-                    }
-                }
-            } else {
-                // 新規登録モード
-                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
-                
-                // 初回ミーティングセクションを表示
-                document.getElementById('firstMeetingSection').style.display = 'block';
-                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
-                
-                // 現在時刻を設定
-                const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
-                
-                // テンプレートを適用
-                const template = localStorage.getItem('meetingTemplate') || '';
-                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
-            }
-            
-            setupMultiSelect();
-            setupFirstMeetingFileDrop();
-            document.getElementById('contactFormModal').style.display = 'block';
-            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
-        }
-
-        // ドロップダウンオプションに連絡先の値を追加
-        function ensureMultiSelectOptions(contact) {
-            if (contact.types) {
-                contact.types.forEach(type => {
-                    if (!dropdownOptions.types.includes(type)) {
-                        dropdownOptions.types.push(type);
-                    }
-                });
-            }
-            if (contact.affiliations) {
-                contact.affiliations.forEach(aff => {
-                    if (!dropdownOptions.affiliations.includes(aff)) {
-                        dropdownOptions.affiliations.push(aff);
-                    }
-                });
-            }
-            if (contact.wantToConnect) {
-                contact.wantToConnect.forEach(want => {
-                    if (!dropdownOptions.wantToConnect.includes(want)) {
-                        dropdownOptions.wantToConnect.push(want);
-                    }
-                });
-            }
-            if (contact.goldenEgg) {
-                contact.goldenEgg.forEach(egg => {
-                    if (!dropdownOptions.goldenEgg.includes(egg)) {
-                        dropdownOptions.goldenEgg.push(egg);
-                    }
-                });
-            }
-        }
-
-        async function saveContactForm(event) {
-            event.preventDefault();
-            showLoading();
-            
-            const formData = new FormData(event.target);
-            const contact = {
-                id: currentEditingContactId || generateId(),
-                name: formData.get('name'),
-                yomi: formData.get('yomi'),
-                company: formData.get('company'),
-                email: formData.get('email'),
-                phone: formData.get('phone'),
-                homepage: formData.get('homepage'),
-                referredBy: formData.get('referredBy'),
-                strengths: formData.get('strengths'),
-                careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'),
-                types: getSelectedValues('types'),
-                affiliations: getSelectedValues('affiliations'),
-                wantToConnect: getSelectedValues('wantToConnect'),
-                goldenEgg: getSelectedValues('goldenEgg'),
-                area: formData.get('area'),
-                residence: formData.get('residence'),
-                attachments: [],
-                createdAt: currentEditingContactId ? 
-                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            // 既存の連絡先の場合、既存データを保持
-            if (currentEditingContactId) {
-                const existing = contacts.find(c => c.id === currentEditingContactId);
-                if (existing) {
-                    contact.photo = existing.photo;
-                    contact.photoUrl = existing.photoUrl;
-                    contact.cardImage = existing.cardImage;
-                    contact.cardImageUrl = existing.cardImageUrl;
-                    contact.attachments = existing.attachments || [];
-                }
-            }
-            
-            try {
-                // 顔写真をアップロード
-                if (currentPhotoFile) {
-                    const timestamp = new Date().getTime();
-                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
-                    const photoResult = await uploadFile(currentPhotoFile, photoName);
-                    contact.photo = photoResult.id;
-                    contact.photoUrl = photoResult.url;
-                }
-                
-                // 名刺画像をアップロード
-                if (currentCardImageFile) {
-                    const timestamp = new Date().getTime();
-                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
-                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
-                    contact.cardImage = cardImageResult.id;
-                    contact.cardImageUrl = cardImageResult.url;
-                }
-                
-                // 添付ファイルをアップロード
-                for (const file of selectedFiles) {
-                    const timestamp = new Date().getTime();
-                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
-                    const fileResult = await uploadFile(file, fileName);
-                    contact.attachments.push({
-                        name: file.name,
-                        id: fileResult.id,
-                        url: fileResult.url,
-                        uploadedAt: new Date().toISOString()
-                    });
-                }
-                
-                // 削除されたファイルを処理
-                contact.attachments = contact.attachments.filter(att => 
-                    !deletedAttachments.includes(att.id)
-                );
-                
-                // 連絡先を保存
-                const index = contacts.findIndex(c => c.id === contact.id);
-                if (index >= 0) {
-                    contacts[index] = contact;
-                } else {
-                    contacts.push(contact);
-                }
-                
-                // 初回ミーティング情報の処理
-                const firstMeetingDatetime = formData.get('firstMeetingDatetime');
-                const firstMeetingContent = formData.get('firstMeetingContent');
-                const firstMeetingSection = document.getElementById('firstMeetingSection');
-                
-                if (firstMeetingSection.style.display !== 'none' && 
-                    (firstMeetingDatetime || firstMeetingContent)) {
-                    
-                    // タスク情報を収集
-                    const taskTexts = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskText[]"]')).map(input => input.value);
-                    const taskDues = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskDue[]"]')).map(input => input.value);
-                    
-                    const tasks = [];
-                    taskTexts.forEach((text, index) => {
-                        if (text.trim()) {
-                            tasks.push({
-                                text: text.trim(),
-                                due: taskDues[index] || null,
-                                done: false
-                            });
-                        }
-                    });
-                    
-                    const firstMeeting = {
-                        id: generateId(),
-                        contactId: contact.id,
-                        datetime: firstMeetingDatetime || new Date().toISOString(),
-                        content: firstMeetingContent || '',
-                        tasks: tasks,
-                        attachments: [],
-                        isFirstMeeting: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    
-                    // 初回ミーティングの添付ファイルをアップロード
-                    for (const file of selectedFirstMeetingFiles) {
-                        const timestamp = new Date().getTime();
-                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
-                        const fileResult = await uploadFile(file, fileName);
-                        firstMeeting.attachments.push({
-                            name: file.name,
-                            id: fileResult.id,
-                            url: fileResult.url,
-                            uploadedAt: new Date().toISOString()
-                        });
-                    }
-                    
-                    // ミーティングを保存
-                    meetings.push(firstMeeting);
-                }
-                
-                // 紹介元リンクを更新
-                updateAllReferrerLinks();
-                
-                // データを保存
-                await saveData();
-                
-                // UIを更新
-                renderContactList();
-                updateDropdownOptions();
-                closeModal('contactFormModal');
-                resetContactForm();
-                
-                hideLoading();
-                showNotification('連絡先を保存しました');
-            } catch (error) {
-                console.error('連絡先保存エラー:', error);
-                showNotification('連絡先の保存に失敗しました', 'error');
-                hideLoading();
-            }
-        }
-
-        async function deleteContact(contactId) {
-            if (!confirm('この連絡先を削除してもよろしいですか？\n関連するミーティング記録も削除されます。')) {
-                return;
-            }
-            
-            showLoading();
-            
-            try {
-                // 関連するミーティングを削除
-                meetings = meetings.filter(m => m.contactId !== contactId);
-                
-                // 連絡先を削除
-                contacts = contacts.filter(c => c.id !== contactId);
-                
-                // データを保存
-                await saveData();
-                
-                // UIを更新
                 renderContactList();
                 updateDropdownOptions();
                 closeModal('contactDetailModal');
@@ -3345,32 +2901,25 @@
                     form.datetime.value = meeting.datetime;
                     form.content.value = meeting.content || '';
                     
-                    // タスクリストを表示
                     if (meeting.tasks && meeting.tasks.length > 0) {
                         displayTaskInputs(meeting.tasks);
                     }
                     
-                    // 既存の添付ファイル
                     displayExistingMeetingAttachments(meeting.attachments || []);
                 }
             } else {
-                // 新規の場合
                 const now = new Date();
                 now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
                 document.getElementById('meetingForm').datetime.value = now.toISOString().slice(0, 16);
                 
-                // テンプレートを適用
                 const template = localStorage.getItem('meetingTemplate') || '';
                 document.getElementById('meetingForm').content.value = template;
                 
-                // 空のタスク入力を1つ表示
                 displayTaskInputs([]);
             }
             
-            // ドラフトを復元
             restoreDraft();
             
-            // テキストエリアの自動保存を設定
             const contentTextarea = document.querySelector('#meetingForm textarea[name="content"]');
             if (contentTextarea) {
                 contentTextarea.addEventListener('input', () => {
@@ -3391,7 +2940,6 @@
             const taskTexts = formData.getAll('taskText[]');
             const taskDues = formData.getAll('taskDue[]');
             
-            // タスク配列を作成
             const tasks = [];
             taskTexts.forEach((text, index) => {
                 if (text.trim()) {
@@ -3416,12 +2964,10 @@
                 updatedAt: new Date().toISOString()
             };
             
-            // 既存のミーティングの場合、既存データを保持
             if (currentEditingMeetingId) {
                 const existing = meetings.find(m => m.id === currentEditingMeetingId);
                 if (existing) {
                     meeting.attachments = existing.attachments || [];
-                    // 既存タスクの完了状態を保持
                     if (existing.tasks) {
                         tasks.forEach((task, index) => {
                             if (existing.tasks[index] && existing.tasks[index].text === task.text) {
@@ -3433,7 +2979,6 @@
             }
             
             try {
-                // 添付ファイルをアップロード
                 const contact = contacts.find(c => c.id === currentEditingContactId);
                 for (const file of selectedMeetingFiles) {
                     const timestamp = new Date().getTime();
@@ -3447,12 +2992,10 @@
                     });
                 }
                 
-                // 削除されたファイルを処理
                 meeting.attachments = meeting.attachments.filter(att => 
                     !deletedMeetingAttachments.includes(att.id)
                 );
                 
-                // ミーティングを保存
                 const index = meetings.findIndex(m => m.id === meeting.id);
                 if (index >= 0) {
                     meetings[index] = meeting;
@@ -3460,13 +3003,10 @@
                     meetings.push(meeting);
                 }
                 
-                // データを保存
                 await saveData();
                 
-                // ドラフトを削除
                 clearDraft();
                 
-                // UIを更新
                 closeModal('meetingFormModal');
                 showContactDetail(currentEditingContactId);
                 renderContactList();
@@ -3489,13 +3029,10 @@
             showLoading();
             
             try {
-                // ミーティングを削除
                 meetings = meetings.filter(m => m.id !== meetingId);
                 
-                // データを保存
                 await saveData();
                 
-                // UIを更新
                 showContactDetail(currentEditingContactId);
                 renderContactList();
                 renderOutstandingActions();
@@ -3527,7 +3064,6 @@
                 </div>
             `).join('');
             
-            // タスクが0個の場合は1つ追加
             if (tasks.length === 0) {
                 addTaskInput();
             }
@@ -3565,7 +3101,6 @@
             draftSaveTimer = setTimeout(saveDraft, 1000);
         }
 
-        // 初回ミーティングのタスク追加
         function addFirstMeetingTask() {
             const container = document.getElementById('firstMeetingTaskContainer');
             const newRow = document.createElement('div');
@@ -3578,7 +3113,6 @@
             container.appendChild(newRow);
         }
 
-        // タスクリスト表示
         function renderTaskListNew(meeting) {
             if (!meeting.tasks || meeting.tasks.length === 0) return '';
             
@@ -3607,7 +3141,6 @@
             `;
         }
 
-        // タスク編集
         function startTaskEdit(meetingId, taskIndex) {
             const meeting = meetings.find(m => m.id === meetingId);
             if (!meeting || !meeting.tasks[taskIndex] || meeting.tasks[taskIndex].done) return;
@@ -3617,14 +3150,12 @@
             taskElement.classList.add('editing');
             taskElement.focus();
             
-            // テキスト全体を選択
             const range = document.createRange();
             range.selectNodeContents(taskElement);
             const selection = window.getSelection();
             selection.removeAllRanges();
             selection.addRange(range);
             
-            // エンターキーで保存、ESCでキャンセル
             taskElement.onkeydown = async function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -3634,7 +3165,6 @@
                 }
             };
             
-            // フォーカスが外れたら保存
             taskElement.onblur = async function() {
                 await saveTaskEdit(meetingId, taskIndex, taskElement.textContent.trim());
             };
@@ -3651,7 +3181,6 @@
                 try {
                     await saveData();
                     showNotification('タスクを更新しました');
-                    // 詳細ビューを更新
                     if (currentEditingContactId === meeting.contactId) {
                         showContactDetail(meeting.contactId);
                     }
@@ -3686,14 +3215,12 @@
             try {
                 await saveData();
                 renderOutstandingActions();
-                // 詳細ビューを更新
                 if (currentEditingContactId === meeting.contactId) {
                     showContactDetail(meeting.contactId);
                 }
                 renderContactList();
                 showNotification('タスクステータスを更新しました');
             } catch (error) {
-                // エラー時は元に戻す
                 meeting.tasks[taskIndex].done = !meeting.tasks[taskIndex].done;
                 showNotification('更新に失敗しました', 'error');
             }
@@ -3726,7 +3253,6 @@
                 sessionStorage.setItem(draftKey, JSON.stringify(draftData));
                 hasUnsavedDraft = true;
                 
-                // ドラフト保存インジケーターを表示
                 const indicator = document.getElementById('draftStatus');
                 indicator.classList.add('show');
                 setTimeout(() => {
@@ -3745,12 +3271,10 @@
                 const draft = JSON.parse(draftData);
                 const form = document.getElementById('meetingForm');
                 
-                // ドラフトが現在の内容より新しい場合のみ復元
                 if (!form.content.value || confirm('保存されていない下書きがあります。復元しますか？')) {
                     form.content.value = draft.content;
                     if (draft.datetime) form.datetime.value = draft.datetime;
                     
-                    // タスクを復元
                     if (draft.tasks && draft.tasks.length > 0) {
                         displayTaskInputs(draft.tasks);
                     }
@@ -3920,7 +3444,6 @@
             currentEditingContactId = contactId;
             document.getElementById('contactDetailBody').innerHTML = html;
             document.getElementById('contactDetailModal').style.display = 'block';
-            // モーダルを最上部にスクロール
             document.querySelector('#contactDetailModal .modal-content').scrollTop = 0;
         }
 
@@ -3962,10 +3485,8 @@
             const grid = document.getElementById('contactGrid');
             let filteredContacts = filterFunc ? contacts.filter(filterFunc) : contacts;
             
-            // ソート適用
             filteredContacts = sortContacts(filteredContacts);
             
-            // 未完了アクション数を更新
             const outstandingCount = getOutstandingTaskCount();
             const actionsHeader = document.querySelector('#outstandingActions h3');
             if (actionsHeader) {
@@ -3973,7 +3494,6 @@
             }
             
             if (viewMode === 'list') {
-                // リスト表示
                 grid.className = 'contact-list';
                 grid.innerHTML = filteredContacts.map(contact => {
                     const lastMeetingDate = getLastMeetingDate(contact.id);
@@ -4005,7 +3525,6 @@
                     `;
                 }).join('');
             } else {
-                // カード表示
                 grid.className = 'contact-grid';
                 grid.innerHTML = filteredContacts.map(contact => {
                     const lastMeetingDate = getLastMeetingDate(contact.id);
@@ -4042,16 +3561,15 @@
         // ===== 検索・フィルター・ソート =====
         function filterContacts() {
             const searchText = document.getElementById('searchName').value.toLowerCase();
-            const typeFilter = document.getElementById('filterType').value;
-            const affiliationFilter = document.getElementById('filterAffiliation').value;
-            const wantToConnectFilter = document.getElementById('filterWantToConnect').value;
-            const goldenEggFilter = document.getElementById('filterGoldenEgg').value;
-            const referredByFilter = document.getElementById('filterReferredBy').value;
-            const areaFilter = document.getElementById('filterArea').value;
-            const residenceFilter = document.getElementById('filterResidence').value;
+            const typeFilter = window.searchableSelects?.filterType?.getValue() || '';
+            const affiliationFilter = window.searchableSelects?.filterAffiliation?.getValue() || '';
+            const wantToConnectFilter = window.searchableSelects?.filterWantToConnect?.getValue() || '';
+            const goldenEggFilter = window.searchableSelects?.filterGoldenEgg?.getValue() || '';
+            const referredByFilter = window.searchableSelects?.filterReferredBy?.getValue() || '';
+            const areaFilter = window.searchableSelects?.filterArea?.getValue() || '';
+            const residenceFilter = window.searchableSelects?.filterResidence?.getValue() || '';
 
             renderContactList(contact => {
-                // フリーワード検索
                 if (searchText) {
                     const searchableText = [
                         contact.name,
@@ -4072,7 +3590,6 @@
                         ...(contact.wantToConnect || [])
                     ].filter(Boolean).join(' ').toLowerCase();
                     
-                    // 関連するミーティングの内容も検索対象に含める
                     const contactMeetings = meetings.filter(m => m.contactId === contact.id);
                     const meetingText = contactMeetings.map(m => {
                         const taskTexts = m.tasks ? m.tasks.map(t => t.text).join(' ') : '';
@@ -4084,7 +3601,6 @@
                     if (!fullText.includes(searchText)) return false;
                 }
                 
-                // 個別フィルター
                 if (typeFilter && !(contact.types || []).includes(typeFilter)) return false;
                 if (affiliationFilter && !(contact.affiliations || []).includes(affiliationFilter)) return false;
                 if (wantToConnectFilter && !(contact.wantToConnect || []).includes(wantToConnectFilter)) return false;
@@ -4160,6 +3676,106 @@
                 .sort((a, b) => b - a)[0];
         }
 
+        // ===== インクリメンタルサーチ付きセレクト =====
+        class SearchableSelect {
+            constructor(wrapper, options, value = '', onChange = null) {
+                this.wrapper = typeof wrapper === 'string' ? document.getElementById(wrapper) : wrapper;
+                this.options = options;
+                this.value = value;
+                this.onChange = onChange;
+                this.filteredOptions = [...options];
+                this.init();
+            }
+
+            init() {
+                this.wrapper.innerHTML = `
+                    <div class="searchable-select-input" onclick="event.stopPropagation()">
+                        ${this.value || 'すべて'}
+                    </div>
+                    <div class="searchable-select-dropdown">
+                        <div class="searchable-select-search">
+                            <input type="text" placeholder="検索..." onclick="event.stopPropagation()">
+                        </div>
+                        <div class="searchable-select-options"></div>
+                    </div>
+                `;
+
+                this.input = this.wrapper.querySelector('.searchable-select-input');
+                this.dropdown = this.wrapper.querySelector('.searchable-select-dropdown');
+                this.searchInput = this.wrapper.querySelector('.searchable-select-search input');
+                this.optionsContainer = this.wrapper.querySelector('.searchable-select-options');
+
+                this.input.addEventListener('click', () => this.toggle());
+                this.searchInput.addEventListener('input', (e) => this.filter(e.target.value));
+                
+                document.addEventListener('click', (e) => {
+                    if (!this.wrapper.contains(e.target)) {
+                        this.close();
+                    }
+                });
+
+                this.renderOptions();
+            }
+
+            toggle() {
+                if (this.dropdown.classList.contains('show')) {
+                    this.close();
+                } else {
+                    this.open();
+                }
+            }
+
+            open() {
+                this.dropdown.classList.add('show');
+                this.searchInput.focus();
+                this.searchInput.value = '';
+                this.filter('');
+            }
+
+            close() {
+                this.dropdown.classList.remove('show');
+            }
+
+            filter(query) {
+                this.filteredOptions = this.options.filter(option => 
+                    option.toLowerCase().includes(query.toLowerCase())
+                );
+                this.renderOptions();
+            }
+
+            renderOptions() {
+                this.optionsContainer.innerHTML = `
+                    <div class="searchable-select-option ${!this.value ? 'selected' : ''}" data-value="">
+                        すべて
+                    </div>
+                    ${this.filteredOptions.map(option => `
+                        <div class="searchable-select-option ${this.value === option ? 'selected' : ''}" data-value="${escapeHtml(option)}">
+                            ${escapeHtml(option)}
+                        </div>
+                    `).join('')}
+                `;
+
+                this.optionsContainer.querySelectorAll('.searchable-select-option').forEach(option => {
+                    option.addEventListener('click', () => {
+                        this.setValue(option.dataset.value);
+                        this.close();
+                    });
+                });
+            }
+
+            setValue(value) {
+                this.value = value;
+                this.input.textContent = value || 'すべて';
+                if (this.onChange) {
+                    this.onChange(value);
+                }
+            }
+
+            getValue() {
+                return this.value;
+            }
+        }
+
         // ===== 未完了アクション管理 =====
         function toggleOutstandingActions() {
             const list = document.getElementById('outstandingActionsList');
@@ -4178,7 +3794,6 @@
         function renderOutstandingActions() {
             const outstandingTasks = [];
             
-            // すべてのミーティングから未完了タスクを収集
             meetings.forEach(meeting => {
                 if (meeting.tasks && meeting.tasks.length > 0) {
                     meeting.tasks.forEach((task, index) => {
@@ -4196,7 +3811,6 @@
                 }
             });
             
-            // 期限でソート
             outstandingTasks.sort((a, b) => {
                 if (a.task.due && b.task.due) {
                     return new Date(a.task.due) - new Date(b.task.due);
@@ -4315,7 +3929,6 @@
         }
 
         function setupFileDragDrop() {
-            // 顔写真
             const photoZone = document.getElementById('photoDropZone');
             const photoInput = document.getElementById('photoUpload');
             
@@ -4326,10 +3939,8 @@
                 photoZone.addEventListener('drop', (e) => handlePhotoDrop(e));
             }
             
-            // 名刺画像
             setupCardImageInput();
             
-            // 連絡先の添付ファイル
             const attachmentZone = document.getElementById('attachmentDropZone');
             const attachmentInput = document.getElementById('attachmentUpload');
             
@@ -4341,7 +3952,6 @@
                 attachmentInput.addEventListener('change', (e) => handleFileSelect(e, 'contact'));
             }
             
-            // ミーティングの添付ファイル
             const meetingZone = document.getElementById('meetingAttachmentDropZone');
             const meetingInput = document.getElementById('meetingAttachmentUpload');
             
@@ -4360,7 +3970,6 @@
             
             if (!cardImageZone || !cardImageInput) return;
             
-            // モバイルの場合はcapture属性を追加
             if (window.matchMedia("(max-width: 768px)").matches) {
                 cardImageInput.setAttribute('capture', 'camera');
             }
@@ -4540,26 +4149,21 @@
 
         function openFile(url, filename) {
             const extension = filename.split('.').pop().toLowerCase();
-            const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
-            const pdfExtensions = ['pdf'];
-            const textExtensions = ['txt', 'md', 'csv', 'log', 'json', 'xml', 'html', 'js', 'css', 'py', 'java', 'cpp', 'h'];
-            const videoExtensions = ['mp4', 'webm', 'ogg', 'mov'];
-            const audioExtensions = ['mp3', 'wav', 'ogg', 'm4a'];
             
-            if (imageExtensions.includes(extension) || 
-                pdfExtensions.includes(extension) || 
-                textExtensions.includes(extension) ||
-                videoExtensions.includes(extension) ||
-                audioExtensions.includes(extension)) {
-                // ブラウザで開く
+            // 画像およびPDFは新規タブで直接表示
+            const viewableExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'pdf'];
+            
+            if (viewableExtensions.includes(extension)) {
                 window.open(url, '_blank');
             } else {
-                // ダウンロード
+                // その他のファイルはダウンロード
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = filename;
                 a.target = '_blank';
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
             }
         }
 
@@ -4586,7 +4190,6 @@
         }
 
         function sanitizeFileName(fileName) {
-            // Google Driveで使用できない文字を置換
             return fileName.replace(/[\/\\:?*<>|"]/g, '_');
         }
 
@@ -4618,7 +4221,6 @@
             
             document.getElementById(modalId).style.display = 'none';
             
-            // タイマーをクリア
             if (draftSaveTimer) {
                 clearTimeout(draftSaveTimer);
                 draftSaveTimer = null;
@@ -4717,7 +4319,6 @@
         }
 
         function handleContactClick(event, contactId) {
-            // リンククリックの場合は何もしない
             if (event.target.tagName === 'A') {
                 return;
             }
@@ -4731,7 +4332,6 @@
                 error: '画像の読み込みに失敗しました'
             });
             
-            // イニシャル表示にフォールバック
             const parentDiv = img.parentElement;
             parentDiv.innerHTML = `<span style="font-size: ${parentDiv.style.width === '120px' ? '48px' : '32px'};">${contactName.charAt(0)}</span>`;
         }
@@ -4740,47 +4340,36 @@
         function renderMarkdown(text) {
             if (!text) return '';
             
-            // 最初にURLとメールをリンク化
             text = linkifyText(text);
             
-            // コードブロックを一時的に置換
             const codeBlocks = [];
             let processedText = text.replace(/```([\s\S]*?)```/g, (match, code) => {
                 codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
                 return `__CODEBLOCK_${codeBlocks.length - 1}__`;
             });
             
-            // インラインコードを処理
             processedText = processedText.replace(/`([^`]+)`/g, '<code>$1</code>');
             
-            // 見出し
             processedText = processedText.replace(/^### (.+)$/gm, '<h3>$1</h3>');
             processedText = processedText.replace(/^## (.+)$/gm, '<h2>$1</h2>');
             processedText = processedText.replace(/^# (.+)$/gm, '<h1>$1</h1>');
             
-            // 太字
             processedText = processedText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
             
-            // リンク（Markdown形式）
             processedText = processedText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
             
-            // リスト（順序なし）
             processedText = processedText.replace(/^- (.+)$/gm, '<li>$1</li>');
             processedText = processedText.replace(/(<li>.*<\/li>)/s, (match) => {
                 const items = match.split('\n').filter(item => item.trim());
                 return '<ul>' + items.join('\n') + '</ul>';
             });
             
-            // リスト（順序あり）
             processedText = processedText.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
             
-            // 引用
             processedText = processedText.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
             
-            // 水平線
             processedText = processedText.replace(/^---$/gm, '<hr>');
             
-            // 段落
             processedText = processedText.split('\n\n').map(para => {
                 if (para.trim() && !para.startsWith('<')) {
                     return `<p>${para.trim()}</p>`;
@@ -4788,7 +4377,6 @@
                 return para;
             }).join('\n');
             
-            // コードブロックを復元
             codeBlocks.forEach((code, index) => {
                 processedText = processedText.replace(`__CODEBLOCK_${index}__`, code);
             });
@@ -4797,9 +4385,7 @@
         }
 
         function linkifyText(text) {
-            // URLパターン
             const urlPattern = /(https?:\/\/[^\s<]+)/g;
-            // メールパターン
             const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
             
             text = text.replace(urlPattern, '<a href="$1" target="_blank">$1</a>');
@@ -4814,7 +4400,6 @@
                 if (contact.referredBy) {
                     const referrers = contacts.filter(c => c.name === contact.referredBy && c.id !== contact.id);
                     
-                    // リンク情報をリセット
                     delete contact.referredById;
                     delete contact.referredByIds;
                     
@@ -4841,41 +4426,35 @@
 
         // ===== ドロップダウンオプション管理 =====
         function updateDropdownOptions() {
-            updateSelectOptions('filterType', dropdownOptions.types);
-            updateSelectOptions('filterAffiliation', dropdownOptions.affiliations);
-            updateSelectOptions('filterWantToConnect', dropdownOptions.wantToConnect);
-            updateSelectOptions('filterGoldenEgg', dropdownOptions.goldenEgg);
+            // 通常のセレクトボックスは削除
             
-            // 紹介元フィルター
-            const referrers = [...new Set(contacts.map(c => c.referredBy).filter(Boolean))];
-            updateSelectOptions('filterReferredBy', referrers);
+            // インクリメンタルサーチ付きセレクトを初期化
+            const sortedTypes = [...dropdownOptions.types].sort((a, b) => a.localeCompare(b, 'ja'));
+            const sortedAffiliations = [...dropdownOptions.affiliations].sort((a, b) => a.localeCompare(b, 'ja'));
+            const sortedWantToConnect = [...dropdownOptions.wantToConnect].sort((a, b) => a.localeCompare(b, 'ja'));
+            const sortedGoldenEgg = [...dropdownOptions.goldenEgg].sort((a, b) => a.localeCompare(b, 'ja'));
             
-            // エリアフィルター
-            const areas = [...new Set(contacts.map(c => c.area).filter(Boolean))];
-            updateSelectOptions('filterArea', areas);
+            const referrers = [...new Set(contacts.map(c => c.referredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
+            const areas = [...new Set(contacts.map(c => c.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
+            const residences = [...new Set(contacts.map(c => c.residence).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
             
-            // 居住地フィルター
-            const residences = [...new Set(contacts.map(c => c.residence).filter(Boolean))];
-            updateSelectOptions('filterResidence', residences);
-        }
-
-        function updateSelectOptions(selectId, options) {
-            const select = document.getElementById(selectId);
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">すべて</option>';
-            options.forEach(option => {
-                const optionElement = document.createElement('option');
-                optionElement.value = option;
-                optionElement.textContent = option;
-                select.appendChild(optionElement);
-            });
-            select.value = currentValue;
+            // グローバルに保持
+            window.searchableSelects = {
+                filterType: new SearchableSelect('filterTypeWrapper', sortedTypes, '', () => filterContacts()),
+                filterAffiliation: new SearchableSelect('filterAffiliationWrapper', sortedAffiliations, '', () => filterContacts()),
+                filterWantToConnect: new SearchableSelect('filterWantToConnectWrapper', sortedWantToConnect, '', () => filterContacts()),
+                filterGoldenEgg: new SearchableSelect('filterGoldenEggWrapper', sortedGoldenEgg, '', () => filterContacts()),
+                filterReferredBy: new SearchableSelect('filterReferredByWrapper', referrers, '', () => filterContacts()),
+                filterArea: new SearchableSelect('filterAreaWrapper', areas, '', () => filterContacts()),
+                filterResidence: new SearchableSelect('filterResidenceWrapper', residences, '', () => filterContacts())
+            };
         }
 
         // ===== マルチセレクト =====
         function setupMultiSelect() {
             ['types', 'affiliations', 'wantToConnect', 'goldenEgg'].forEach(field => {
-                updateMultiSelectOptions(field, dropdownOptions[field]);
+                const sorted = [...dropdownOptions[field]].sort((a, b) => a.localeCompare(b, 'ja'));
+                updateMultiSelectOptions(field, sorted);
             });
         }
 
@@ -4961,7 +4540,7 @@
                 const trimmedValue = newValue.trim();
                 if (!dropdownOptions[field].includes(trimmedValue)) {
                     dropdownOptions[field].push(trimmedValue);
-                    dropdownOptions[field].sort();
+                    dropdownOptions[field].sort((a, b) => a.localeCompare(b, 'ja'));
                     updateMultiSelectOptions(field, dropdownOptions[field]);
                     updateDropdownOptions();
                     await saveData();
@@ -4981,7 +4560,6 @@
             selectedFiles = [];
             deletedAttachments = [];
             
-            // マルチセレクトをリセット
             ['types', 'affiliations', 'wantToConnect', 'goldenEgg'].forEach(field => {
                 const checkboxes = document.querySelectorAll(`#${field}-dropdown input[type="checkbox"]`);
                 checkboxes.forEach(cb => cb.checked = false);
@@ -4990,7 +4568,6 @@
                 display.innerHTML = '<span style="color: #aaaaaa;">選択してください</span>';
             });
             
-            // 初回ミーティング関連をリセット
             selectedFirstMeetingFiles = [];
             document.getElementById('firstMeetingSection').style.display = 'none';
             document.getElementById('firstMeetingTaskContainer').innerHTML = '';
@@ -5015,7 +4592,6 @@
             settingsList.style.display = 'none';
             templateEditor.style.display = 'block';
             
-            // 既存のテンプレートを読み込み
             const savedTemplate = localStorage.getItem('meetingTemplate') || '';
             document.getElementById('templateContent').value = savedTemplate;
         }
@@ -5079,23 +4655,19 @@
                     throw new Error('無効なデータ形式です');
                 }
                 
-                // 重複チェックとマージ
                 const existingContactIds = new Set(contacts.map(c => c.id));
                 const existingMeetingIds = new Set(meetings.map(m => m.id));
                 
                 let addedContacts = 0;
                 let addedMeetings = 0;
                 
-                // 連絡先のインポート
                 for (const contact of importedData.contacts) {
                     if (!existingContactIds.has(contact.id)) {
-                        // 必須フィールドの初期化
                         if (!contact.hasOwnProperty('yomi')) contact.yomi = '';
                         if (!contact.hasOwnProperty('cutout')) contact.cutout = '';
                         if (!contact.hasOwnProperty('cardImage')) contact.cardImage = '';
                         if (!contact.hasOwnProperty('cardImageUrl')) contact.cardImageUrl = '';
                         
-                        // 顔写真URLを変換
                         if (contact.photoUrl) {
                             contact.photoUrl = toDirectLink(contact.photoUrl);
                         }
@@ -5105,10 +4677,8 @@
                     }
                 }
                 
-                // ミーティングのインポート
                 for (const meeting of importedData.meetings) {
                     if (!existingMeetingIds.has(meeting.id)) {
-                        // 関連する連絡先が存在するか確認
                         if (contacts.some(c => c.id === meeting.contactId)) {
                             meetings.push(meeting);
                             addedMeetings++;
@@ -5116,12 +4686,10 @@
                     }
                 }
                 
-                // データ移行
                 migrateMeetingsData();
                 migrateContactsData();
                 migratePhotoUrls();
                 
-                // ドロップダウンオプションのマージ
                 if (importedData.dropdownOptions) {
                     for (const key in importedData.dropdownOptions) {
                         if (dropdownOptions[key]) {
@@ -5130,10 +4698,8 @@
                     }
                 }
                 
-                // データを保存
                 await saveData();
                 
-                // UIを更新
                 updateDropdownOptions();
                 updateAllReferrerLinks();
                 renderContactList();
@@ -5141,7 +4707,6 @@
                 hideLoading();
                 showNotification(`インポート完了: ${addedContacts}件の連絡先と${addedMeetings}件のミーティングを追加しました`);
                 
-                // インプットをリセット
                 event.target.value = '';
             } catch (error) {
                 console.error('Import error:', error);
@@ -5155,7 +4720,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupFileDragDrop();
             
-            // モーダルの外側クリックで閉じる
             document.querySelectorAll('.modal').forEach(modal => {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -5164,7 +4728,6 @@
                 });
             });
             
-            // マルチセレクトを閉じる
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.multi-select')) {
                     document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
@@ -5173,7 +4736,6 @@
                 }
             });
             
-            // ドラッグオーバーを防止
             document.addEventListener('dragover', (e) => {
                 e.preventDefault();
             });
@@ -5182,7 +4744,6 @@
                 e.preventDefault();
             });
             
-            // オンライン/オフライン状態の監視
             window.addEventListener('online', () => {
                 showNotification('インターネット接続が復旧しました', 'success');
             });
@@ -5193,7 +4754,6 @@
         });
 
         window.onbeforeunload = function(e) {
-            // 未保存のドラフトがある場合のみ警告を表示
             if (hasUnsavedDraft) {
                 const message = '編集中の内容があります。保存しますか？';
                 e.returnValue = message;
@@ -5203,14 +4763,416 @@
 
         // ===== 初期化 =====
         window.onload = function() {
-            // アプリを初期化（CLIENT_IDのチェックを含む）
             initializeApp();
         };
 
         function handleCredentialResponse(response) {
-            // ID token を処理（必要に応じて）
             console.log("ID token received");
         }
     </script>
 </body>
-</html>
+</html>DropdownOptions();
+                showNotification('同期が完了しました');
+            } catch (error) {
+                console.error('Sync error:', error);
+                showNotification('同期に失敗しました', 'error');
+            }
+        }
+
+        function toDirectLink(url) {
+            if (!url) return url;
+            
+            if (url.includes('drive.google.com/uc')) {
+                return url;
+            }
+            
+            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) {
+                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+            }
+            
+            return url;
+        }
+
+        function migratePhotoUrls() {
+            console.log('=== 顔写真URLのマイグレーション開始 ===');
+            let migratedCount = 0;
+            let needsSave = false;
+            
+            contacts.forEach(contact => {
+                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc')) {
+                    const oldUrl = contact.photoUrl;
+                    contact.photoUrl = toDirectLink(contact.photoUrl);
+                    needsSave = true;
+                    migratedCount++;
+                    console.log(`✅ URLを変換: ${contact.name}`);
+                }
+            });
+            
+            if (needsSave) {
+                console.log(`📊 ${migratedCount}件の顔写真URLを変換しました`);
+                saveData().catch(error => {
+                    console.error('マイグレーション後の保存エラー:', error);
+                });
+            }
+        }
+
+        function migrateContactsData() {
+            let needsSave = false;
+            
+            contacts.forEach(contact => {
+                if (!contact.hasOwnProperty('yomi')) {
+                    contact.yomi = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cutout')) {
+                    contact.cutout = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cardImage')) {
+                    contact.cardImage = '';
+                    needsSave = true;
+                }
+                if (!contact.hasOwnProperty('cardImageUrl')) {
+                    contact.cardImageUrl = '';
+                    needsSave = true;
+                }
+            });
+            
+            if (needsSave) {
+                console.log('連絡先データに新しいフィールドを追加しました');
+            }
+        }
+
+        function migrateMeetingsData() {
+            let needsSave = false;
+            
+            meetings.forEach(meeting => {
+                if (!meeting.hasOwnProperty('tasks')) {
+                    meeting.tasks = [];
+                    if (meeting.nextAction) {
+                        const taskLines = meeting.nextAction.split('\n').filter(line => line.trim());
+                        taskLines.forEach((taskText, index) => {
+                            meeting.tasks.push({
+                                text: taskText.trim(),
+                                due: index === 0 ? meeting.nextActionDue : null,
+                                done: meeting.nextActionDoneTasks && meeting.nextActionDoneTasks[index] || false
+                            });
+                        });
+                    }
+                    needsSave = true;
+                }
+            });
+            
+            if (needsSave) {
+                console.log('ミーティングデータを新形式に移行しました');
+            }
+        }
+
+        async function loadOptions() {
+            try {
+                const optionsData = await loadJsonFile('options.json');
+                if (optionsData) {
+                    if (optionsData.dropdownOptions) {
+                        dropdownOptions = optionsData.dropdownOptions;
+                    }
+                    if (optionsData.userSettings) {
+                        userSettings = optionsData.userSettings;
+                        viewMode = userSettings.viewMode || 'card';
+                        filterVisible = userSettings.filterVisible || false;
+                        if (userSettings.meetingTemplate) {
+                            localStorage.setItem('meetingTemplate', userSettings.meetingTemplate);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('設定読み込みエラー:', error);
+            }
+        }
+
+        async function saveOptions() {
+            try {
+                userSettings.viewMode = viewMode;
+                userSettings.filterVisible = filterVisible;
+                userSettings.meetingTemplate = localStorage.getItem('meetingTemplate') || '';
+                
+                const optionsData = {
+                    dropdownOptions: dropdownOptions,
+                    userSettings: userSettings
+                };
+                
+                await saveJsonFile('options.json', optionsData);
+            } catch (error) {
+                console.error('設定保存エラー:', error);
+            }
+        }
+
+        // ===== 連絡先管理 =====
+        function showContactForm(contactId = null) {
+            closeModal('contactDetailModal');
+            
+            currentEditingContactId = contactId;
+            resetContactForm();
+            
+            if (contactId) {
+                const contact = contacts.find(c => c.id === contactId);
+                if (contact) {
+                    document.getElementById('contactFormTitle').textContent = '連絡先編集';
+                    const form = document.getElementById('contactForm');
+                    form.name.value = contact.name || '';
+                    form.yomi.value = contact.yomi || '';
+                    form.company.value = contact.company || '';
+                    form.email.value = contact.email || '';
+                    form.phone.value = contact.phone || '';
+                    form.homepage.value = contact.homepage || '';
+                    form.referredBy.value = contact.referredBy || '';
+                    form.strengths.value = contact.strengths || '';
+                    form.careerHistory.value = contact.careerHistory || '';
+                    form.cutout.value = contact.cutout || '';
+                    form.area.value = contact.area || '';
+                    form.residence.value = contact.residence || '';
+                    
+                    if (contact.photoUrl) {
+                        document.getElementById('photoPreview').innerHTML = 
+                            `<img src="${contact.photoUrl}" style="max-width: 200px; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">`;
+                    }
+                    
+                    if (contact.cardImageUrl) {
+                        document.getElementById('cardImagePreview').innerHTML = 
+                            `<img src="${contact.cardImageUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 8px;" onerror="handleImageError(this, '名刺')">`;
+                    }
+                    
+                    ensureMultiSelectOptions(contact);
+                    setSelectedValues('types', contact.types || []);
+                    setSelectedValues('affiliations', contact.affiliations || []);
+                    setSelectedValues('wantToConnect', contact.wantToConnect || []);
+                    setSelectedValues('goldenEgg', contact.goldenEgg || []);
+                    
+                    displayExistingAttachments(contact.attachments || []);
+                    
+                    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+                    hasFirstMeeting[contactId] = contactMeetings.length > 0;
+                    
+                    if (contactMeetings.length === 0) {
+                        document.getElementById('firstMeetingSection').style.display = 'block';
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                        form.firstMeetingDatetime.value = now.toISOString().slice(0, 16);
+                        
+                        const template = localStorage.getItem('meetingTemplate') || '';
+                        form.firstMeetingContent.value = template;
+                    }
+                }
+            } else {
+                document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+                
+                document.getElementById('firstMeetingSection').style.display = 'block';
+                document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
+                
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.querySelector('input[name="firstMeetingDatetime"]').value = now.toISOString().slice(0, 16);
+                
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.querySelector('textarea[name="firstMeetingContent"]').value = template;
+            }
+            
+            setupMultiSelect();
+            setupFirstMeetingFileDrop();
+            document.getElementById('contactFormModal').style.display = 'block';
+            document.querySelector('#contactFormModal .modal-content').scrollTop = 0;
+        }
+
+        function ensureMultiSelectOptions(contact) {
+            if (contact.types) {
+                contact.types.forEach(type => {
+                    if (!dropdownOptions.types.includes(type)) {
+                        dropdownOptions.types.push(type);
+                    }
+                });
+            }
+            if (contact.affiliations) {
+                contact.affiliations.forEach(aff => {
+                    if (!dropdownOptions.affiliations.includes(aff)) {
+                        dropdownOptions.affiliations.push(aff);
+                    }
+                });
+            }
+            if (contact.wantToConnect) {
+                contact.wantToConnect.forEach(want => {
+                    if (!dropdownOptions.wantToConnect.includes(want)) {
+                        dropdownOptions.wantToConnect.push(want);
+                    }
+                });
+            }
+            if (contact.goldenEgg) {
+                contact.goldenEgg.forEach(egg => {
+                    if (!dropdownOptions.goldenEgg.includes(egg)) {
+                        dropdownOptions.goldenEgg.push(egg);
+                    }
+                });
+            }
+        }
+
+        async function saveContactForm(event) {
+            event.preventDefault();
+            showLoading();
+            
+            const formData = new FormData(event.target);
+            const contact = {
+                id: currentEditingContactId || generateId(),
+                name: formData.get('name'),
+                yomi: formData.get('yomi'),
+                company: formData.get('company'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                homepage: formData.get('homepage'),
+                referredBy: formData.get('referredBy'),
+                strengths: formData.get('strengths'),
+                careerHistory: formData.get('careerHistory'),
+                cutout: formData.get('cutout'),
+                types: getSelectedValues('types'),
+                affiliations: getSelectedValues('affiliations'),
+                wantToConnect: getSelectedValues('wantToConnect'),
+                goldenEgg: getSelectedValues('goldenEgg'),
+                area: formData.get('area'),
+                residence: formData.get('residence'),
+                attachments: [],
+                createdAt: currentEditingContactId ? 
+                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
+                    new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            if (currentEditingContactId) {
+                const existing = contacts.find(c => c.id === currentEditingContactId);
+                if (existing) {
+                    contact.photo = existing.photo;
+                    contact.photoUrl = existing.photoUrl;
+                    contact.cardImage = existing.cardImage;
+                    contact.cardImageUrl = existing.cardImageUrl;
+                    contact.attachments = existing.attachments || [];
+                }
+            }
+            
+            try {
+                if (currentPhotoFile) {
+                    const timestamp = new Date().getTime();
+                    const photoName = `${sanitizeFileName(contact.name)}_${timestamp}_photo.jpg`;
+                    const photoResult = await uploadFile(currentPhotoFile, photoName);
+                    contact.photo = photoResult.id;
+                    contact.photoUrl = photoResult.url;
+                }
+                
+                if (currentCardImageFile) {
+                    const timestamp = new Date().getTime();
+                    const cardImageName = `名刺_${sanitizeFileName(contact.name)}_${timestamp}.jpg`;
+                    const cardImageResult = await uploadFile(currentCardImageFile, cardImageName);
+                    contact.cardImage = cardImageResult.id;
+                    contact.cardImageUrl = cardImageResult.url;
+                }
+                
+                for (const file of selectedFiles) {
+                    const timestamp = new Date().getTime();
+                    const fileName = `${sanitizeFileName(contact.name)}_${timestamp}_${sanitizeFileName(file.name)}`;
+                    const fileResult = await uploadFile(file, fileName);
+                    contact.attachments.push({
+                        name: file.name,
+                        id: fileResult.id,
+                        url: fileResult.url,
+                        uploadedAt: new Date().toISOString()
+                    });
+                }
+                
+                contact.attachments = contact.attachments.filter(att => 
+                    !deletedAttachments.includes(att.id)
+                );
+                
+                const index = contacts.findIndex(c => c.id === contact.id);
+                if (index >= 0) {
+                    contacts[index] = contact;
+                } else {
+                    contacts.push(contact);
+                }
+                
+                const firstMeetingDatetime = formData.get('firstMeetingDatetime');
+                const firstMeetingContent = formData.get('firstMeetingContent');
+                const firstMeetingSection = document.getElementById('firstMeetingSection');
+                
+                if (firstMeetingSection.style.display !== 'none' && 
+                    (firstMeetingDatetime || firstMeetingContent)) {
+                    
+                    const taskTexts = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskText[]"]')).map(input => input.value);
+                    const taskDues = Array.from(document.querySelectorAll('#firstMeetingTaskContainer input[name="firstTaskDue[]"]')).map(input => input.value);
+                    
+                    const tasks = [];
+                    taskTexts.forEach((text, index) => {
+                        if (text.trim()) {
+                            tasks.push({
+                                text: text.trim(),
+                                due: taskDues[index] || null,
+                                done: false
+                            });
+                        }
+                    });
+                    
+                    const firstMeeting = {
+                        id: generateId(),
+                        contactId: contact.id,
+                        datetime: firstMeetingDatetime || new Date().toISOString(),
+                        content: firstMeetingContent || '',
+                        tasks: tasks,
+                        attachments: [],
+                        isFirstMeeting: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    
+                    for (const file of selectedFirstMeetingFiles) {
+                        const timestamp = new Date().getTime();
+                        const fileName = `${sanitizeFileName(contact.name)}_firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                        const fileResult = await uploadFile(file, fileName);
+                        firstMeeting.attachments.push({
+                            name: file.name,
+                            id: fileResult.id,
+                            url: fileResult.url,
+                            uploadedAt: new Date().toISOString()
+                        });
+                    }
+                    
+                    meetings.push(firstMeeting);
+                }
+                
+                updateAllReferrerLinks();
+                
+                await saveData();
+                
+                renderContactList();
+                updateDropdownOptions();
+                closeModal('contactFormModal');
+                resetContactForm();
+                
+                hideLoading();
+                showNotification('連絡先を保存しました');
+            } catch (error) {
+                console.error('連絡先保存エラー:', error);
+                showNotification('連絡先の保存に失敗しました', 'error');
+                hideLoading();
+            }
+        }
+
+        async function deleteContact(contactId) {
+            if (!confirm('この連絡先を削除してもよろしいですか？\n関連するミーティング記録も削除されます。')) {
+                return;
+            }
+            
+            showLoading();
+            
+            try {
+                meetings = meetings.filter(m => m.contactId !== contactId);
+                contacts = contacts.filter(c => c.id !== contactId);
+                
+                await saveData();
+                
+                renderContactList();
+                update
