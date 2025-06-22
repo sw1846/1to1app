@@ -2613,8 +2613,17 @@
         }
 
         function showAuthScreen() {
-            document.getElementById('authContainer').style.display = 'block';
-            document.getElementById('mainContainer').style.display = 'none';
+            const authContainer = document.getElementById('authContainer');
+            const mainContainer = document.getElementById('mainContainer');
+            
+            if (authContainer) {
+                authContainer.style.display = 'block';
+            }
+            
+            if (mainContainer) {
+                mainContainer.style.display = 'none';
+            }
+            
             updateConnectionStatus();
         }
 
@@ -2626,8 +2635,16 @@
                 await loadData();
                 migratePhotoUrls();
                 
-                document.getElementById('authContainer').style.display = 'none';
-                document.getElementById('mainContainer').style.display = 'block';
+                const authContainer = document.getElementById('authContainer');
+                const mainContainer = document.getElementById('mainContainer');
+                
+                if (authContainer) {
+                    authContainer.style.display = 'none';
+                }
+                
+                if (mainContainer) {
+                    mainContainer.style.display = 'block';
+                }
                 
                 initializeViewMode();
                 initializeFilterVisibility();
@@ -3313,12 +3330,17 @@
             const contactMeetings = meetings.filter(m => m.contactId === contactId)
                 .sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
             
+            // 顔写真部分を生成
+            let photoHtml = '';
+            if (contact.photoUrl) {
+                photoHtml = `<div class="contact-photo" style="width: 120px; height: 120px; margin-bottom: 20px;">
+                    <img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">
+                </div>`;
+            }
+            
             let html = `
                 <div style="margin-bottom: 20px;">
-                    ${contact.photoUrl ? 
-                        `<div class="contact-photo" style="width: 120px; height: 120px; margin-bottom: 20px;">
-                            <img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">
-                        </div>` : ''}
+                    ${photoHtml}
                     <h3 style="font-size: 24px; margin-bottom: 10px;">${escapeHtml(contact.name)}</h3>
                     ${contact.yomi ? `<p style="color: #aaaaaa; margin-bottom: 10px;">よみ: ${escapeHtml(contact.yomi)}</p>` : ''}
                     ${contact.company ? `<p style="color: #aaaaaa; margin-bottom: 20px;">${escapeHtml(contact.company)}</p>` : ''}
@@ -3406,8 +3428,11 @@
                 </div>
                 
                 <div id="files" class="tab-content">
-                    <div class="tab-panel">
-                        ${contact.cardImageUrl ? `
+                    <div class="tab-panel">`;
+                    
+                    // 名刺画像部分を生成
+                    if (contact.cardImageUrl) {
+                        html += `
                             <div style="margin-bottom: 20px;">
                                 <strong>名刺画像:</strong>
                                 <div style="margin-top: 10px;">
@@ -3416,25 +3441,34 @@
                                          loading="lazy"
                                          onerror="handleImageError(this, '名刺')">
                                 </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${contact.attachments && contact.attachments.length > 0 ? `
+                            </div>`;
+                    }
+                    
+                    // 添付ファイル部分を生成
+                    if (contact.attachments && contact.attachments.length > 0) {
+                        html += `
                             <div>
                                 <strong>添付ファイル:</strong>
-                                <div class="file-list" style="margin-top: 10px;">
-                                    ${contact.attachments.map(att => `
-                                        <div class="file-item">
-                                            <span>${escapeHtml(att.name)}</span>
-                                            <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" class="btn-small btn-secondary">開く</a>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
+                                <div class="file-list" style="margin-top: 10px;">`;
                         
-                        ${!contact.cardImageUrl && (!contact.attachments || contact.attachments.length === 0) ?
-                            '<p style="color: #aaaaaa;">ファイルがアップロードされていません。</p>' : ''}
+                        contact.attachments.forEach(att => {
+                            html += `
+                                <div class="file-item">
+                                    <span>${escapeHtml(att.name)}</span>
+                                    <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name).replace(/'/g, "\\'")}'); return false;" class="btn-small btn-secondary">開く</a>
+                                </div>`;
+                        });
+                        
+                        html += `
+                                </div>
+                            </div>`;
+                    }
+                    
+                    if (!contact.cardImageUrl && (!contact.attachments || contact.attachments.length === 0)) {
+                        html += '<p style="color: #aaaaaa;">ファイルがアップロードされていません。</p>';
+                    }
+                    
+                    html += `
                     </div>
                 </div>
                 
@@ -3484,9 +3518,10 @@
                     ${meeting.attachments && meeting.attachments.length > 0 ? `
                         <div style="margin-top: 10px;">
                             <strong>添付ファイル:</strong>
-                            ${meeting.attachments.map(att => `
-                                <a href="#" onclick="openFile('${att.url}', '${escapeHtml(att.name)}'); return false;" style="margin-left: 10px;">${escapeHtml(att.name)}</a>
-                            `).join('')}
+                            ${meeting.attachments.map(att => {
+                                const escapedName = escapeHtml(att.name).replace(/'/g, "\\'");
+                                return `<a href="#" onclick="openFile('${att.url}', '${escapedName}'); return false;" style="margin-left: 10px;">${escapeHtml(att.name)}</a>`;
+                            }).join('')}
                         </div>
                     ` : ''}
                 </div>
@@ -3513,13 +3548,18 @@
                         `最終: ${formatDate(lastMeetingDate)}` : 
                         '未実施';
                     
+                    // 顔写真HTML生成
+                    let photoHtml = '';
+                    if (contact.photoUrl) {
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">`;
+                    } else {
+                        photoHtml = `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`;
+                    }
+                    
                     return `
                         <div class="contact-list-item" onclick="handleContactClick(event, '${contact.id}')">
                             <div class="contact-list-photo">
-                                ${contact.photoUrl ? 
-                                    `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
-                                    `<span style="font-size: 20px;">${contact.name.charAt(0)}</span>`
-                                }
+                                ${photoHtml}
                             </div>
                             <div class="contact-list-info">
                                 <div class="contact-list-name">
@@ -3544,13 +3584,18 @@
                         `最終打合せ: ${formatDate(lastMeetingDate)}` : 
                         'ミーティング未実施';
                     
+                    // 顔写真HTML生成
+                    let photoHtml = '';
+                    if (contact.photoUrl) {
+                        photoHtml = `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name).replace(/'/g, "\\'")}')">`;
+                    } else {
+                        photoHtml = `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`;
+                    }
+                    
                     return `
                         <div class="contact-card" onclick="handleContactClick(event, '${contact.id}')">
                             <div class="contact-photo">
-                                ${contact.photoUrl ? 
-                                    `<img src="${contact.photoUrl}" alt="${contact.name}" loading="lazy" onerror="handleImageError(this, '${escapeHtml(contact.name)}')">` : 
-                                    `<span style="font-size: 32px;">${contact.name.charAt(0)}</span>`
-                                }
+                                ${photoHtml}
                             </div>
                             <div class="contact-name">${escapeHtml(contact.name)}</div>
                             ${contact.yomi ? `<div class="contact-info" style="font-size: 12px; color: #888;">（${escapeHtml(contact.yomi)}）</div>` : ''}
@@ -3850,7 +3895,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${outstandingTasks.map(item => `
+                        ${outstandingTasks.map(item => {
+                            if (!item.contact) return '';
+                            return `
                             <tr>
                                 <td style="padding: 8px;">
                                     <a href="#" onclick="showContactDetail('${item.contact.id}'); return false;">
@@ -3873,7 +3920,7 @@
                                            style="cursor: pointer; width: 18px; height: 18px;">
                                 </td>
                             </tr>
-                        `).join('')}
+                        `}).join('')}
                     </tbody>
                 </table>
             `;
@@ -4209,19 +4256,30 @@
             const notification = document.createElement('div');
             notification.className = `notification ${type === 'error' ? 'error-notification' : ''}`;
             notification.textContent = message;
-            document.body.appendChild(notification);
             
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
+            if (document.body) {
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 3000);
+            }
         }
 
         function showLoading() {
-            document.getElementById('loadingOverlay').style.display = 'flex';
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'flex';
+            }
         }
 
         function hideLoading() {
-            document.getElementById('loadingOverlay').style.display = 'none';
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
         }
 
         function closeModal(modalId) {
@@ -4231,7 +4289,10 @@
                 }
             }
             
-            document.getElementById(modalId).style.display = 'none';
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
             
             if (draftSaveTimer) {
                 clearTimeout(draftSaveTimer);
@@ -4242,6 +4303,10 @@
         function updateConnectionStatus() {
             const dot = document.getElementById('connectionDot');
             const tooltip = document.getElementById('connectionTooltip');
+            
+            if (!dot || !tooltip) {
+                return;
+            }
             
             if (accessToken) {
                 dot.classList.add('connected');
@@ -4440,7 +4505,7 @@
             } else if (contact.referredByIds && contact.referredByIds.length > 0) {
                 return `<span>${escapeHtml(contact.referredBy)} <small style="color: #d93025;">(紹介元が複数あります)</small></span>`;
             }
-            return escapeHtml(contact.referredBy);
+            return escapeHtml(contact.referredBy || '');
         }
 
         // ===== ドロップダウンオプション管理 =====
