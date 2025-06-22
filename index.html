@@ -1479,6 +1479,7 @@
             opacity: 0.8;
         }
 
+        /* 改修1: プルダウンが切れないようにする修正 */
         .filter-content {
             max-height: 0;
             overflow: hidden;
@@ -1487,6 +1488,7 @@
 
         .filter-content.show {
             max-height: 500px;
+            overflow: visible; /* visible に変更して、プルダウンが表示されるようにする */
         }
 
         /* 名刺画像アップロード */
@@ -1657,6 +1659,17 @@
         .back-to-main:hover {
             background: #3a3a3a;
             border-color: #4c8bf5;
+        }
+
+        /* 改修3: 連絡先件数表示 */
+        .contact-count-info {
+            background: #2a2a2a;
+            padding: 16px 24px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid #3a3a3a;
+            font-size: 16px;
+            color: #f0f0f0;
         }
     </style>
 </head>
@@ -1909,6 +1922,11 @@
                 <div id="outstandingActionsList" style="display: none; margin-top: 20px;">
                     <!-- Outstanding actions will be rendered here -->
                 </div>
+            </div>
+
+            <!-- 改修3: 連絡先件数表示 -->
+            <div id="contactCountInfo" class="contact-count-info">
+                登録済み連絡先：<span id="contactCount">0</span>件
             </div>
 
             <!-- 表示コントロールバー（位置変更） -->
@@ -2654,6 +2672,7 @@
                 updateDropdownOptions();
                 renderContactList();
                 renderOutstandingActions();
+                updateContactCount(); // 改修3: 連絡先件数を更新
                 
                 hideLoading();
                 showNotification('ログインしました');
@@ -2920,6 +2939,7 @@
                 renderContactList();
                 updateDropdownOptions();
                 renderOutstandingActions();
+                updateContactCount(); // 改修3: 連絡先件数を更新
                 
                 showNotification('同期が完了しました');
             } catch (error) {
@@ -3300,6 +3320,7 @@
                 updateDropdownOptions();
                 closeModal('contactFormModal');
                 resetContactForm();
+                updateContactCount(); // 改修3: 連絡先件数を更新
                 
                 hideLoading();
                 showNotification('連絡先を保存しました');
@@ -3326,6 +3347,7 @@
                 renderContactList();
                 updateDropdownOptions();
                 closeModal('contactDetailModal');
+                updateContactCount(); // 改修3: 連絡先件数を更新
                 
                 hideLoading();
                 showNotification('連絡先を削除しました');
@@ -4634,6 +4656,7 @@
             displayFirstMeetingAttachments();
         }
 
+        // 改修2: ファイル種別に応じた開き方の実装
         function openFile(url, filename) {
             const extension = filename.split('.').pop().toLowerCase();
             
@@ -4641,13 +4664,28 @@
             const viewableExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'pdf'];
             
             if (viewableExtensions.includes(extension)) {
+                // PDFと画像は新規タブで直接開く
                 window.open(url, '_blank');
             } else {
-                // その他のファイルはダウンロード（Google Drive経由）
+                // その他のファイルは自動ダウンロード
+                // Google DriveのダウンロードURLに変換
+                let downloadUrl = url;
+                if (url.includes('drive.google.com/uc?export=view')) {
+                    // export=viewをexport=downloadに変更
+                    downloadUrl = url.replace('export=view', 'export=download');
+                } else if (url.includes('drive.google.com')) {
+                    // その他のGoogle DriveのURLの場合
+                    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                    if (match && match[1]) {
+                        downloadUrl = `https://drive.google.com/uc?export=download&id=${match[1]}`;
+                    }
+                }
+                
+                // ダウンロードリンクを作成してクリック
                 const a = document.createElement('a');
-                a.href = url;
+                a.href = downloadUrl;
                 a.download = filename;
-                a.target = '_blank';
+                a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -4744,6 +4782,14 @@
                 dot.classList.remove('connected');
                 dot.classList.add('disconnected');
                 tooltip.textContent = '未接続';
+            }
+        }
+
+        // 改修3: 連絡先件数を更新する関数
+        function updateContactCount() {
+            const countElement = document.getElementById('contactCount');
+            if (countElement) {
+                countElement.textContent = contacts.length;
             }
         }
 
@@ -5215,6 +5261,7 @@
                 updateDropdownOptions();
                 updateAllReferrerLinks();
                 renderContactList();
+                updateContactCount(); // 改修3: 連絡先件数を更新
                 
                 hideLoading();
                 showNotification(`インポート完了: ${addedContacts}件の連絡先と${addedMeetings}件のミーティングを追加しました`);
