@@ -2923,8 +2923,8 @@
                 // iOS対応の画像URL生成
                 let shareUrl;
                 if (file.type.startsWith('image/')) {
-                    // 画像の場合は直接アクセス可能なURLを生成
-                    shareUrl = `https://drive.google.com/uc?id=${result.id}&export=view`;
+                    // 画像の場合は直接アクセス可能なURLを生成（iOS Safari対応）
+                    shareUrl = `https://lh3.googleusercontent.com/d/${result.id}`;
                     
                     // 画像に対してanyoneへの読み取り権限を付与
                     try {
@@ -2937,6 +2937,8 @@
                         });
                     } catch (permError) {
                         console.warn('画像の共有設定に失敗しました:', permError);
+                        // フォールバックURL
+                        shareUrl = `https://drive.google.com/uc?id=${result.id}&export=view`;
                     }
                 } else {
                     // その他のファイルは通常のURLを使用
@@ -3027,23 +3029,32 @@
         function toDirectLink(url) {
             if (!url) return url;
             
-            // すでに適切な形式の場合はそのまま返す
-            if (url.includes('drive.google.com/uc?id=') && url.includes('&export=view')) {
+            // すでにlh3形式の場合はそのまま返す
+            if (url.includes('lh3.googleusercontent.com/d/')) {
                 return url;
             }
             
-            // 旧形式のURLを新形式に変換
-            const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-            if (match) {
-                return `https://drive.google.com/uc?id=${match[1]}&export=view`;
+            // Google DriveのファイルIDを抽出
+            let fileId = null;
+            
+            // 各種URLパターンからIDを抽出
+            const patterns = [
+                /\/d\/([a-zA-Z0-9-_]+)/,
+                /id=([a-zA-Z0-9-_]+)/,
+                /export=view&id=([a-zA-Z0-9-_]+)/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match && match[1]) {
+                    fileId = match[1];
+                    break;
+                }
             }
             
-            // uc?export=viewだけの形式をiOS対応形式に変換
-            if (url.includes('drive.google.com/uc?export=view&id=')) {
-                const idMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
-                if (idMatch) {
-                    return `https://drive.google.com/uc?id=${idMatch[1]}&export=view`;
-                }
+            // IDが見つかった場合はiOS対応URLを返す
+            if (fileId) {
+                return `https://lh3.googleusercontent.com/d/${fileId}`;
             }
             
             return url;
@@ -3058,7 +3069,7 @@
                 let updated = false;
                 
                 // 顔写真URLを修正
-                if (contact.photoUrl && !contact.photoUrl.includes('drive.google.com/uc?id=')) {
+                if (contact.photoUrl && !contact.photoUrl.includes('lh3.googleusercontent.com/d/')) {
                     const oldUrl = contact.photoUrl;
                     contact.photoUrl = toDirectLink(contact.photoUrl);
                     updated = true;
@@ -3066,7 +3077,7 @@
                 }
                 
                 // 名刺画像URLを修正
-                if (contact.cardImageUrl && !contact.cardImageUrl.includes('drive.google.com/uc?id=')) {
+                if (contact.cardImageUrl && !contact.cardImageUrl.includes('lh3.googleusercontent.com/d/')) {
                     contact.cardImageUrl = toDirectLink(contact.cardImageUrl);
                     updated = true;
                     console.log(`✅ 名刺画像URLを変換: ${contact.name}`);
