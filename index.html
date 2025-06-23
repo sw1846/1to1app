@@ -2235,6 +2235,20 @@
                             <div class="settings-item-description">ミーティング内容のテンプレートを編集します</div>
                         </div>
                     </div>
+                    <div class="settings-item" onclick="checkFileStructure()">
+                        <div class="settings-item-icon">🔍</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">ファイル構造確認</div>
+                            <div class="settings-item-description">現在のファイル保存状況を確認します</div>
+                        </div>
+                    </div>
+                    <div class="settings-item" onclick="migrateExistingFiles()">
+                        <div class="settings-item-icon">📁</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">ファイル整理</div>
+                            <div class="settings-item-description">既存のファイルを新しいフォルダ構造に移動します</div>
+                        </div>
+                    </div>
                     <div class="settings-item" onclick="showSetupWizardFromSettings()">
                         <div class="settings-item-icon">⚙️</div>
                         <div class="settings-item-content">
@@ -5382,6 +5396,398 @@
                 showNotification('データのインポートに失敗しました', 'error');
                 hideLoading();
                 event.target.value = '';
+            }
+        }
+
+        // ===== ファイル構造確認機能 =====
+        async function checkFileStructure() {
+            closeModal('settingsModal');
+            showLoading();
+            
+            try {
+                // レポート用のデータ
+                const report = {
+                    totalFiles: 0,
+                    organized: 0,
+                    unorganized: 0,
+                    contactFolders: new Set(),
+                    unorganizedFiles: []
+                };
+                
+                // attachmentsフォルダの存在確認
+                let hasAttachmentsFolder = false;
+                try {
+                    const response = await gapi.client.drive.files.list({
+                        q: `name='${ATTACHMENTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and '${appFolderId}' in parents and trashed=false`,
+                        fields: 'files(id, name)'
+                    });
+                    hasAttachmentsFolder = response.result.files && response.result.files.length > 0;
+                    if (hasAttachmentsFolder) {
+                        attachmentsFolderId = response.result.files[0].id;
+                    }
+                } catch (error) {
+                    console.error('attachmentsフォルダの確認エラー:', error);
+                }
+                
+                // 各連絡先のファイルをチェック
+                for (const contact of contacts) {
+                    if (!contact.name) continue;
+                    
+                    const filesToCheck = [];
+                    
+                    // ファイルリストを収集
+                    if (contact.photo) filesToCheck.push({ id: contact.photo, type: '顔写真' });
+                    if (contact.cardImage) filesToCheck.push({ id: contact.cardImage, type: '名刺' });
+                    if (contact.attachments) {
+                        contact.attachments.forEach(att => {
+                            if (att.id) filesToCheck.push({ id: att.id, type: att.name });
+                        });
+                    }
+                    
+                    // ミーティングファイルも確認
+                    const contactMeetings = meetings.filter(m => m.contactId === contact.id);
+                    for (const meeting of contactMeetings) {
+                        if (meeting.attachments) {
+                            meeting.attachments.forEach(att => {
+                                if (att.id) filesToCheck.push({ id: att.id, type: `ミーティング: ${att.name}` });
+                            });
+                        }
+                    }
+                    
+                    // 各ファイルの場所を確認
+                    for (const file of filesToCheck) {
+                        try {
+                            const fileInfo = await gapi.client.drive.files.get({
+                                fileId: file.id,
+                                fields: 'id,name,parents'
+                            });
+                            
+                            if (fileInfo.result) {
+                                report.totalFiles++;
+                                
+                                // 親フォルダ情報を取得
+                                if (fileInfo.result.parents && fileInfo.result.parents.length > 0) {
+                                    const parentId = fileInfo.result.parents[0];
+                                    
+                                    // 親フォルダの情報を取得
+                                    const parentInfo = await gapi.client.drive.files.get({
+                                        fileId: parentId,
+                                        fields: 'id,name,parents'
+                                    });
+                                    
+                                    // attachmentsフォルダ内の連絡先フォルダにあるかチェック
+                                    if (parentInfo.result.parents && 
+                                        parentInfo.result.parents.includes(attachmentsFolderId) &&
+                                        parentInfo.result.name === sanitizeFileName(contact.name)) {
+                                        report.organized++;
+                                        report.contactFolders.add(contact.name);
+                                    } else {
+                                        report.unorganized++;
+                                        report.unorganizedFiles.push({
+                                            contact: contact.name,
+                                            fileType: file.type,
+                                            currentLocation: parentInfo.result.name || 'ルート'
+                                        });
+                                    }
+                                } else {
+                                    report.unorganized++;
+                                    report.unorganizedFiles.push({
+                                        contact: contact.name,
+                                        fileType: file.type,
+                                        currentLocation: 'ルート'
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`ファイル確認エラー (${file.id}):`, error);
+                        }
+                    }
+                }
+                
+                hideLoading();
+                
+                // レポートを表示
+                showFileStructureReport(report, hasAttachmentsFolder);
+                
+            } catch (error) {
+                console.error('ファイル構造確認エラー:', error);
+                hideLoading();
+                showNotification('ファイル構造の確認中にエラーが発生しました', 'error');
+            }
+        }
+        
+        function showFileStructureReport(report, hasAttachmentsFolder) {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            
+            const unorganizedList = report.unorganizedFiles.map(file => 
+                `<tr>
+                    <td style="padding: 4px 8px;">${escapeHtml(file.contact)}</td>
+                    <td style="padding: 4px 8px;">${escapeHtml(file.fileType)}</td>
+                    <td style="padding: 4px 8px;">${escapeHtml(file.currentLocation)}</td>
+                </tr>`
+            ).join('');
+            
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h2>ファイル構造レポート</h2>
+                        <span class="close-modal" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <h3>概要</h3>
+                        <table style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="padding: 8px 0;">総ファイル数:</td>
+                                <td style="padding: 8px 0; text-align: right;"><strong>${report.totalFiles}</strong> 個</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0;">整理済み:</td>
+                                <td style="padding: 8px 0; text-align: right; color: #34a853;"><strong>${report.organized}</strong> 個</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0;">未整理:</td>
+                                <td style="padding: 8px 0; text-align: right; color: ${report.unorganized > 0 ? '#d93025' : '#34a853'};"><strong>${report.unorganized}</strong> 個</td>
+                            </tr>
+                        </table>
+                        
+                        ${!hasAttachmentsFolder ? `
+                            <div style="background: #333; border: 1px solid #d93025; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                                <p style="color: #d93025; margin: 0;">
+                                    <strong>⚠️ attachmentsフォルダが存在しません</strong><br>
+                                    「ファイル整理」を実行して、新しいフォルダ構造を作成してください。
+                                </p>
+                            </div>
+                        ` : ''}
+                        
+                        ${report.unorganized > 0 ? `
+                            <h3>未整理のファイル</h3>
+                            <div style="max-height: 300px; overflow-y: auto; background: #1a1a1a; border-radius: 6px; padding: 10px;">
+                                <table style="width: 100%; font-size: 13px;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid #444;">
+                                            <th style="text-align: left; padding: 4px 8px;">連絡先</th>
+                                            <th style="text-align: left; padding: 4px 8px;">ファイル種別</th>
+                                            <th style="text-align: left; padding: 4px 8px;">現在の場所</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${unorganizedList}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div style="background: #333; border: 1px solid #4c8bf5; padding: 15px; border-radius: 6px; margin-top: 20px;">
+                                <p style="margin: 0;">
+                                    💡 <strong>ヒント:</strong> 「ファイル整理」機能を使用すると、<br>
+                                    これらのファイルを自動的に正しいフォルダに移動できます。
+                                </p>
+                            </div>
+                        ` : `
+                            <div style="background: #333; border: 1px solid #34a853; padding: 15px; border-radius: 6px;">
+                                <p style="color: #34a853; margin: 0;">
+                                    ✅ すべてのファイルが正しく整理されています！
+                                </p>
+                            </div>
+                        `}
+                        
+                        <div class="action-buttons" style="margin-top: 20px;">
+                            ${report.unorganized > 0 ? `
+                                <button class="btn-primary" onclick="this.closest('.modal').remove(); migrateExistingFiles();">ファイル整理を実行</button>
+                            ` : ''}
+                            <button class="btn-secondary" onclick="this.closest('.modal').remove()">閉じる</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // モーダル外クリックで閉じる
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
+        // ===== ファイル移行機能 =====
+        async function migrateExistingFiles() {
+            if (!confirm('既存のファイルを新しいフォルダ構造（attachments/連絡先名/）に移動します。\n\nこの処理には時間がかかる場合があります。続行しますか？')) {
+                return;
+            }
+            
+            closeModal('settingsModal');
+            
+            // 進捗表示用のモーダルを作成
+            const progressModal = document.createElement('div');
+            progressModal.className = 'modal';
+            progressModal.style.display = 'block';
+            progressModal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h2>ファイル移行中...</h2>
+                    </div>
+                    <div class="modal-body">
+                        <div id="migrationProgress" style="margin-bottom: 20px;">
+                            <div class="loading"></div>
+                            <p style="margin-top: 20px;" id="migrationStatus">準備中...</p>
+                        </div>
+                        <div id="migrationLog" style="max-height: 300px; overflow-y: auto; background: #1a1a1a; padding: 10px; border-radius: 4px; font-size: 12px; font-family: monospace;">
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(progressModal);
+            
+            const statusEl = document.getElementById('migrationStatus');
+            const logEl = document.getElementById('migrationLog');
+            
+            function addLog(message, isError = false) {
+                const time = new Date().toLocaleTimeString();
+                const color = isError ? '#d93025' : '#4c8bf5';
+                logEl.innerHTML += `<div style="color: ${color};">[${time}] ${message}</div>`;
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+            
+            try {
+                addLog('移行処理を開始します...');
+                
+                // attachmentsフォルダが存在することを確認
+                await ensureAttachmentsFolder();
+                addLog('attachmentsフォルダを確認しました');
+                
+                let totalMoved = 0;
+                let errors = 0;
+                
+                // 各連絡先のファイルを処理
+                for (const contact of contacts) {
+                    if (!contact.name) continue;
+                    
+                    statusEl.textContent = `処理中: ${contact.name}`;
+                    
+                    // 連絡先のフォルダを作成
+                    const contactFolderId = await ensureContactFolder(contact.name);
+                    addLog(`📁 ${contact.name} のフォルダを作成/確認`);
+                    
+                    // 移動するファイルのリスト
+                    const filesToMove = [];
+                    
+                    // 顔写真
+                    if (contact.photo) {
+                        filesToMove.push({
+                            fileId: contact.photo,
+                            type: '顔写真',
+                            contact: contact.name
+                        });
+                    }
+                    
+                    // 名刺画像
+                    if (contact.cardImage) {
+                        filesToMove.push({
+                            fileId: contact.cardImage,
+                            type: '名刺',
+                            contact: contact.name
+                        });
+                    }
+                    
+                    // 添付ファイル
+                    if (contact.attachments && contact.attachments.length > 0) {
+                        for (const att of contact.attachments) {
+                            if (att.id) {
+                                filesToMove.push({
+                                    fileId: att.id,
+                                    type: att.name,
+                                    contact: contact.name
+                                });
+                            }
+                        }
+                    }
+                    
+                    // ミーティングの添付ファイル
+                    const contactMeetings = meetings.filter(m => m.contactId === contact.id);
+                    for (const meeting of contactMeetings) {
+                        if (meeting.attachments && meeting.attachments.length > 0) {
+                            for (const att of meeting.attachments) {
+                                if (att.id) {
+                                    filesToMove.push({
+                                        fileId: att.id,
+                                        type: `ミーティング: ${att.name}`,
+                                        contact: contact.name
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    
+                    // ファイルを移動
+                    for (const file of filesToMove) {
+                        try {
+                            // ファイルの現在の情報を取得
+                            const fileInfo = await gapi.client.drive.files.get({
+                                fileId: file.fileId,
+                                fields: 'id,name,parents'
+                            });
+                            
+                            if (fileInfo.result) {
+                                // 既に正しいフォルダにある場合はスキップ
+                                if (fileInfo.result.parents && fileInfo.result.parents.includes(contactFolderId)) {
+                                    addLog(`✓ ${file.type} は既に正しい場所にあります`);
+                                    continue;
+                                }
+                                
+                                // ファイルを新しいフォルダに移動
+                                const previousParents = fileInfo.result.parents ? fileInfo.result.parents.join(',') : '';
+                                
+                                await gapi.client.drive.files.update({
+                                    fileId: file.fileId,
+                                    addParents: contactFolderId,
+                                    removeParents: previousParents,
+                                    fields: 'id, parents'
+                                });
+                                
+                                addLog(`✓ ${file.type} を移動しました`);
+                                totalMoved++;
+                            }
+                        } catch (error) {
+                            addLog(`✗ ${file.type} の移動に失敗: ${error.message}`, true);
+                            errors++;
+                        }
+                    }
+                }
+                
+                statusEl.textContent = '移行完了！';
+                addLog(`\n===== 移行完了 =====`);
+                addLog(`移動したファイル: ${totalMoved}個`);
+                if (errors > 0) {
+                    addLog(`エラー: ${errors}個`, true);
+                }
+                
+                // 完了ボタンを追加
+                const modalBody = progressModal.querySelector('.modal-body');
+                modalBody.innerHTML += `
+                    <div class="action-buttons" style="margin-top: 20px;">
+                        <button class="btn-primary" onclick="this.closest('.modal').remove()">閉じる</button>
+                    </div>
+                `;
+                
+                showNotification('ファイルの移行が完了しました');
+                
+            } catch (error) {
+                console.error('移行エラー:', error);
+                addLog(`致命的エラー: ${error.message}`, true);
+                statusEl.textContent = 'エラーが発生しました';
+                
+                // エラー時も閉じるボタンを追加
+                const modalBody = progressModal.querySelector('.modal-body');
+                modalBody.innerHTML += `
+                    <div class="action-buttons" style="margin-top: 20px;">
+                        <button class="btn-primary" onclick="this.closest('.modal').remove()">閉じる</button>
+                    </div>
+                `;
+                
+                showNotification('ファイル移行中にエラーが発生しました', 'error');
             }
         }
 
