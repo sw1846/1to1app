@@ -5449,6 +5449,16 @@
                             </p>
                         </div>
                         
+                        <div style="background: #2d3748; border: 1px solid #4c8bf5; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                            <p style="color: #4c8bf5; margin: 0;">
+                                <strong>💡 フォルダアクセス権限について</strong><br>
+                                • 対象フォルダがあなたと共有されている必要があります<br>
+                                • 「マイドライブ」内のフォルダ、または共有されたフォルダのみアクセス可能です<br>
+                                • フォルダの所有者でない場合は、編集権限が必要です<br>
+                                • 404エラーが出る場合は、フォルダの共有設定を確認してください
+                            </p>
+                        </div>
+                        
                         <div class="action-buttons">
                             <button class="btn-primary" onclick="executeFolderMigration()">移行を開始</button>
                             <button class="btn-secondary" onclick="this.closest('.modal').remove()">キャンセル</button>
@@ -5458,11 +5468,16 @@
             `;
             document.body.appendChild(inputModal);
             
-            // モーダル外クリックで閉じる
-            inputModal.addEventListener('click', (e) => {
-                if (e.target === inputModal) {
+            // モーダルのクリック処理
+            let modalMouseDownTarget = null;
+            inputModal.addEventListener('mousedown', (e) => {
+                modalMouseDownTarget = e.target;
+            });
+            inputModal.addEventListener('mouseup', (e) => {
+                if (e.target === inputModal && modalMouseDownTarget === inputModal) {
                     inputModal.remove();
                 }
+                modalMouseDownTarget = null;
             });
         }
         
@@ -5533,8 +5548,15 @@
                     }
                     addLog(`移動元フォルダ確認: ${sourceFolder.result.name}`);
                 } catch (error) {
-                    addLog('移動元フォルダが見つかりません', true);
-                    throw new Error('移動元フォルダが存在しません');
+                    console.error('移動元フォルダエラー:', error);
+                    if (error.status === 404) {
+                        addLog('移動元フォルダが見つかりません。アクセス権限を確認してください。', true);
+                        addLog('フォルダが自分と共有されているか確認してください。', true);
+                        throw new Error('移動元フォルダへのアクセス権限がありません');
+                    } else {
+                        addLog(`移動元フォルダエラー: ${error.message}`, true);
+                        throw new Error('移動元フォルダの確認に失敗しました');
+                    }
                 }
                 
                 // 移動先フォルダ確認
@@ -5548,8 +5570,15 @@
                     }
                     addLog(`移動先フォルダ確認: ${targetFolder.result.name}`);
                 } catch (error) {
-                    addLog('移動先フォルダが見つかりません', true);
-                    throw new Error('移動先フォルダが存在しません');
+                    console.error('移動先フォルダエラー:', error);
+                    if (error.status === 404) {
+                        addLog('移動先フォルダが見つかりません。アクセス権限を確認してください。', true);
+                        addLog('フォルダが自分と共有されているか確認してください。', true);
+                        throw new Error('移動先フォルダへのアクセス権限がありません');
+                    } else {
+                        addLog(`移動先フォルダエラー: ${error.message}`, true);
+                        throw new Error('移動先フォルダの確認に失敗しました');
+                    }
                 }
                 
                 // 移動元フォルダのファイルを取得
@@ -6011,11 +6040,16 @@
             
             document.body.appendChild(modal);
             
-            // モーダル外クリックで閉じる
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
+            // モーダルのクリック処理
+            let modalMouseDownTarget = null;
+            modal.addEventListener('mousedown', (e) => {
+                modalMouseDownTarget = e.target;
+            });
+            modal.addEventListener('mouseup', (e) => {
+                if (e.target === modal && modalMouseDownTarget === modal) {
                     modal.remove();
                 }
+                modalMouseDownTarget = null;
             });
         }
 
@@ -6202,11 +6236,21 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupFileDragDrop();
             
+            // モーダルのクリック処理を改善
+            let modalMouseDownTarget = null;
+            
             document.querySelectorAll('.modal').forEach(modal => {
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) {
+                // マウスダウン時のターゲットを記録
+                modal.addEventListener('mousedown', (e) => {
+                    modalMouseDownTarget = e.target;
+                });
+                
+                // マウスアップ時に両方がモーダル背景なら閉じる
+                modal.addEventListener('mouseup', (e) => {
+                    if (e.target === modal && modalMouseDownTarget === modal) {
                         closeModal(modal.id);
                     }
+                    modalMouseDownTarget = null;
                 });
             });
             
