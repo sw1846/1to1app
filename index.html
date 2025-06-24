@@ -5408,14 +5408,80 @@
 
         // ===== 特定フォルダ間のデータ移行 =====
         async function migrateFromSpecificFolder() {
-            const SOURCE_FOLDER_ID = '1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP';
-            const TARGET_FOLDER_ID = '1h-QG1jRtlGf7C3WemDKTRPWabysODsM-';
+            closeModal('settingsModal');
             
-            if (!confirm(`フォルダID: ${SOURCE_FOLDER_ID}\nから\nフォルダID: ${TARGET_FOLDER_ID}\nへファイルを移動します。\n\n移動先では連絡先名でフォルダ分けされます。\n続行しますか？`)) {
+            // フォルダID入力用のモーダル
+            const inputModal = document.createElement('div');
+            inputModal.className = 'modal';
+            inputModal.style.display = 'block';
+            inputModal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2>フォルダ間データ移行設定</h2>
+                        <span class="close-modal" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <p style="margin-bottom: 20px;">移動元と移動先のGoogle DriveフォルダIDを入力してください。</p>
+                        
+                        <div class="form-group">
+                            <label>移動元フォルダID</label>
+                            <input type="text" id="sourceFolderId" placeholder="例: 1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP" value="1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP">
+                            <small style="color: #aaa; display: block; margin-top: 5px;">
+                                Google DriveでフォルダのURLから取得できます（folders/の後の文字列）
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>移動先フォルダID</label>
+                            <input type="text" id="targetFolderId" placeholder="例: 1h-QG1jRtlGf7C3WemDKTRPWabysODsM-" value="1h-QG1jRtlGf7C3WemDKTRPWabysODsM-">
+                            <small style="color: #aaa; display: block; margin-top: 5px;">
+                                移動先では連絡先名でサブフォルダが作成されます
+                            </small>
+                        </div>
+                        
+                        <div style="background: #333; border: 1px solid #444; padding: 15px; border-radius: 6px; margin: 20px 0;">
+                            <p style="color: #ff9800; margin: 0;">
+                                <strong>⚠️ 注意事項</strong><br>
+                                • 移動元フォルダ内のすべてのファイルが対象となります<br>
+                                • ファイルは連絡先と紐付けられ、連絡先名のサブフォルダに移動されます<br>
+                                • 紐付けできないファイルは「未分類」フォルダに移動されます<br>
+                                • この操作は取り消せません
+                            </p>
+                        </div>
+                        
+                        <div class="action-buttons">
+                            <button class="btn-primary" onclick="executeFolderMigration()">移行を開始</button>
+                            <button class="btn-secondary" onclick="this.closest('.modal').remove()">キャンセル</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(inputModal);
+            
+            // モーダル外クリックで閉じる
+            inputModal.addEventListener('click', (e) => {
+                if (e.target === inputModal) {
+                    inputModal.remove();
+                }
+            });
+        }
+        
+        async function executeFolderMigration() {
+            const sourceFolderId = document.getElementById('sourceFolderId').value.trim();
+            const targetFolderId = document.getElementById('targetFolderId').value.trim();
+            
+            if (!sourceFolderId || !targetFolderId) {
+                showNotification('フォルダIDを入力してください', 'error');
                 return;
             }
             
-            closeModal('settingsModal');
+            if (sourceFolderId === targetFolderId) {
+                showNotification('移動元と移動先は異なるフォルダを指定してください', 'error');
+                return;
+            }
+            
+            // 入力モーダルを閉じる
+            document.querySelector('.modal').remove();
             
             // 進捗表示用のモーダル
             const progressModal = document.createElement('div');
@@ -5428,12 +5494,12 @@
                     </div>
                     <div class="modal-body">
                         <div style="margin-bottom: 20px;">
-                            <p><strong>移動元:</strong> ${SOURCE_FOLDER_ID}</p>
-                            <p><strong>移動先:</strong> ${TARGET_FOLDER_ID}</p>
+                            <p><strong>移動元:</strong> ${sourceFolderId}</p>
+                            <p><strong>移動先:</strong> ${targetFolderId}</p>
                         </div>
                         <div id="migrationProgress" style="margin-bottom: 20px;">
                             <div class="loading"></div>
-                            <p style="margin-top: 20px;" id="migrationStatus">ファイルを取得中...</p>
+                            <p style="margin-top: 20px;" id="migrationStatus">フォルダを確認中...</p>
                         </div>
                         <div id="migrationLog" style="max-height: 300px; overflow-y: auto; background: #1a1a1a; padding: 10px; border-radius: 4px; font-size: 12px; font-family: monospace;">
                         </div>
@@ -5453,14 +5519,48 @@
             }
             
             try {
+                // フォルダの存在確認
+                addLog('フォルダの存在を確認中...');
+                
+                // 移動元フォルダ確認
+                try {
+                    const sourceFolder = await gapi.client.drive.files.get({
+                        fileId: sourceFolderId,
+                        fields: 'id, name, mimeType'
+                    });
+                    if (sourceFolder.result.mimeType !== 'application/vnd.google-apps.folder') {
+                        throw new Error('移動元は有効なフォルダではありません');
+                    }
+                    addLog(`移動元フォルダ確認: ${sourceFolder.result.name}`);
+                } catch (error) {
+                    addLog('移動元フォルダが見つかりません', true);
+                    throw new Error('移動元フォルダが存在しません');
+                }
+                
+                // 移動先フォルダ確認
+                try {
+                    const targetFolder = await gapi.client.drive.files.get({
+                        fileId: targetFolderId,
+                        fields: 'id, name, mimeType'
+                    });
+                    if (targetFolder.result.mimeType !== 'application/vnd.google-apps.folder') {
+                        throw new Error('移動先は有効なフォルダではありません');
+                    }
+                    addLog(`移動先フォルダ確認: ${targetFolder.result.name}`);
+                } catch (error) {
+                    addLog('移動先フォルダが見つかりません', true);
+                    throw new Error('移動先フォルダが存在しません');
+                }
+                
                 // 移動元フォルダのファイルを取得
+                statusEl.textContent = 'ファイルを取得中...';
                 addLog('移動元フォルダのファイルを取得中...');
                 let allFiles = [];
                 let pageToken = null;
                 
                 do {
                     const response = await gapi.client.drive.files.list({
-                        q: `'${SOURCE_FOLDER_ID}' in parents and trashed=false`,
+                        q: `'${sourceFolderId}' in parents and trashed=false`,
                         fields: 'nextPageToken, files(id, name, mimeType, size)',
                         pageSize: 1000,
                         pageToken: pageToken
@@ -5477,10 +5577,17 @@
                 if (allFiles.length === 0) {
                     statusEl.textContent = '移動するファイルがありません';
                     addLog('移動対象のファイルが見つかりませんでした', true);
+                    const modalBody = progressModal.querySelector('.modal-body');
+                    modalBody.innerHTML += `
+                        <div class="action-buttons" style="margin-top: 20px;">
+                            <button class="btn-primary" onclick="this.closest('.modal').remove()">閉じる</button>
+                        </div>
+                    `;
                     return;
                 }
                 
                 // ファイルと連絡先のマッチング
+                statusEl.textContent = 'ファイルと連絡先を照合中...';
                 const fileContactMap = new Map();
                 const unmatchedFiles = [];
                 
@@ -5535,18 +5642,6 @@
                     addLog(`${unmatchedFiles.length}個のファイルは連絡先と紐付けできませんでした`, true);
                 }
                 
-                // 移動先フォルダの存在確認
-                try {
-                    await gapi.client.drive.files.get({
-                        fileId: TARGET_FOLDER_ID,
-                        fields: 'id, name'
-                    });
-                    addLog('移動先フォルダを確認しました');
-                } catch (error) {
-                    addLog('移動先フォルダが見つかりません', true);
-                    throw new Error('移動先フォルダが存在しません');
-                }
-                
                 // ファイルを移動
                 let movedCount = 0;
                 let errorCount = 0;
@@ -5577,7 +5672,7 @@
                     try {
                         // 既存フォルダを確認
                         const folderSearch = await gapi.client.drive.files.list({
-                            q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${TARGET_FOLDER_ID}' in parents and trashed=false`,
+                            q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${targetFolderId}' in parents and trashed=false`,
                             fields: 'files(id)'
                         });
                         
@@ -5590,7 +5685,7 @@
                                 resource: {
                                     name: folderName,
                                     mimeType: 'application/vnd.google-apps.folder',
-                                    parents: [TARGET_FOLDER_ID]
+                                    parents: [targetFolderId]
                                 },
                                 fields: 'id'
                             });
@@ -5604,7 +5699,7 @@
                                 await gapi.client.drive.files.update({
                                     fileId: file.id,
                                     addParents: contactFolderId,
-                                    removeParents: SOURCE_FOLDER_ID,
+                                    removeParents: sourceFolderId,
                                     fields: 'id, parents'
                                 });
                                 
@@ -5629,7 +5724,7 @@
                     let unmatchedFolderId;
                     try {
                         const folderSearch = await gapi.client.drive.files.list({
-                            q: `name='未分類' and mimeType='application/vnd.google-apps.folder' and '${TARGET_FOLDER_ID}' in parents and trashed=false`,
+                            q: `name='未分類' and mimeType='application/vnd.google-apps.folder' and '${targetFolderId}' in parents and trashed=false`,
                             fields: 'files(id)'
                         });
                         
@@ -5640,7 +5735,7 @@
                                 resource: {
                                     name: '未分類',
                                     mimeType: 'application/vnd.google-apps.folder',
-                                    parents: [TARGET_FOLDER_ID]
+                                    parents: [targetFolderId]
                                 },
                                 fields: 'id'
                             });
@@ -5655,7 +5750,7 @@
                                 await gapi.client.drive.files.update({
                                     fileId: file.id,
                                     addParents: unmatchedFolderId,
-                                    removeParents: SOURCE_FOLDER_ID,
+                                    removeParents: sourceFolderId,
                                     fields: 'id, parents'
                                 });
                                 
@@ -5680,14 +5775,16 @@
                     addLog(`失敗: ${errorCount}個のファイル`, true);
                 }
                 
-                // attachmentsFolderIdを更新
-                attachmentsFolderId = TARGET_FOLDER_ID;
+                // 移動先がattachmentsFolderの場合は更新
+                if (targetFolderId === attachmentsFolderId) {
+                    addLog('attachmentフォルダへの移動を検知しました');
+                }
                 
                 // 完了ボタンを追加
                 const modalBody = progressModal.querySelector('.modal-body');
                 modalBody.innerHTML += `
                     <div class="action-buttons" style="margin-top: 20px;">
-                        <button class="btn-primary" onclick="this.closest('.modal').remove(); location.reload();">完了（画面を更新）</button>
+                        <button class="btn-primary" onclick="this.closest('.modal').remove();">閉じる</button>
                     </div>
                 `;
                 
