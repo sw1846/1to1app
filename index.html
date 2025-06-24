@@ -2304,7 +2304,8 @@
     <script>
         // ===== グローバル変数 =====
         let CLIENT_ID = localStorage.getItem('google_client_id') || '';
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
+        // スコープを拡張して共有フォルダへのアクセスを可能にする
+        const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
         const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
         const APP_FOLDER_NAME = '1to1MeetingManager';
         const ATTACHMENTS_FOLDER_NAME = 'attachments';
@@ -5406,7 +5407,7 @@
             }
         }
 
-        // ===== 特定フォルダ間のデータ移行 =====
+        // ===== 特定フォルダ間のデータ移行（修正版） =====
         async function migrateFromSpecificFolder() {
             closeModal('settingsModal');
             
@@ -5425,7 +5426,7 @@
                         
                         <div class="form-group">
                             <label>移動元フォルダID</label>
-                            <input type="text" id="sourceFolderId" placeholder="例: 1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP" value="1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP">
+                            <input type="text" id="sourceFolderId" placeholder="例: 1As7VHK1IZ1EmWXZmtbEsIEQiK3jI76wP">
                             <small style="color: #aaa; display: block; margin-top: 5px;">
                                 Google DriveでフォルダのURLから取得できます（folders/の後の文字列）
                             </small>
@@ -5433,7 +5434,7 @@
                         
                         <div class="form-group">
                             <label>移動先フォルダID</label>
-                            <input type="text" id="targetFolderId" placeholder="例: 1h-QG1jRtlGf7C3WemDKTRPWabysODsM-" value="1h-QG1jRtlGf7C3WemDKTRPWabysODsM-">
+                            <input type="text" id="targetFolderId" placeholder="例: 1h-QG1jRtlGf7C3WemDKTRPWabysODsM-">
                             <small style="color: #aaa; display: block; margin-top: 5px;">
                                 移動先では連絡先名でサブフォルダが作成されます
                             </small>
@@ -5451,11 +5452,11 @@
                         
                         <div style="background: #2d3748; border: 1px solid #4c8bf5; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
                             <p style="color: #4c8bf5; margin: 0;">
-                                <strong>💡 フォルダアクセス権限について</strong><br>
-                                • 対象フォルダがあなたと共有されている必要があります<br>
-                                • 「マイドライブ」内のフォルダ、または共有されたフォルダのみアクセス可能です<br>
-                                • フォルダの所有者でない場合は、編集権限が必要です<br>
-                                • 404エラーが出る場合は、フォルダの共有設定を確認してください
+                                <strong>💡 共有フォルダへのアクセスについて</strong><br>
+                                • 共有フォルダを使用する場合は、そのフォルダへの編集権限が必要です<br>
+                                • フォルダが「マイドライブ」に表示されていることを確認してください<br>
+                                • 共有ドライブのファイルは、supportsAllDrivesパラメータが必要な場合があります<br>
+                                • アクセスエラーが発生した場合は、フォルダの共有設定を確認してください
                             </p>
                         </div>
                         
@@ -5537,11 +5538,12 @@
                 // フォルダの存在確認
                 addLog('フォルダの存在を確認中...');
                 
-                // 移動元フォルダ確認
+                // 移動元フォルダ確認（共有ドライブ対応）
                 try {
                     const sourceFolder = await gapi.client.drive.files.get({
                         fileId: sourceFolderId,
-                        fields: 'id, name, mimeType'
+                        fields: 'id, name, mimeType',
+                        supportsAllDrives: true
                     });
                     if (sourceFolder.result.mimeType !== 'application/vnd.google-apps.folder') {
                         throw new Error('移動元は有効なフォルダではありません');
@@ -5550,8 +5552,11 @@
                 } catch (error) {
                     console.error('移動元フォルダエラー:', error);
                     if (error.status === 404) {
-                        addLog('移動元フォルダが見つかりません。アクセス権限を確認してください。', true);
-                        addLog('フォルダが自分と共有されているか確認してください。', true);
+                        addLog('移動元フォルダが見つかりません。', true);
+                        addLog('共有フォルダの場合は、以下を確認してください：', true);
+                        addLog('1. フォルダが自分と共有されているか', true);
+                        addLog('2. 編集権限があるか', true);
+                        addLog('3. 「マイドライブ」に追加されているか', true);
                         throw new Error('移動元フォルダへのアクセス権限がありません');
                     } else {
                         addLog(`移動元フォルダエラー: ${error.message}`, true);
@@ -5559,11 +5564,12 @@
                     }
                 }
                 
-                // 移動先フォルダ確認
+                // 移動先フォルダ確認（共有ドライブ対応）
                 try {
                     const targetFolder = await gapi.client.drive.files.get({
                         fileId: targetFolderId,
-                        fields: 'id, name, mimeType'
+                        fields: 'id, name, mimeType',
+                        supportsAllDrives: true
                     });
                     if (targetFolder.result.mimeType !== 'application/vnd.google-apps.folder') {
                         throw new Error('移動先は有効なフォルダではありません');
@@ -5572,8 +5578,8 @@
                 } catch (error) {
                     console.error('移動先フォルダエラー:', error);
                     if (error.status === 404) {
-                        addLog('移動先フォルダが見つかりません。アクセス権限を確認してください。', true);
-                        addLog('フォルダが自分と共有されているか確認してください。', true);
+                        addLog('移動先フォルダが見つかりません。', true);
+                        addLog('共有フォルダの場合は、編集権限と「マイドライブ」への追加を確認してください。', true);
                         throw new Error('移動先フォルダへのアクセス権限がありません');
                     } else {
                         addLog(`移動先フォルダエラー: ${error.message}`, true);
@@ -5581,7 +5587,7 @@
                     }
                 }
                 
-                // 移動元フォルダのファイルを取得
+                // 移動元フォルダのファイルを取得（共有ドライブ対応）
                 statusEl.textContent = 'ファイルを取得中...';
                 addLog('移動元フォルダのファイルを取得中...');
                 let allFiles = [];
@@ -5592,7 +5598,9 @@
                         q: `'${sourceFolderId}' in parents and trashed=false`,
                         fields: 'nextPageToken, files(id, name, mimeType, size)',
                         pageSize: 1000,
-                        pageToken: pageToken
+                        pageToken: pageToken,
+                        supportsAllDrives: true,
+                        includeItemsFromAllDrives: true
                     });
                     
                     if (response.result.files) {
@@ -5702,7 +5710,8 @@
                         // 既存フォルダを確認
                         const folderSearch = await gapi.client.drive.files.list({
                             q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${targetFolderId}' in parents and trashed=false`,
-                            fields: 'files(id)'
+                            fields: 'files(id)',
+                            supportsAllDrives: true
                         });
                         
                         if (folderSearch.result.files && folderSearch.result.files.length > 0) {
@@ -5716,7 +5725,8 @@
                                     mimeType: 'application/vnd.google-apps.folder',
                                     parents: [targetFolderId]
                                 },
-                                fields: 'id'
+                                fields: 'id',
+                                supportsAllDrives: true
                             });
                             contactFolderId = folderResponse.result.id;
                             addLog(`📁 ${contact.name} のフォルダを作成`);
@@ -5729,7 +5739,8 @@
                                     fileId: file.id,
                                     addParents: contactFolderId,
                                     removeParents: sourceFolderId,
-                                    fields: 'id, parents'
+                                    fields: 'id, parents',
+                                    supportsAllDrives: true
                                 });
                                 
                                 addLog(`✓ ${file.name} を移動`);
@@ -5754,7 +5765,8 @@
                     try {
                         const folderSearch = await gapi.client.drive.files.list({
                             q: `name='未分類' and mimeType='application/vnd.google-apps.folder' and '${targetFolderId}' in parents and trashed=false`,
-                            fields: 'files(id)'
+                            fields: 'files(id)',
+                            supportsAllDrives: true
                         });
                         
                         if (folderSearch.result.files && folderSearch.result.files.length > 0) {
@@ -5766,7 +5778,8 @@
                                     mimeType: 'application/vnd.google-apps.folder',
                                     parents: [targetFolderId]
                                 },
-                                fields: 'id'
+                                fields: 'id',
+                                supportsAllDrives: true
                             });
                             unmatchedFolderId = folderResponse.result.id;
                         }
@@ -5780,7 +5793,8 @@
                                     fileId: file.id,
                                     addParents: unmatchedFolderId,
                                     removeParents: sourceFolderId,
-                                    fields: 'id, parents'
+                                    fields: 'id, parents',
+                                    supportsAllDrives: true
                                 });
                                 
                                 addLog(`✓ ${file.name} を未分類フォルダへ移動`);
@@ -6298,3 +6312,4 @@
     </script>
 </body>
 </html>
+                                     
