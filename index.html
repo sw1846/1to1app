@@ -2821,6 +2821,8 @@
             const close_delim = "\r\n--" + boundary + "--";
             
             try {
+                console.log(`saveJsonFile(${fileName}): データサイズ=${JSON.stringify(data).length}文字`);
+                
                 const searchResponse = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
                     fields: 'files(id)'
@@ -2829,6 +2831,9 @@
                 let fileId;
                 let metadata;
                 let multipartRequestBody;
+                
+                // JSONデータを文字列化（エンコーディングを明示）
+                const jsonContent = JSON.stringify(data, null, 2);
                 
                 if (searchResponse.result.files && searchResponse.result.files.length > 0) {
                     fileId = searchResponse.result.files[0].id;
@@ -2839,11 +2844,11 @@
                     
                     multipartRequestBody =
                         delimiter +
-                        'Content-Type: application/json\r\n\r\n' +
+                        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
                         JSON.stringify(metadata) +
                         delimiter +
-                        'Content-Type: application/json\r\n\r\n' +
-                        JSON.stringify(data, null, 2) +
+                        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                        jsonContent +
                         close_delim;
                     
                     await gapi.client.request({
@@ -2864,11 +2869,11 @@
                     
                     multipartRequestBody =
                         delimiter +
-                        'Content-Type: application/json\r\n\r\n' +
+                        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
                         JSON.stringify(metadata) +
                         delimiter +
-                        'Content-Type: application/json\r\n\r\n' +
-                        JSON.stringify(data, null, 2) +
+                        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                        jsonContent +
                         close_delim;
                     
                     await gapi.client.request({
@@ -2881,6 +2886,8 @@
                         body: multipartRequestBody
                     });
                 }
+                
+                console.log(`${fileName} を保存しました`);
             } catch (error) {
                 console.error('Error saving file:', error);
                 throw error;
@@ -2889,12 +2896,15 @@
 
         async function loadJsonFile(fileName) {
             try {
+                console.log(`loadJsonFile(${fileName}): 読み込み開始`);
+                
                 const searchResponse = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
                     fields: 'files(id)'
                 });
                 
                 if (!searchResponse.result.files || searchResponse.result.files.length === 0) {
+                    console.log(`${fileName} が見つかりません`);
                     return null;
                 }
                 
@@ -2905,6 +2915,7 @@
                     alt: 'media'
                 });
                 
+                console.log(`${fileName} を読み込みました`);
                 return response.result;
             } catch (error) {
                 console.error('Error loading file:', error);
@@ -2985,6 +2996,13 @@
                 const contactsData = await loadJsonFile('contacts.json');
                 contacts = contactsData || [];
                 
+                // データ読み込み時のログ
+                console.log('=== 読み込んだ連絡先データ ===');
+                console.log('連絡先数:', contacts.length);
+                if (contacts.length > 0) {
+                    console.log('サンプルデータ:', contacts[0]);
+                }
+                
                 const meetingsData = await loadJsonFile('meetings.json');
                 meetings = meetingsData || [];
                 
@@ -3007,6 +3025,12 @@
 
         async function saveData() {
             try {
+                console.log('=== データ保存 ===');
+                console.log('保存する連絡先数:', contacts.length);
+                if (contacts.length > 0) {
+                    console.log('サンプル連絡先データ:', contacts[0]);
+                }
+                
                 const savePromises = [];
                 
                 savePromises.push(saveJsonFile('contacts.json', contacts));
@@ -3211,6 +3235,9 @@
 
         // ===== 連絡先管理 =====
         function showContactForm(contactId = null) {
+            console.log('=== showContactForm ===');
+            console.log('contactId:', contactId);
+            
             closeModal('contactDetailModal');
             
             currentEditingContactId = contactId;
@@ -3219,6 +3246,9 @@
             if (contactId) {
                 const contact = contacts.find(c => c.id === contactId);
                 if (contact) {
+                    console.log('=== 編集フォームに設定するデータ ===');
+                    console.log('連絡先:', contact);
+                    
                     document.getElementById('contactFormTitle').textContent = '連絡先編集';
                     const form = document.getElementById('contactForm');
                     form.name.value = contact.name || '';
@@ -3233,6 +3263,9 @@
                     form.cutout.value = contact.cutout || '';
                     form.area.value = contact.area || '';
                     form.residence.value = contact.residence || '';
+                    
+                    console.log('強み設定値:', contact.strengths);
+                    console.log('経歴設定値:', contact.careerHistory);
                     
                     if (contact.photoUrl) {
                         document.getElementById('photoPreview').innerHTML = 
@@ -3249,6 +3282,9 @@
                     setSelectedValues('affiliations', contact.affiliations || []);
                     setSelectedValues('wantToConnect', contact.wantToConnect || []);
                     setSelectedValues('goldenEgg', contact.goldenEgg || []);
+                    
+                    console.log('種別設定値:', contact.types);
+                    console.log('所属設定値:', contact.affiliations);
                     
                     displayExistingAttachments(contact.attachments || []);
                     
@@ -3321,49 +3357,73 @@
             showLoading();
             
             const formData = new FormData(event.target);
-            const contact = {
-                id: currentEditingContactId || generateId(),
-                name: formData.get('name'),
-                yomi: formData.get('yomi'),
-                company: formData.get('company'),
-                email: formData.get('email'),
-                phone: formData.get('phone'),
-                homepage: formData.get('homepage'),
-                referredBy: formData.get('referredBy'),
-                strengths: formData.get('strengths'),
-                careerHistory: formData.get('careerHistory'),
-                cutout: formData.get('cutout'),
-                types: getSelectedValues('types'),
-                affiliations: getSelectedValues('affiliations'),
-                wantToConnect: getSelectedValues('wantToConnect'),
-                goldenEgg: getSelectedValues('goldenEgg'),
-                area: formData.get('area'),
-                residence: formData.get('residence'),
-                attachments: [],
-                createdAt: currentEditingContactId ? 
-                    contacts.find(c => c.id === currentEditingContactId)?.createdAt : 
-                    new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
             
+            // デバッグログ追加
+            console.log('=== 保存前のデータ確認 ===');
+            console.log('types:', getSelectedValues('types'));
+            console.log('affiliations:', getSelectedValues('affiliations'));
+            console.log('strengths:', formData.get('strengths'));
+            console.log('careerHistory:', formData.get('careerHistory'));
+            
+            // 既存データをベースに更新（編集時）
+            let contact;
             if (currentEditingContactId) {
                 const existing = contacts.find(c => c.id === currentEditingContactId);
                 if (existing) {
-                    contact.photo = existing.photo;
-                    contact.photoUrl = existing.photoUrl;
-                    contact.cardImage = existing.cardImage;
-                    contact.cardImageUrl = existing.cardImageUrl;
-                    contact.attachments = existing.attachments || [];
+                    // 既存データをコピーしてから更新
+                    contact = { ...existing };
+                    console.log('既存データ:', existing);
+                } else {
+                    // 既存データが見つからない場合は新規作成
+                    contact = { id: currentEditingContactId };
                 }
+            } else {
+                // 新規作成
+                contact = { id: generateId() };
             }
             
+            // フォームデータで更新
+            contact.name = formData.get('name');
+            contact.yomi = formData.get('yomi');
+            contact.company = formData.get('company');
+            contact.email = formData.get('email');
+            contact.phone = formData.get('phone');
+            contact.homepage = formData.get('homepage');
+            contact.referredBy = formData.get('referredBy');
+            contact.strengths = formData.get('strengths');
+            contact.careerHistory = formData.get('careerHistory');
+            contact.cutout = formData.get('cutout');
+            contact.area = formData.get('area');
+            contact.residence = formData.get('residence');
+            
+            // マルチセレクトの値を取得（空配列でも必ず設定）
+            contact.types = getSelectedValues('types');
+            contact.affiliations = getSelectedValues('affiliations');
+            contact.wantToConnect = getSelectedValues('wantToConnect');
+            contact.goldenEgg = getSelectedValues('goldenEgg');
+            
+            // タイムスタンプ
+            if (!contact.createdAt) {
+                contact.createdAt = new Date().toISOString();
+            }
+            contact.updatedAt = new Date().toISOString();
+            
+            // attachmentsが未定義の場合は空配列を設定
+            if (!contact.attachments) {
+                contact.attachments = [];
+            }
+            
+            console.log('保存するデータ:', contact);
+            
             try {
+                // 画像ファイルの処理
                 if (currentPhotoFile) {
                     const timestamp = new Date().getTime();
                     const photoName = `photo_${timestamp}.jpg`;
                     const photoResult = await uploadFile(currentPhotoFile, photoName, contact.name);
                     contact.photo = photoResult.id;
                     contact.photoUrl = photoResult.url;
+                    console.log('顔写真をアップロード:', photoResult);
                 }
                 
                 if (currentCardImageFile) {
@@ -3372,8 +3432,10 @@
                     const cardImageResult = await uploadFile(currentCardImageFile, cardImageName, contact.name);
                     contact.cardImage = cardImageResult.id;
                     contact.cardImageUrl = cardImageResult.url;
+                    console.log('名刺画像をアップロード:', cardImageResult);
                 }
                 
+                // 添付ファイルの処理
                 for (const file of selectedFiles) {
                     const timestamp = new Date().getTime();
                     const fileName = `${timestamp}_${sanitizeFileName(file.name)}`;
@@ -3384,17 +3446,24 @@
                         url: fileResult.url,
                         uploadedAt: new Date().toISOString()
                     });
+                    console.log('添付ファイルをアップロード:', file.name);
                 }
                 
-                contact.attachments = contact.attachments.filter(att => 
-                    !deletedAttachments.includes(att.id)
-                );
+                // 削除された添付ファイルを除外
+                if (contact.attachments && contact.attachments.length > 0) {
+                    contact.attachments = contact.attachments.filter(att => 
+                        !deletedAttachments.includes(att.id)
+                    );
+                }
                 
+                // 連絡先を保存（既存の場合は更新、新規の場合は追加）
                 const index = contacts.findIndex(c => c.id === contact.id);
                 if (index >= 0) {
                     contacts[index] = contact;
+                    console.log('連絡先を更新:', contact);
                 } else {
                     contacts.push(contact);
+                    console.log('新規連絡先を追加:', contact);
                 }
                 
                 const firstMeetingDatetime = formData.get('firstMeetingDatetime');
@@ -4896,6 +4965,12 @@
                 clearTimeout(draftSaveTimer);
                 draftSaveTimer = null;
             }
+            
+            // 連絡先フォームを閉じた場合のみcurrentEditingContactIdをクリア
+            if (modalId === 'contactFormModal') {
+                console.log('連絡先フォームを閉じました');
+                currentEditingContactId = null;
+            }
         }
 
         function updateConnectionStatus() {
@@ -5176,10 +5251,12 @@
         }
 
         function toggleOption(field, value) {
-            const display = event.target.closest('.multi-select').querySelector('.multi-select-display');
-            const checkbox = event.target.querySelector('input[type="checkbox"]');
+            console.log(`toggleOption(${field}, ${value})`);
             
-            if (checkbox) {
+            const checkbox = event.target.querySelector('input[type="checkbox"]') || 
+                            (event.target.tagName === 'INPUT' ? event.target : null);
+            
+            if (checkbox && event.target !== checkbox) {
                 checkbox.checked = !checkbox.checked;
             }
             
@@ -5187,12 +5264,32 @@
         }
 
         function getSelectedValues(field) {
-            const checkboxes = document.querySelectorAll(`#${field}-dropdown input[type="checkbox"]:checked`);
-            return Array.from(checkboxes).map(cb => cb.parentElement.querySelector('span').textContent);
+            const dropdown = document.getElementById(`${field}-dropdown`);
+            if (!dropdown) {
+                console.warn(`ドロップダウンが見つかりません: ${field}`);
+                return [];
+            }
+            
+            const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:checked');
+            const values = Array.from(checkboxes).map(cb => {
+                const span = cb.parentElement.querySelector('span');
+                return span ? span.textContent : '';
+            }).filter(v => v);
+            
+            console.log(`getSelectedValues(${field}):`, values);
+            return values;
         }
 
         function setSelectedValues(field, values) {
-            const checkboxes = document.querySelectorAll(`#${field}-dropdown input[type="checkbox"]`);
+            console.log(`setSelectedValues(${field}, ${JSON.stringify(values)})`);
+            
+            const dropdown = document.getElementById(`${field}-dropdown`);
+            if (!dropdown) {
+                console.error(`ドロップダウンが見つかりません: ${field}`);
+                return;
+            }
+            
+            const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
             checkboxes.forEach(cb => {
                 const value = cb.parentElement.querySelector('span').textContent;
                 cb.checked = values.includes(value);
@@ -5240,6 +5337,8 @@
 
         // ===== フォームリセット =====
         function resetContactForm() {
+            console.log('=== フォームリセット開始 ===');
+            
             document.getElementById('contactForm').reset();
             document.getElementById('photoPreview').innerHTML = '';
             document.getElementById('cardImagePreview').innerHTML = '';
@@ -5251,17 +5350,24 @@
             deletedAttachments = [];
             
             ['types', 'affiliations', 'wantToConnect', 'goldenEgg'].forEach(field => {
-                const checkboxes = document.querySelectorAll(`#${field}-dropdown input[type="checkbox"]`);
-                checkboxes.forEach(cb => cb.checked = false);
-                
-                const display = document.querySelector(`#${field}-dropdown`).previousElementSibling;
-                display.innerHTML = '<span style="color: #aaaaaa;">選択してください</span>';
+                const dropdown = document.getElementById(`${field}-dropdown`);
+                if (dropdown) {
+                    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach(cb => cb.checked = false);
+                    
+                    const display = dropdown.previousElementSibling;
+                    if (display) {
+                        display.innerHTML = '<span style="color: #aaaaaa;">選択してください</span>';
+                    }
+                }
             });
             
             selectedFirstMeetingFiles = [];
             document.getElementById('firstMeetingSection').style.display = 'none';
             document.getElementById('firstMeetingTaskContainer').innerHTML = '';
             document.getElementById('firstMeetingAttachments').innerHTML = '';
+            
+            console.log('フォームリセット完了');
         }
 
         function resetMeetingForm() {
@@ -6306,10 +6412,7 @@
             initializeApp();
         };
 
-        function handleCredentialResponse(response) {
-            console.log("ID token received");
-        }
     </script>
 </body>
 </html>
-                                     
+                
