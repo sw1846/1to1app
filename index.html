@@ -2471,11 +2471,7 @@
             document.getElementById('setupWizard').style.display = 'none';
             
             try {
-                google.accounts.id.initialize({
-                    client_id: CLIENT_ID,
-                    callback: handleCredentialResponse
-                });
-                
+                // OAuth 2.0フローを使用しているため、Google IDサービスの初期化は不要
                 initializeGisClient();
                 gapi.load('client', initializeGapiClient);
             } catch (error) {
@@ -2537,11 +2533,7 @@
             console.log('Google APIを初期化します');
             
             try {
-                google.accounts.id.initialize({
-                    client_id: CLIENT_ID,
-                    callback: handleCredentialResponse
-                });
-                
+                // OAuth 2.0フローを使用しているため、Google IDサービスの初期化は不要
                 initializeGisClient();
                 gapi.load('client', initializeGapiClient);
             } catch (error) {
@@ -6415,4 +6407,3 @@
     </script>
 </body>
 </html>
-                
