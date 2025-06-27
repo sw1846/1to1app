@@ -5,9 +5,14 @@ function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-// セキュリティ改善: より堅牢なHTMLエスケープ
+// セキュリティ改善: より堅牢なHTMLエスケープ（URL対応版）
 function escapeHtml(text) {
     if (!text) return '';
+    
+    // URLの場合はエスケープしない
+    if (typeof text === 'string' && (text.startsWith('http://') || text.startsWith('https://'))) {
+        return text;
+    }
     
     const escapeMap = {
         '&': '&amp;',
@@ -15,12 +20,11 @@ function escapeHtml(text) {
         '>': '&gt;',
         '"': '&quot;',
         "'": '&#39;',
-        '/': '&#x2F;',
         '`': '&#x60;',
         '=': '&#x3D;'
     };
     
-    return String(text).replace(/[&<>"'`=\/]/g, (char) => escapeMap[char]);
+    return String(text).replace(/[&<>"'`=]/g, (char) => escapeMap[char]);
 }
 
 // 日付フォーマット
@@ -35,13 +39,13 @@ function formatDateTime(datetime) {
     return `${formatDate(d)} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
-// ファイル名のサニタイズ
+// ファイル名のサニタイズ（日本語対応版）
 function sanitizeFileName(fileName) {
-    // より厳格なサニタイズ
+    // 日本語文字を保持しつつ、ファイルシステムで問題になる文字のみを置換
     return fileName
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .replace(/_{2,}/g, '_')
-        .substring(0, 100); // 長さ制限
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+        .replace(/\.+$/, '') // 末尾のドットを削除
+        .substring(0, 200); // 長さ制限を緩和
 }
 
 // 通知表示
@@ -128,8 +132,11 @@ async function getSecureImageUrl(fileId) {
 function renderMarkdown(text) {
     if (!text) return '';
     
-    // まずHTMLエスケープ
-    let safeText = escapeHtml(text);
+    // まずHTMLエスケープ（ただしURLは除外）
+    let safeText = text.split(/(\bhttps?:\/\/[^\s<]+)/g).map((part, index) => {
+        // 奇数インデックスはURL
+        return index % 2 === 1 ? part : escapeHtml(part);
+    }).join('');
     
     // コードブロックの処理
     const codeBlocks = [];
@@ -201,21 +208,47 @@ function isValidUrl(string) {
 
 // テキストのリンク化（セキュリティ改善版）
 function linkifyText(text) {
-    // まずHTMLエスケープ
-    const safeText = escapeHtml(text);
+    if (!text) return '';
     
+    // URLパターンとメールパターン
     const urlPattern = /(https?:\/\/[^\s<]+)/g;
     const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     
-    let result = safeText;
-    result = result.replace(urlPattern, (url) => {
-        if (isValidUrl(url)) {
-            return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-        }
-        return url;
+    // まず安全なテキストに変換（URLとメールアドレスは保持）
+    let result = text;
+    
+    // メールアドレスを一時的に置換
+    const emailPlaceholders = [];
+    result = result.replace(emailPattern, (match) => {
+        emailPlaceholders.push(match);
+        return `__EMAIL_${emailPlaceholders.length - 1}__`;
     });
     
-    result = result.replace(emailPattern, '<a href="mailto:$1">$1</a>');
+    // URLを一時的に置換
+    const urlPlaceholders = [];
+    result = result.replace(urlPattern, (match) => {
+        urlPlaceholders.push(match);
+        return `__URL_${urlPlaceholders.length - 1}__`;
+    });
+    
+    // HTMLエスケープ
+    result = escapeHtml(result);
+    
+    // URLを戻してリンク化
+    urlPlaceholders.forEach((url, index) => {
+        if (isValidUrl(url)) {
+            result = result.replace(`__URL_${index}__`, 
+                `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+        } else {
+            result = result.replace(`__URL_${index}__`, url);
+        }
+    });
+    
+    // メールアドレスを戻してリンク化
+    emailPlaceholders.forEach((email, index) => {
+        result = result.replace(`__EMAIL_${index}__`, 
+            `<a href="mailto:${email}">${email}</a>`);
+    });
     
     return result;
 }
@@ -249,25 +282,41 @@ function getLastMeetingDate(contactId) {
         .sort((a, b) => b - a)[0];
 }
 
-// ファイル種別に応じた開き方（セキュリティ改善版）
+// ファイル種別に応じた開き方（PDF対応版）
 async function openFile(fileIdOrUrl, filename) {
     try {
         let url = fileIdOrUrl;
+        let fileId = null;
         
         // URLかIDかを判定
         if (fileIdOrUrl && (fileIdOrUrl.startsWith('http://') || fileIdOrUrl.startsWith('https://'))) {
-            // URLの場合は直接リンクに変換
+            // URLからファイルIDを抽出
+            const match = fileIdOrUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) {
+                fileId = match[1];
+            }
             url = toDirectLink(fileIdOrUrl);
         } else if (fileIdOrUrl && fileIdOrUrl.length > 10 && !fileIdOrUrl.includes('/')) {
-            // ファイルIDの場合は認証付きURLを取得
-            url = await getAuthenticatedFileUrl(fileIdOrUrl);
-            if (!url) {
-                showNotification('ファイルへのアクセスに失敗しました', 'error');
-                return;
+            // ファイルIDの場合
+            fileId = fileIdOrUrl;
+            // PDFの場合は特別な処理
+            if (filename && filename.toLowerCase().endsWith('.pdf')) {
+                url = `https://drive.google.com/file/d/${fileId}/preview`;
+            } else {
+                url = await getAuthenticatedFileUrl(fileIdOrUrl);
+                if (!url) {
+                    showNotification('ファイルへのアクセスに失敗しました', 'error');
+                    return;
+                }
             }
         } else {
             showNotification('無効なファイル参照です', 'error');
             return;
+        }
+        
+        // PDFの場合はプレビューURLを使用
+        if (filename && filename.toLowerCase().endsWith('.pdf') && fileId) {
+            url = `https://drive.google.com/file/d/${fileId}/preview`;
         }
         
         // 新規タブで開く
@@ -282,11 +331,12 @@ async function openFile(fileIdOrUrl, filename) {
 function setContentSecurityPolicy() {
     const meta = document.createElement('meta');
     meta.httpEquiv = 'Content-Security-Policy';
-    meta.content = "default-src 'self' https://*.googleapis.com https://*.googleusercontent.com https://drive.google.com; " +
+    meta.content = "default-src 'self' https://*.googleapis.com https://*.googleusercontent.com https://drive.google.com https://www.google.com; " +
                    "script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com; " +
                    "style-src 'self' 'unsafe-inline'; " +
-                   "img-src 'self' data: https://*.googleusercontent.com https://*.googleapis.com https://drive.google.com https://lh3.googleusercontent.com; " +
-                   "connect-src 'self' https://*.googleapis.com https://apis.google.com";
+                   "img-src 'self' data: https://*.googleusercontent.com https://*.googleapis.com https://drive.google.com https://lh3.googleusercontent.com https://www.google.com; " +
+                   "connect-src 'self' https://*.googleapis.com https://apis.google.com https://www.google.com; " +
+                   "frame-src 'self' https://drive.google.com https://accounts.google.com";
     document.head.appendChild(meta);
 }
 

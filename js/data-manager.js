@@ -8,13 +8,6 @@ async function loadData() {
         const contactsData = await loadJsonFile('contacts.json');
         contacts = contactsData || [];
         
-        // データ読み込み時のログ
-        console.log('=== 読み込んだ連絡先データ ===');
-        console.log('連絡先数:', contacts.length);
-        if (contacts.length > 0) {
-            console.log('サンプルデータ:', contacts[0]);
-        }
-        
         const meetingsData = await loadJsonFile('meetings.json');
         meetings = meetingsData || [];
         
@@ -41,12 +34,6 @@ async function loadData() {
 // データ保存
 async function saveData() {
     try {
-        console.log('=== データ保存 ===');
-        console.log('保存する連絡先数:', contacts.length);
-        if (contacts.length > 0) {
-            console.log('サンプル連絡先データ:', contacts[0]);
-        }
-        
         const savePromises = [];
         
         savePromises.push(saveJsonFile('contacts.json', contacts));
@@ -177,10 +164,14 @@ async function importData(event) {
         
         for (const contact of importedData.contacts) {
             if (!existingContactIds.has(contact.id)) {
+                // 新しいフィールドのデフォルト値を設定
                 if (!contact.hasOwnProperty('yomi')) contact.yomi = '';
                 if (!contact.hasOwnProperty('cutout')) contact.cutout = '';
                 if (!contact.hasOwnProperty('cardImage')) contact.cardImage = '';
                 if (!contact.hasOwnProperty('cardImageUrl')) contact.cardImageUrl = '';
+                if (!contact.hasOwnProperty('emails')) contact.emails = contact.email ? [contact.email] : [];
+                if (!contact.hasOwnProperty('phones')) contact.phones = contact.phone ? [contact.phone] : [];
+                if (!contact.hasOwnProperty('relatedContacts')) contact.relatedContacts = [];
                 
                 // 画像URLを修正
                 contact = fixContactImageUrls(contact);
@@ -229,11 +220,12 @@ async function importData(event) {
     }
 }
 
-// データマイグレーション
+// データマイグレーション（拡張版）
 function migrateContactsData() {
     let needsSave = false;
     
     contacts.forEach(contact => {
+        // 既存フィールドのマイグレーション
         if (!contact.hasOwnProperty('yomi')) {
             contact.yomi = '';
             needsSave = true;
@@ -251,23 +243,37 @@ function migrateContactsData() {
             needsSave = true;
         }
         
+        // 新規フィールド：複数メール・電話対応
+        if (!contact.hasOwnProperty('emails')) {
+            contact.emails = contact.email ? [contact.email] : [];
+            needsSave = true;
+        }
+        if (!contact.hasOwnProperty('phones')) {
+            contact.phones = contact.phone ? [contact.phone] : [];
+            needsSave = true;
+        }
+        
+        // 新規フィールド：関係者リンク
+        if (!contact.hasOwnProperty('relatedContacts')) {
+            contact.relatedContacts = [];
+            needsSave = true;
+        }
+        
         // ファイルパス形式のphotoフィールドをクリーンアップ
         if (contact.photo && contact.photo.startsWith('/')) {
-            console.log(`ファイルパス形式のphotoフィールドを削除: ${contact.name} - ${contact.photo}`);
             delete contact.photo;
             needsSave = true;
         }
         
         // ファイルパス形式のcardImageフィールドをクリーンアップ
         if (contact.cardImage && contact.cardImage.startsWith('/')) {
-            console.log(`ファイルパス形式のcardImageフィールドを削除: ${contact.name} - ${contact.cardImage}`);
             delete contact.cardImage;
             needsSave = true;
         }
     });
     
     if (needsSave) {
-        console.log('連絡先データに新しいフィールドを追加しました');
+        console.log('連絡先データをマイグレーションしました');
     }
 }
 
@@ -337,36 +343,6 @@ function fixContactImageUrls(contact) {
     return contact;
 }
 
-// Google Drive画像URLを修正する関数
-function fixDriveImageUrl(url) {
-    if (!url) return '';
-    
-    // すでにlh3.googleusercontent.comの場合はそのまま
-    if (url.includes('lh3.googleusercontent.com/d/')) {
-        return url;
-    }
-    
-    // drive.google.com/file/d/{id}/view 形式から ID を抽出
-    const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
-    if (fileMatch && fileMatch[1]) {
-        return `https://lh3.googleusercontent.com/d/${fileMatch[1]}`;
-    }
-    
-    // drive.google.com/open?id={id} 形式から ID を抽出
-    const openMatch = url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
-    if (openMatch && openMatch[1]) {
-        return `https://lh3.googleusercontent.com/d/${openMatch[1]}`;
-    }
-    
-    // その他のGoogle DriveのURL形式
-    const driveMatch = url.match(/drive\.google\.com.*[/?&]([a-zA-Z0-9-_]{20,})/);
-    if (driveMatch && driveMatch[1]) {
-        return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-    }
-    
-    return url;
-}
-
 // 写真URLマイグレーション（既存の関数名を維持）
 function migratePhotoUrls() {
     console.log('=== 顔写真URLのマイグレーション開始 ===');
@@ -379,7 +355,6 @@ function migratePhotoUrls() {
         
         // Dropbox URLをチェックして削除
         if (contact.photoUrl && contact.photoUrl.includes('dropbox')) {
-            console.log(`🚫 Dropbox URLを検出（顔写真）: ${contact.name} - ${contact.photoUrl}`);
             delete contact.photoUrl;
             dropboxCount++;
             updated = true;
@@ -387,7 +362,6 @@ function migratePhotoUrls() {
         }
         
         if (contact.cardImageUrl && contact.cardImageUrl.includes('dropbox')) {
-            console.log(`🚫 Dropbox URLを検出（名刺）: ${contact.name} - ${contact.cardImageUrl}`);
             delete contact.cardImageUrl;
             dropboxCount++;
             updated = true;
@@ -398,7 +372,6 @@ function migratePhotoUrls() {
         if (contact.attachments && contact.attachments.length > 0) {
             contact.attachments = contact.attachments.filter(att => {
                 if (att.url && att.url.includes('dropbox')) {
-                    console.log(`🚫 Dropbox URLを検出（添付ファイル）: ${contact.name} - ${att.name}`);
                     dropboxCount++;
                     needsSave = true;
                     return false;
@@ -414,9 +387,6 @@ function migratePhotoUrls() {
             if (oldUrl !== newUrl) {
                 contact.photoUrl = newUrl;
                 updated = true;
-                console.log(`✅ 顔写真URLを変換: ${contact.name}`);
-                console.log(`   旧: ${oldUrl}`);
-                console.log(`   新: ${newUrl}`);
             }
         }
         
@@ -426,7 +396,6 @@ function migratePhotoUrls() {
             if (oldUrl !== newUrl) {
                 contact.cardImageUrl = newUrl;
                 updated = true;
-                console.log(`✅ 名刺画像URLを変換: ${contact.name}`);
             }
         }
         
@@ -439,7 +408,6 @@ function migratePhotoUrls() {
                     if (oldUrl !== newUrl) {
                         att.url = newUrl;
                         updated = true;
-                        console.log(`✅ 添付ファイルURLを変換: ${contact.name} - ${att.name}`);
                     }
                 }
             });
@@ -459,7 +427,6 @@ function migratePhotoUrls() {
             const originalLength = meeting.attachments.length;
             meeting.attachments = meeting.attachments.filter(att => {
                 if (att.url && att.url.includes('dropbox')) {
-                    console.log(`🚫 Dropbox URLを検出（ミーティング添付）: ${att.name}`);
                     dropboxCount++;
                     needsSave = true;
                     return false;
@@ -475,7 +442,6 @@ function migratePhotoUrls() {
                     if (oldUrl !== newUrl) {
                         att.url = newUrl;
                         meetingUpdated = true;
-                        console.log(`✅ ミーティング添付ファイルURLを変換: ${att.name}`);
                     }
                 }
             });
@@ -488,12 +454,10 @@ function migratePhotoUrls() {
     });
     
     if (dropboxCount > 0) {
-        console.log(`⚠️ ${dropboxCount}件のDropbox URLを削除しました`);
         showNotification(`${dropboxCount}件の古いDropboxリンクを削除しました`, 'info');
     }
     
     if (needsSave) {
-        console.log(`📊 ${migratedCount}件の画像URLを変換しました`);
         saveData().catch(error => {
             console.error('マイグレーション後の保存エラー:', error);
         });
@@ -502,7 +466,6 @@ function migratePhotoUrls() {
 
 // 既存の画像URLを修正（新規追加関数）
 async function fixImageUrls() {
-    console.log('=== 画像URLの修正開始 ===');
     let needsSave = false;
     
     contacts.forEach(contact => {
@@ -512,25 +475,16 @@ async function fixImageUrls() {
         contact = fixContactImageUrls(contact);
         
         if (originalPhotoUrl !== contact.photoUrl) {
-            console.log(`✅ 顔写真URLを修正: ${contact.name}`);
-            console.log(`   旧: ${originalPhotoUrl}`);
-            console.log(`   新: ${contact.photoUrl}`);
             needsSave = true;
         }
         
         if (originalCardImageUrl !== contact.cardImageUrl) {
-            console.log(`✅ 名刺画像URLを修正: ${contact.name}`);
-            console.log(`   旧: ${originalCardImageUrl}`);
-            console.log(`   新: ${contact.cardImageUrl}`);
             needsSave = true;
         }
     });
     
     if (needsSave) {
-        console.log('画像URLを修正しました。保存します...');
         await saveData();
-    } else {
-        console.log('修正が必要な画像URLはありませんでした。');
     }
 }
 

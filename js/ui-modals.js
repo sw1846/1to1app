@@ -20,20 +20,19 @@ function closeModal(modalId) {
     
     // 連絡先フォームを閉じた場合のみcurrentEditingContactIdをクリア
     if (modalId === 'contactFormModal') {
-        console.log('連絡先フォームを閉じました');
         currentEditingContactId = null;
     }
 }
 
 // フォームリセット
 function resetContactForm() {
-    console.log('=== フォームリセット開始 ===');
-    
     document.getElementById('contactForm').reset();
     document.getElementById('photoPreview').innerHTML = '';
     document.getElementById('cardImagePreview').innerHTML = '';
     document.getElementById('existingAttachments').innerHTML = '';
     document.getElementById('newAttachments').innerHTML = '';
+    document.getElementById('emailContainer').innerHTML = '';
+    document.getElementById('phoneContainer').innerHTML = '';
     currentPhotoFile = null;
     currentCardImageFile = null;
     selectedFiles = [];
@@ -56,8 +55,7 @@ function resetContactForm() {
     document.getElementById('firstMeetingSection').style.display = 'none';
     document.getElementById('firstMeetingTaskContainer').innerHTML = '';
     document.getElementById('firstMeetingAttachments').innerHTML = '';
-    
-    console.log('フォームリセット完了');
+    document.getElementById('relatedContactsContainer').innerHTML = '';
 }
 
 function resetMeetingForm() {
@@ -135,8 +133,8 @@ function renderMultiSelectOptions(field, options, selectedValues) {
             <span>${escapeHtml(option)}</span>
         </div>
     `).join('') + `
-        <div class="multi-select-option" onclick="addNewOption('${field}')">
-            <span style="color: #4c8bf5;">+ 新しい項目を追加</span>
+        <div class="multi-select-option" onclick="addNewOptions('${field}')">
+            <span style="color: #4c8bf5;">+ 新しい項目を追加（複数可）</span>
         </div>
     `;
 }
@@ -183,8 +181,6 @@ function toggleMultiSelect(field) {
 
 // オプショントグル
 function toggleOption(field, value) {
-    console.log(`toggleOption(${field}, ${value})`);
-    
     const checkbox = event.target.querySelector('input[type="checkbox"]') || 
                     (event.target.tagName === 'INPUT' ? event.target : null);
     
@@ -199,7 +195,6 @@ function toggleOption(field, value) {
 function getSelectedValues(field) {
     const dropdown = document.getElementById(`${field}-dropdown`);
     if (!dropdown) {
-        console.warn(`ドロップダウンが見つかりません: ${field}`);
         return [];
     }
     
@@ -207,19 +202,15 @@ function getSelectedValues(field) {
     const values = Array.from(checkboxes).map(cb => {
         const span = cb.parentElement.querySelector('span');
         return span ? span.textContent : '';
-    }).filter(v => v && v !== '+ 新しい項目を追加');
+    }).filter(v => v && v !== '+ 新しい項目を追加（複数可）');
     
-    console.log(`getSelectedValues(${field}):`, values);
     return values;
 }
 
 // 選択値設定
 function setSelectedValues(field, values) {
-    console.log(`setSelectedValues(${field}, ${JSON.stringify(values)})`);
-    
     const dropdown = document.getElementById(`${field}-dropdown`);
     if (!dropdown) {
-        console.error(`ドロップダウンが見つかりません: ${field}`);
         return;
     }
     
@@ -262,7 +253,40 @@ function removeSelectedValue(field, value) {
     }
 }
 
-// 新規オプション追加
+// 複数の新規オプション追加（改善版）
+async function addNewOptions(field) {
+    event.stopPropagation();
+    const input = prompt('新しい項目を入力してください（複数の場合はカンマ区切り）:');
+    if (!input || !input.trim()) return;
+    
+    // カンマで分割して各項目を処理
+    const newItems = input.split(',').map(item => item.trim()).filter(item => item);
+    const addedItems = [];
+    
+    for (const item of newItems) {
+        if (!dropdownOptions[field].includes(item)) {
+            dropdownOptions[field].push(item);
+            addedItems.push(item);
+        }
+    }
+    
+    if (addedItems.length > 0) {
+        dropdownOptions[field].sort((a, b) => a.localeCompare(b, 'ja'));
+        updateMultiSelectOptions(field, dropdownOptions[field]);
+        
+        // 追加した項目を自動的に選択状態にする
+        const currentSelected = getSelectedValues(field);
+        const newSelected = [...currentSelected, ...addedItems];
+        setSelectedValues(field, newSelected);
+        
+        updateDropdownOptions();
+        await saveData();
+        
+        showNotification(`${addedItems.length}個の項目を追加しました`);
+    }
+}
+
+// 単一の新規オプション追加（既存の関数を維持）
 async function addNewOption(field) {
     event.stopPropagation();
     const newValue = prompt('新しい項目を入力してください:');
@@ -276,6 +300,56 @@ async function addNewOption(field) {
             await saveData();
         }
     }
+}
+
+// メールアドレス入力欄を追加
+function addEmailInput(value = '') {
+    const container = document.getElementById('emailContainer');
+    const emailDiv = document.createElement('div');
+    emailDiv.className = 'multi-input-row';
+    emailDiv.innerHTML = `
+        <input type="email" name="emails[]" value="${escapeHtml(value)}" placeholder="メールアドレス">
+        <button type="button" class="btn-small btn-danger" onclick="removeInput(this)">削除</button>
+    `;
+    container.appendChild(emailDiv);
+}
+
+// 電話番号入力欄を追加
+function addPhoneInput(value = '') {
+    const container = document.getElementById('phoneContainer');
+    const phoneDiv = document.createElement('div');
+    phoneDiv.className = 'multi-input-row';
+    phoneDiv.innerHTML = `
+        <input type="tel" name="phones[]" value="${escapeHtml(value)}" placeholder="電話番号">
+        <button type="button" class="btn-small btn-danger" onclick="removeInput(this)">削除</button>
+    `;
+    container.appendChild(phoneDiv);
+}
+
+// 入力欄を削除
+function removeInput(button) {
+    button.closest('.multi-input-row').remove();
+}
+
+// 関係者を追加
+function addRelatedContact(contactId = '') {
+    const container = document.getElementById('relatedContactsContainer');
+    const relatedDiv = document.createElement('div');
+    relatedDiv.className = 'related-contact-row';
+    
+    // 現在編集中の連絡先を除外したリスト
+    const availableContacts = contacts.filter(c => c.id !== currentEditingContactId);
+    
+    relatedDiv.innerHTML = `
+        <select name="relatedContacts[]">
+            <option value="">選択してください</option>
+            ${availableContacts.map(c => 
+                `<option value="${c.id}" ${c.id === contactId ? 'selected' : ''}>${escapeHtml(c.name)}${c.company ? ' - ' + escapeHtml(c.company) : ''}</option>`
+            ).join('')}
+        </select>
+        <button type="button" class="btn-small btn-danger" onclick="removeInput(this)">削除</button>
+    `;
+    container.appendChild(relatedDiv);
 }
 
 // インクリメンタルサーチ付きセレクトクラス

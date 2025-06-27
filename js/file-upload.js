@@ -250,3 +250,22 @@ function removeFirstMeetingAttachment(index) {
     selectedFirstMeetingFiles.splice(index, 1);
     displayFirstMeetingAttachments();
 }
+
+// ファイル名に氏名を追加する関数
+function addContactNameToFileName(originalFileName, contactName) {
+    // ファイル拡張子を取得
+    const lastDotIndex = originalFileName.lastIndexOf('.');
+    let extension = '';
+    let baseName = originalFileName;
+    
+    if (lastDotIndex > -1) {
+        extension = originalFileName.substring(lastDotIndex);
+        baseName = originalFileName.substring(0, lastDotIndex);
+    }
+    
+    // 氏名を安全なファイル名形式に変換
+    const safeContactName = sanitizeFileName(contactName);
+    
+    // 新しいファイル名を構築
+    return `${safeContactName}_${baseName}${extension}`;
+}

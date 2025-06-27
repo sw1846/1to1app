@@ -2,9 +2,6 @@
 
 // 連絡先フォーム表示
 function showContactForm(contactId = null) {
-    console.log('=== showContactForm ===');
-    console.log('contactId:', contactId);
-    
     closeModal('contactDetailModal');
     
     currentEditingContactId = contactId;
@@ -13,17 +10,11 @@ function showContactForm(contactId = null) {
     if (contactId) {
         const contact = contacts.find(c => c.id === contactId);
         if (contact) {
-            console.log('=== 編集フォームに設定するデータ ===');
-            console.log('連絡先:', contact);
-            
             document.getElementById('contactFormTitle').textContent = '連絡先編集';
             const form = document.getElementById('contactForm');
             form.name.value = contact.name || '';
             form.yomi.value = contact.yomi || '';
             form.company.value = contact.company || '';
-            form.email.value = contact.email || '';
-            form.phone.value = contact.phone || '';
-            form.homepage.value = contact.homepage || '';
             form.referredBy.value = contact.referredBy || '';
             form.strengths.value = contact.strengths || '';
             form.careerHistory.value = contact.careerHistory || '';
@@ -31,8 +22,30 @@ function showContactForm(contactId = null) {
             form.area.value = contact.area || '';
             form.residence.value = contact.residence || '';
             
-            console.log('強み設定値:', contact.strengths);
-            console.log('経歴設定値:', contact.careerHistory);
+            // 複数メールアドレスの設定
+            if (contact.emails && contact.emails.length > 0) {
+                contact.emails.forEach(email => addEmailInput(email));
+            } else if (contact.email) {
+                // 旧形式からの移行
+                addEmailInput(contact.email);
+            } else {
+                addEmailInput();
+            }
+            
+            // 複数電話番号の設定
+            if (contact.phones && contact.phones.length > 0) {
+                contact.phones.forEach(phone => addPhoneInput(phone));
+            } else if (contact.phone) {
+                // 旧形式からの移行
+                addPhoneInput(contact.phone);
+            } else {
+                addPhoneInput();
+            }
+            
+            // 関係者の設定
+            if (contact.relatedContacts && contact.relatedContacts.length > 0) {
+                contact.relatedContacts.forEach(relatedId => addRelatedContact(relatedId));
+            }
             
             if (contact.photoUrl && !contact.photoUrl.includes('dropbox')) {
                 document.getElementById('photoPreview').innerHTML = 
@@ -49,9 +62,6 @@ function showContactForm(contactId = null) {
             setSelectedValues('affiliations', contact.affiliations || []);
             setSelectedValues('wantToConnect', contact.wantToConnect || []);
             setSelectedValues('goldenEgg', contact.goldenEgg || []);
-            
-            console.log('種別設定値:', contact.types);
-            console.log('所属設定値:', contact.affiliations);
             
             displayExistingAttachments(contact.attachments || []);
             
@@ -70,6 +80,10 @@ function showContactForm(contactId = null) {
         }
     } else {
         document.getElementById('contactFormTitle').textContent = '新規連絡先登録';
+        
+        // デフォルトで1つずつ入力欄を追加
+        addEmailInput();
+        addPhoneInput();
         
         document.getElementById('firstMeetingSection').style.display = 'block';
         document.getElementById('firstMeetingSection').classList.add('first-meeting-new');
@@ -95,13 +109,6 @@ async function saveContactForm(event) {
     
     const formData = new FormData(event.target);
     
-    // デバッグログ追加
-    console.log('=== 保存前のデータ確認 ===');
-    console.log('types:', getSelectedValues('types'));
-    console.log('affiliations:', getSelectedValues('affiliations'));
-    console.log('strengths:', formData.get('strengths'));
-    console.log('careerHistory:', formData.get('careerHistory'));
-    
     // 既存データをベースに更新（編集時）
     let contact;
     if (currentEditingContactId) {
@@ -109,7 +116,6 @@ async function saveContactForm(event) {
         if (existing) {
             // 既存データをコピーしてから更新
             contact = { ...existing };
-            console.log('既存データ:', existing);
         } else {
             // 既存データが見つからない場合は新規作成
             contact = { id: currentEditingContactId };
@@ -123,15 +129,19 @@ async function saveContactForm(event) {
     contact.name = formData.get('name');
     contact.yomi = formData.get('yomi');
     contact.company = formData.get('company');
-    contact.email = formData.get('email');
-    contact.phone = formData.get('phone');
-    contact.homepage = formData.get('homepage');
     contact.referredBy = formData.get('referredBy');
     contact.strengths = formData.get('strengths');
     contact.careerHistory = formData.get('careerHistory');
     contact.cutout = formData.get('cutout');
     contact.area = formData.get('area');
     contact.residence = formData.get('residence');
+    
+    // 複数メールアドレス・電話番号の取得
+    contact.emails = formData.getAll('emails[]').filter(email => email.trim());
+    contact.phones = formData.getAll('phones[]').filter(phone => phone.trim());
+    
+    // 関係者の取得
+    contact.relatedContacts = formData.getAll('relatedContacts[]').filter(id => id);
     
     // マルチセレクトの値を取得（空配列でも必ず設定）
     contact.types = getSelectedValues('types');
@@ -150,32 +160,28 @@ async function saveContactForm(event) {
         contact.attachments = [];
     }
     
-    console.log('保存するデータ:', contact);
-    
     try {
-        // 画像ファイルの処理
+        // 画像ファイルの処理（氏名を含むファイル名で保存）
         if (currentPhotoFile) {
             const timestamp = new Date().getTime();
-            const photoName = `photo_${timestamp}.jpg`;
+            const photoName = addContactNameToFileName(`photo_${timestamp}.jpg`, contact.name);
             const photoResult = await uploadFile(currentPhotoFile, photoName, contact.name);
             contact.photo = photoResult.id;
             contact.photoUrl = photoResult.url;
-            console.log('顔写真をアップロード:', photoResult);
         }
         
         if (currentCardImageFile) {
             const timestamp = new Date().getTime();
-            const cardImageName = `名刺_${timestamp}.jpg`;
+            const cardImageName = addContactNameToFileName(`名刺_${timestamp}.jpg`, contact.name);
             const cardImageResult = await uploadFile(currentCardImageFile, cardImageName, contact.name);
             contact.cardImage = cardImageResult.id;
             contact.cardImageUrl = cardImageResult.url;
-            console.log('名刺画像をアップロード:', cardImageResult);
         }
         
-        // 添付ファイルの処理
+        // 添付ファイルの処理（氏名を含むファイル名で保存）
         for (const file of selectedFiles) {
             const timestamp = new Date().getTime();
-            const fileName = `${timestamp}_${sanitizeFileName(file.name)}`;
+            const fileName = addContactNameToFileName(`${timestamp}_${file.name}`, contact.name);
             const fileResult = await uploadFile(file, fileName, contact.name);
             contact.attachments.push({
                 name: file.name,
@@ -183,7 +189,6 @@ async function saveContactForm(event) {
                 url: fileResult.url,
                 uploadedAt: new Date().toISOString()
             });
-            console.log('添付ファイルをアップロード:', file.name);
         }
         
         // 削除された添付ファイルを除外
@@ -197,10 +202,8 @@ async function saveContactForm(event) {
         const index = contacts.findIndex(c => c.id === contact.id);
         if (index >= 0) {
             contacts[index] = contact;
-            console.log('連絡先を更新:', contact);
         } else {
             contacts.push(contact);
-            console.log('新規連絡先を追加:', contact);
         }
         
         // 初回ミーティングの処理
@@ -239,7 +242,7 @@ async function saveContactForm(event) {
             
             for (const file of selectedFirstMeetingFiles) {
                 const timestamp = new Date().getTime();
-                const fileName = `firstmeeting_${timestamp}_${sanitizeFileName(file.name)}`;
+                const fileName = addContactNameToFileName(`firstmeeting_${timestamp}_${file.name}`, contact.name);
                 const fileResult = await uploadFile(file, fileName, contact.name);
                 firstMeeting.attachments.push({
                     name: file.name,
@@ -316,6 +319,31 @@ function showContactDetail(contactId) {
         </div>`;
     }
     
+    // 複数メール・電話の表示
+    const emailsHtml = contact.emails && contact.emails.length > 0 ? 
+        contact.emails.map(email => `<div style="margin-bottom: 4px;">${linkifyText(email)}</div>`).join('') :
+        (contact.email ? linkifyText(contact.email) : '');
+    
+    const phonesHtml = contact.phones && contact.phones.length > 0 ?
+        contact.phones.map(phone => `<div style="margin-bottom: 4px;">${escapeHtml(phone)}</div>`).join('') :
+        (contact.phone ? escapeHtml(contact.phone) : '');
+    
+    // 関係者の表示
+    let relatedContactsHtml = '';
+    if (contact.relatedContacts && contact.relatedContacts.length > 0) {
+        const relatedNames = contact.relatedContacts.map(relatedId => {
+            const related = contacts.find(c => c.id === relatedId);
+            if (related) {
+                return `<a href="#" onclick="showContactDetail('${related.id}'); return false;">${escapeHtml(related.name)}</a>`;
+            }
+            return null;
+        }).filter(Boolean);
+        
+        if (relatedNames.length > 0) {
+            relatedContactsHtml = `<tr><td style="padding: 8px 0; color: #aaaaaa;">関係者:</td><td style="padding: 8px 0;">${relatedNames.join('、')}</td></tr>`;
+        }
+    }
+    
     let html = `
         <div style="margin-bottom: 20px;">
             ${photoHtml}
@@ -333,12 +361,13 @@ function showContactDetail(contactId) {
         <div id="basic" class="tab-content active">
             <div class="tab-panel">
                 <table style="width: 100%; margin-bottom: 20px;">
-                    ${contact.email ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">メール:</td><td style="padding: 8px 0;">${linkifyText(escapeHtml(contact.email))}</td></tr>` : ''}
-                    ${contact.phone ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">電話:</td><td style="padding: 8px 0;">${escapeHtml(contact.phone)}</td></tr>` : ''}
-                    ${contact.homepage ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">HP:</td><td style="padding: 8px 0;">${linkifyText(escapeHtml(contact.homepage))}</td></tr>` : ''}
+                    ${emailsHtml ? `<tr><td style="padding: 8px 0; color: #aaaaaa; vertical-align: top;">メール:</td><td style="padding: 8px 0;">${emailsHtml}</td></tr>` : ''}
+                    ${phonesHtml ? `<tr><td style="padding: 8px 0; color: #aaaaaa; vertical-align: top;">電話:</td><td style="padding: 8px 0;">${phonesHtml}</td></tr>` : ''}
+                    ${contact.homepage ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">HP:</td><td style="padding: 8px 0;">${linkifyText(contact.homepage)}</td></tr>` : ''}
                     ${contact.area ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">エリア:</td><td style="padding: 8px 0;">${escapeHtml(contact.area)}</td></tr>` : ''}
                     ${contact.residence ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">居住地:</td><td style="padding: 8px 0;">${escapeHtml(contact.residence)}</td></tr>` : ''}
                     ${contact.referredBy ? `<tr><td style="padding: 8px 0; color: #aaaaaa;">紹介元:</td><td style="padding: 8px 0;">${getReferrerDisplay(contact)}</td></tr>` : ''}
+                    ${relatedContactsHtml}
                 </table>
                 
                 ${contact.types && contact.types.length > 0 ? `

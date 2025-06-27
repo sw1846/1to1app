@@ -18,14 +18,14 @@ function initializeGisClient() {
             if (response.error !== undefined) {
                 throw (response);
             }
-            // セキュリティ改善: トークンの有効期限を管理
+            // トークンの有効期限を管理
             accessToken = response.access_token;
             const expiresIn = response.expires_in || 3600; // デフォルト1時間
             tokenExpiresAt = Date.now() + (expiresIn * 1000);
             
-            // セッションストレージに保存（ブラウザを閉じると削除される）
-            sessionStorage.setItem('google_access_token', accessToken);
-            sessionStorage.setItem('token_expires_at', tokenExpiresAt);
+            // ローカルストレージに保存（より長期的な保存）
+            localStorage.setItem('google_access_token', accessToken);
+            localStorage.setItem('token_expires_at', tokenExpiresAt);
             
             handleAuthSuccess();
         },
@@ -37,9 +37,9 @@ function initializeGisClient() {
 // 初期化完了チェック
 function maybeEnableButtons() {
     if (gapiInited && gisInited) {
-        // セキュリティ改善: セッションストレージから取得
-        const savedToken = sessionStorage.getItem('google_access_token');
-        const expiresAt = sessionStorage.getItem('token_expires_at');
+        // ローカルストレージから取得（永続化）
+        const savedToken = localStorage.getItem('google_access_token');
+        const expiresAt = localStorage.getItem('token_expires_at');
         
         if (savedToken && expiresAt && Date.now() < parseInt(expiresAt)) {
             gapi.client.setToken({ access_token: savedToken });
@@ -56,6 +56,8 @@ function maybeEnableButtons() {
 
 // トークンをクリア
 function clearTokens() {
+    localStorage.removeItem('google_access_token');
+    localStorage.removeItem('token_expires_at');
     sessionStorage.removeItem('google_access_token');
     sessionStorage.removeItem('token_expires_at');
     accessToken = null;
@@ -74,8 +76,13 @@ async function validateTokenAndInitialize() {
         handleAuthSuccess();
     } catch (error) {
         console.error('Token validation failed:', error);
-        clearTokens();
-        showAuthScreen();
+        // エラー時は再認証を試みる
+        if (tokenClient) {
+            tokenClient.requestAccessToken({ prompt: '' });
+        } else {
+            clearTokens();
+            showAuthScreen();
+        }
     }
 }
 
@@ -88,7 +95,8 @@ function authenticateGoogle() {
     }
     
     if (tokenClient) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+        // promptを空にして、可能な限りサイレント認証を試みる
+        tokenClient.requestAccessToken({ prompt: '' });
     } else {
         showNotification('認証の初期化に失敗しました。ページを再読み込みしてください。', 'error');
     }
@@ -143,7 +151,7 @@ async function handleAuthSuccess() {
         renderOutstandingActions();
         updateContactCount();
         
-        // セキュリティ改善: トークン自動更新の設定
+        // トークン自動更新の設定
         scheduleTokenRefresh();
         
         hideLoading();
@@ -155,27 +163,48 @@ async function handleAuthSuccess() {
     }
 }
 
-// トークン自動更新のスケジュール
+// トークン自動更新のスケジュール（改善版）
 function scheduleTokenRefresh() {
     if (!tokenExpiresAt) return;
     
-    // 有効期限の5分前に更新
-    const refreshTime = tokenExpiresAt - Date.now() - (5 * 60 * 1000);
+    // 有効期限の10分前に更新（余裕を持たせる）
+    const refreshTime = tokenExpiresAt - Date.now() - (10 * 60 * 1000);
     
     if (refreshTime > 0) {
         setTimeout(() => {
             if (tokenClient) {
-                showNotification('認証を更新しています...', 'info');
+                // サイレント更新を試みる
                 tokenClient.requestAccessToken({ prompt: '' });
             }
         }, refreshTime);
+    } else {
+        // すでに期限が近い場合は即座に更新
+        if (tokenClient) {
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
     }
 }
 
 // API呼び出し前のトークンチェック
 async function ensureValidToken() {
     if (!isTokenValid()) {
-        throw new Error('認証の有効期限が切れています。再度ログインしてください。');
+        // トークンが無効な場合、サイレント更新を試みる
+        if (tokenClient) {
+            return new Promise((resolve, reject) => {
+                const originalCallback = tokenClient.callback;
+                tokenClient.callback = (response) => {
+                    originalCallback(response);
+                    if (response.error) {
+                        reject(new Error('認証の更新に失敗しました'));
+                    } else {
+                        resolve();
+                    }
+                };
+                tokenClient.requestAccessToken({ prompt: '' });
+            });
+        } else {
+            throw new Error('認証の有効期限が切れています。再度ログインしてください。');
+        }
     }
 }
 
