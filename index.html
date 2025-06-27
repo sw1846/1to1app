@@ -1704,9 +1704,65 @@
             font-size: 16px;
             color: #f0f0f0;
         }
+
+        /* エラー画面用スタイル */
+        .error-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .error-content {
+            max-width: 600px;
+            padding: 40px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            border: 1px solid #3a3a3a;
+            text-align: center;
+        }
+
+        .error-content h1 {
+            color: #d93025;
+            margin-bottom: 20px;
+        }
+
+        .error-content p {
+            color: #aaaaaa;
+            margin-bottom: 30px;
+        }
+
+        .error-details {
+            background: #333333;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            text-align: left;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #f0f0f0;
+        }
     </style>
 </head>
 <body>
+    <!-- エラー表示用コンテナ -->
+    <div id="errorContainer" class="error-container">
+        <div class="error-content">
+            <h1>エラーが発生しました</h1>
+            <p>システムの初期化中にエラーが発生しました。</p>
+            <div id="errorDetails" class="error-details"></div>
+            <button class="btn-primary" onclick="location.reload()">ページを再読み込み</button>
+        </div>
+    </div>
+
     <div id="app">
         <!-- セットアップウィザード -->
         <div id="setupWizard" class="setup-wizard" style="display: none;">
@@ -2378,24 +2434,54 @@
         let CLIENT_ID = localStorage.getItem('googleClientId');
         let viewMode = 'card';
         let filterVisible = false;
+        let currentStep = 1;
 
         // Google API設定
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
         const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
 
-        // 初期化時にクライアントIDをチェック
-        if (!CLIENT_ID) {
-            // セットアップが必要
-            document.getElementById('setupWizard').style.display = 'block';
-        } else {
-            // Google APIの初期化
-            gapiLoaded();
-            gisLoaded();
+        // エラーハンドリング設定
+        window.addEventListener('error', function(event) {
+            console.error('JavaScript Error:', event.error);
+            showError(event.error.message || 'Unknown error occurred');
+        });
+
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled Promise Rejection:', event.reason);
+            showError(event.reason.message || 'Unhandled promise rejection');
+        });
+
+        // エラー表示関数
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            const errorDetails = document.getElementById('errorDetails');
+            
+            if (errorContainer && errorDetails) {
+                errorDetails.textContent = message;
+                errorContainer.style.display = 'flex';
+            }
         }
+
+        // 初期化時にクライアントIDをチェック
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                if (!CLIENT_ID) {
+                    // セットアップが必要
+                    document.getElementById('setupWizard').style.display = 'block';
+                } else {
+                    // Google APIの初期化
+                    gapiLoaded();
+                    gisLoaded();
+                }
+            } catch (error) {
+                console.error('初期化エラー:', error);
+                showError('システムの初期化に失敗しました: ' + error.message);
+            }
+        });
     </script>
 
     <!-- 各種JSファイルを統合 -->
-    <script src="js/setup.js"></script>
+    <script src="js/setup-wizard.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/google-auth.js"></script>
     <script src="js/google-drive.js"></script>
@@ -2409,165 +2495,194 @@
     <script src="js/outstanding-actions.js"></script>
 
     <script>
-        // ページ読み込み時の初期設定
-        document.addEventListener('DOMContentLoaded', function() {
-            // ドロップゾーンの設定
-            setupFileDragDrop();
-            
-            // モバイル対応
-            if (window.matchMedia("(max-width: 768px)").matches) {
-                const uploadHints = document.querySelectorAll('.upload-hint');
-                uploadHints.forEach(hint => hint.style.display = 'none');
-            }
-            
-            // クリックイベントが外側に伝播しないようにする
-            document.addEventListener('click', function(e) {
-                const dropdowns = document.querySelectorAll('.multi-select-dropdown.show, .searchable-select-dropdown.show');
-                const isClickInsideDropdown = Array.from(dropdowns).some(dropdown => 
-                    dropdown.contains(e.target) || dropdown.previousElementSibling.contains(e.target)
-                );
+        // セットアップウィザード関数（JSファイル読み込みまでのブリッジ）
+        function showSetupWizard(fromSettings = false) {
+            try {
+                document.getElementById('setupWizard').style.display = 'block';
+                document.getElementById('authContainer').style.display = 'none';
+                document.getElementById('mainContainer').style.display = 'none';
+                document.getElementById('backToMainBtn').style.display = fromSettings ? 'block' : 'none';
                 
-                if (!isClickInsideDropdown) {
-                    dropdowns.forEach(dropdown => {
-                        dropdown.classList.remove('show');
-                    });
+                // 現在のURLを表示
+                updateOriginUrl();
+            } catch (error) {
+                console.error('セットアップウィザード表示エラー:', error);
+                showError('セットアップウィザードの表示に失敗しました: ' + error.message);
+            }
+        }
+
+        function updateOriginUrl() {
+            let origin = window.location.origin;
+            if (!origin || origin === 'null' || origin === 'file://') {
+                origin = 'http://localhost:8000';
+            }
+            const urlElement = document.getElementById('origin-url');
+            if (urlElement) {
+                urlElement.textContent = origin;
+            }
+        }
+
+        function nextStep() {
+            try {
+                if (currentStep < 4) {
+                    document.getElementById(`step${currentStep}`).classList.remove('active');
+                    document.getElementById(`step${currentStep}Dot`).classList.remove('active');
+                    document.getElementById(`step${currentStep}Dot`).classList.add('completed');
+                    
+                    currentStep++;
+                    
+                    document.getElementById(`step${currentStep}`).classList.add('active');
+                    document.getElementById(`step${currentStep}Dot`).classList.add('active');
+                    
+                    if (currentStep === 3) {
+                        updateOriginUrl();
+                    }
                 }
-            });
-        });
+            } catch (error) {
+                console.error('ステップ移動エラー:', error);
+                showError('ステップの移動に失敗しました: ' + error.message);
+            }
+        }
+
+        function previousStep() {
+            try {
+                if (currentStep > 1) {
+                    document.getElementById(`step${currentStep}`).classList.remove('active');
+                    document.getElementById(`step${currentStep}Dot`).classList.remove('active');
+                    
+                    currentStep--;
+                    
+                    document.getElementById(`step${currentStep}Dot`).classList.remove('completed');
+                    document.getElementById(`step${currentStep}Dot`).classList.add('active');
+                    document.getElementById(`step${currentStep}`).classList.add('active');
+                }
+            } catch (error) {
+                console.error('ステップ戻りエラー:', error);
+                showError('ステップの移動に失敗しました: ' + error.message);
+            }
+        }
+
+        function validateAndProceed() {
+            try {
+                const clientId = document.getElementById('clientIdInput').value.trim();
+                
+                if (!clientId) {
+                    showNotification('クライアントIDを入力してください', 'error');
+                    return;
+                }
+                
+                if (!clientId.includes('.apps.googleusercontent.com')) {
+                    showNotification('正しいクライアントIDを入力してください', 'error');
+                    return;
+                }
+                
+                CLIENT_ID = clientId;
+                localStorage.setItem('googleClientId', CLIENT_ID);
+                
+                const config = `クライアントID: ${CLIENT_ID}`;
+                document.getElementById('final-config').textContent = config;
+                
+                nextStep();
+            } catch (error) {
+                console.error('検証エラー:', error);
+                showError('入力の検証に失敗しました: ' + error.message);
+            }
+        }
+
+        function completeSetup() {
+            try {
+                localStorage.setItem('setup_completed', 'true');
+                document.getElementById('setupWizard').style.display = 'none';
+                
+                // Google API初期化
+                gapiLoaded();
+                gisLoaded();
+            } catch (error) {
+                console.error('セットアップ完了エラー:', error);
+                showError('セットアップの完了に失敗しました: ' + error.message);
+            }
+        }
+
+        function closeSetupAndReturn() {
+            try {
+                document.getElementById('setupWizard').style.display = 'none';
+                if (CLIENT_ID) {
+                    document.getElementById('mainContainer').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('画面遷移エラー:', error);
+                showError('画面の切り替えに失敗しました: ' + error.message);
+            }
+        }
 
         // Google API読み込み完了時のコールバック
         function gapiLoaded() {
-            gapi.load('client', initializeGapiClient);
+            try {
+                if (typeof gapi !== 'undefined') {
+                    gapi.load('client', initializeGapiClient);
+                }
+            } catch (error) {
+                console.error('GAPI読み込みエラー:', error);
+                showError('Google APIの読み込みに失敗しました: ' + error.message);
+            }
         }
 
         // Google Identity Services読み込み完了時のコールバック
         function gisLoaded() {
-            if (CLIENT_ID) {
-                initializeGisClient();
+            try {
+                if (CLIENT_ID && typeof google !== 'undefined') {
+                    initializeGisClient();
+                }
+            } catch (error) {
+                console.error('GIS読み込みエラー:', error);
+                showError('Google認証サービスの読み込みに失敗しました: ' + error.message);
             }
         }
 
-        // ビューモード切り替え
-        function setViewMode(mode) {
-            viewMode = mode;
-            document.getElementById('cardViewBtn').classList.toggle('active', mode === 'card');
-            document.getElementById('listViewBtn').classList.toggle('active', mode === 'list');
-            
-            userSettings.viewMode = mode;
-            saveOptions().catch(console.error);
-            
-            renderContactList();
+        // 仮の関数定義（JSファイル読み込み前のエラー防止）
+        function initializeGapiClient() {}
+        function initializeGisClient() {}
+        function authenticateGoogle() {}
+        function showNotification(message, type) {
+            console.log(message, type);
+        }
+        function copyToClipboard(id) {
+            const text = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('コピーしました');
+            });
         }
 
-        // フィルター表示切り替え
-        function toggleFilters() {
-            filterVisible = !filterVisible;
-            const filterContent = document.getElementById('filterContent');
-            const toggleIcon = document.getElementById('filterToggleIcon');
-            
-            filterContent.classList.toggle('show', filterVisible);
-            toggleIcon.textContent = filterVisible ? '▼' : '▶';
-            
-            userSettings.filterVisible = filterVisible;
-            saveOptions().catch(console.error);
+        // その他の基本的な関数
+        function showContactForm() {}
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
         }
-
-        // 初期化
-        function initializeViewMode() {
-            if (userSettings.viewMode) {
-                viewMode = userSettings.viewMode;
-                document.getElementById('cardViewBtn').classList.toggle('active', viewMode === 'card');
-                document.getElementById('listViewBtn').classList.toggle('active', viewMode === 'list');
-            }
-        }
-
-        function initializeFilterVisibility() {
-            if (userSettings.filterVisible !== undefined) {
-                filterVisible = userSettings.filterVisible;
-                const filterContent = document.getElementById('filterContent');
-                const toggleIcon = document.getElementById('filterToggleIcon');
-                
-                filterContent.classList.toggle('show', filterVisible);
-                toggleIcon.textContent = filterVisible ? '▼' : '▶';
-            }
-        }
-
-        // タブ切り替え
-        function switchTab(event, tabName) {
-            const tabs = document.querySelectorAll('.detail-tab');
-            const contents = document.querySelectorAll('.tab-content');
-            
-            tabs.forEach(tab => tab.classList.remove('active'));
-            contents.forEach(content => content.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById(tabName).classList.add('active');
-        }
-
-        // 折りたたみコンテンツのトグル
-        function toggleCollapsible(id) {
-            const content = document.getElementById(id);
-            const link = event.target;
-            
-            if (content.classList.contains('collapsed')) {
-                content.classList.remove('collapsed');
-                link.textContent = '折りたたむ';
-            } else {
-                content.classList.add('collapsed');
-                link.textContent = '続きを読む';
-            }
-        }
-
-        // 設定モーダル表示
-        function showSettingsModal() {
-            document.getElementById('settingsModal').style.display = 'block';
-        }
-
-        // テンプレート編集表示
-        function showTemplateEditor() {
-            closeModal('settingsModal');
-            const template = localStorage.getItem('meetingTemplate') || '';
-            document.getElementById('templateContent').value = template;
-            document.getElementById('templateModal').style.display = 'block';
-        }
-
-        // テンプレート保存
-        function saveTemplate() {
-            const template = document.getElementById('templateContent').value;
-            localStorage.setItem('meetingTemplate', template);
-            userSettings.meetingTemplate = template;
-            saveOptions().catch(console.error);
-            showNotification('テンプレートを保存しました');
-            closeModal('templateModal');
-        }
-
-        // テンプレート読み込み
-        function loadTemplate() {
-            const defaultTemplate = `## 相談内容
-
-
-## 次回アクション
-- [ ] 
-
-
-## メモ
-`;
-            document.getElementById('templateContent').value = defaultTemplate;
-        }
-
-        // セットアップ画面から戻る
-        function closeSetupAndReturn() {
-            document.getElementById('setupWizard').style.display = 'none';
-            if (CLIENT_ID) {
-                // 既にセットアップ済みの場合はメイン画面に戻る
-                document.getElementById('mainContainer').style.display = 'block';
-            }
-        }
-
-        // タスク入力削除
-        function removeTaskInput(button) {
-            button.closest('.task-input-row').remove();
-        }
+        function filterContacts() {}
+        function toggleFilters() {}
+        function toggleOutstandingActions() {}
+        function applySorting() {}
+        function setViewMode(mode) {}
+        function showSettingsModal() {}
+        function exportData() {}
+        function importData(event) {}
+        function showTemplateEditor() {}
+        function syncData() {}
+        function logout() {}
+        function saveTemplate() {}
+        function loadTemplate() {}
+        function saveContactForm(event) { event.preventDefault(); }
+        function saveMeetingForm(event) { event.preventDefault(); }
+        function toggleMultiSelect(field) {}
+        function addEmailInput() {}
+        function addPhoneInput() {}
+        function addRelatedContact() {}
+        function handlePhotoUpload(event) {}
+        function handleCardImageUpload(event) {}
+        function addFirstMeetingTask() {}
+        function addTaskInput() {}
+        function removeTaskInput(button) {}
     </script>
 </body>
 </html>
