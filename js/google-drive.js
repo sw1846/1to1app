@@ -1,140 +1,120 @@
-// ===== Google Drive操作関数 =====
+// ===== Google Drive API操作 =====
 
-// アプリフォルダ確認・作成
+// アプリフォルダーの確保
 async function ensureAppFolder() {
     try {
-        await ensureValidToken(); // トークンチェック
+        await ensureValidToken();
         
-        // アプリフォルダを確認・作成
+        // 既存のフォルダーを検索
         const response = await gapi.client.drive.files.list({
-            q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+            q: "name='1to1MeetingData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
             fields: 'files(id, name)',
             spaces: 'drive'
         });
         
         if (response.result.files && response.result.files.length > 0) {
-            appFolderId = response.result.files[0].id;
+            APP_FOLDER_ID = response.result.files[0].id;
+            console.log('既存のフォルダーを使用:', APP_FOLDER_ID);
         } else {
-            const folderResponse = await gapi.client.drive.files.create({
-                resource: {
-                    name: APP_FOLDER_NAME,
-                    mimeType: 'application/vnd.google-apps.folder'
-                },
-                fields: 'id'
-            });
-            appFolderId = folderResponse.result.id;
-        }
-        
-        console.log('App folder ID:', appFolderId);
-        
-        // attachmentsフォルダを確認・作成
-        await ensureAttachmentsFolder();
-    } catch (error) {
-        console.error('Error creating app folder:', error);
-        throw error;
-    }
-}
-
-// 添付ファイル用フォルダ確認・作成
-async function ensureAttachmentsFolder() {
-    try {
-        const response = await gapi.client.drive.files.list({
-            q: `name='${ATTACHMENTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and '${appFolderId}' in parents and trashed=false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-        
-        if (response.result.files && response.result.files.length > 0) {
-            attachmentsFolderId = response.result.files[0].id;
-        } else {
-            const folderResponse = await gapi.client.drive.files.create({
-                resource: {
-                    name: ATTACHMENTS_FOLDER_NAME,
-                    mimeType: 'application/vnd.google-apps.folder',
-                    parents: [appFolderId]
-                },
-                fields: 'id'
-            });
-            attachmentsFolderId = folderResponse.result.id;
-        }
-        
-        console.log('Attachments folder ID:', attachmentsFolderId);
-    } catch (error) {
-        console.error('Error creating attachments folder:', error);
-        throw error;
-    }
-}
-
-// 連絡先用フォルダ確認・作成
-async function ensureContactFolder(contactName) {
-    try {
-        // 連絡先名をそのままフォルダ名として使用（既存の実装を維持）
-        const folderName = contactName;
-        
-        const response = await gapi.client.drive.files.list({
-            q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${attachmentsFolderId}' in parents and trashed=false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-        
-        if (response.result.files && response.result.files.length > 0) {
-            return response.result.files[0].id;
-        } else {
-            const folderResponse = await gapi.client.drive.files.create({
-                resource: {
-                    name: folderName,
-                    mimeType: 'application/vnd.google-apps.folder',
-                    parents: [attachmentsFolderId]
-                },
-                fields: 'id'
-            });
-            return folderResponse.result.id;
-        }
-    } catch (error) {
-        console.error('Error creating contact folder:', error);
-        throw error;
-    }
-}
-
-// JSONファイル保存
-async function saveJsonFile(fileName, data) {
-    await ensureValidToken(); // トークンチェック
-    
-    const boundary = '-------314159265358979323846';
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const close_delim = "\r\n--" + boundary + "--";
-    
-    try {
-        console.log(`saveJsonFile(${fileName}): データサイズ=${JSON.stringify(data).length}文字`);
-        
-        const searchResponse = await gapi.client.drive.files.list({
-            q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
-            fields: 'files(id)'
-        });
-        
-        let fileId;
-        let metadata;
-        let multipartRequestBody;
-        
-        // JSONデータを文字列化（エンコーディングを明示）
-        const jsonContent = JSON.stringify(data, null, 2);
-        
-        if (searchResponse.result.files && searchResponse.result.files.length > 0) {
-            fileId = searchResponse.result.files[0].id;
-            
-            metadata = {
-                name: fileName
+            // フォルダーを作成
+            const folderMetadata = {
+                name: '1to1MeetingData',
+                mimeType: 'application/vnd.google-apps.folder'
             };
             
-            multipartRequestBody =
-                delimiter +
-                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                JSON.stringify(metadata) +
-                delimiter +
-                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                jsonContent +
-                close_delim;
+            const folder = await gapi.client.drive.files.create({
+                resource: folderMetadata,
+                fields: 'id'
+            });
             
+            APP_FOLDER_ID = folder.result.id;
+            console.log('新しいフォルダーを作成:', APP_FOLDER_ID);
+        }
+    } catch (error) {
+        console.error('フォルダー確保エラー:', error);
+        throw error;
+    }
+}
+
+// JSONファイルの読み込み
+async function loadJsonFile(filename) {
+    try {
+        await ensureValidToken();
+        
+        if (!APP_FOLDER_ID) {
+            await ensureAppFolder();
+        }
+        
+        // ファイルを検索
+        const response = await gapi.client.drive.files.list({
+            q: `name='${filename}' and '${APP_FOLDER_ID}' in parents and trashed=false`,
+            fields: 'files(id, name)',
+            spaces: 'drive'
+        });
+        
+        if (response.result.files && response.result.files.length > 0) {
+            const fileId = response.result.files[0].id;
+            
+            // ファイル内容を取得
+            const file = await gapi.client.drive.files.get({
+                fileId: fileId,
+                alt: 'media'
+            });
+            
+            return file.result;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error(`${filename}読み込みエラー:`, error);
+        return null;
+    }
+}
+
+// JSONファイルの保存
+async function saveJsonFile(filename, data) {
+    try {
+        await ensureValidToken();
+        
+        if (!APP_FOLDER_ID) {
+            await ensureAppFolder();
+        }
+        
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+        
+        // ファイルが既に存在するか確認
+        const searchResponse = await gapi.client.drive.files.list({
+            q: `name='${filename}' and '${APP_FOLDER_ID}' in parents and trashed=false`,
+            fields: 'files(id)',
+            spaces: 'drive'
+        });
+        
+        const metadata = {
+            name: filename,
+            mimeType: 'application/json'
+        };
+        
+        if (!searchResponse.result.files || searchResponse.result.files.length === 0) {
+            metadata.parents = [APP_FOLDER_ID];
+        }
+        
+        const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+        const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: application/json\r\n' +
+            'Content-Transfer-Encoding: base64\r\n' +
+            '\r\n' +
+            base64Data +
+            close_delim;
+        
+        if (searchResponse.result.files && searchResponse.result.files.length > 0) {
+            // 既存ファイルを更新
+            const fileId = searchResponse.result.files[0].id;
             await gapi.client.request({
                 path: `/upload/drive/v3/files/${fileId}`,
                 method: 'PATCH',
@@ -145,21 +125,7 @@ async function saveJsonFile(fileName, data) {
                 body: multipartRequestBody
             });
         } else {
-            metadata = {
-                name: fileName,
-                mimeType: 'application/json',
-                parents: [appFolderId]
-            };
-            
-            multipartRequestBody =
-                delimiter +
-                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                JSON.stringify(metadata) +
-                delimiter +
-                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                jsonContent +
-                close_delim;
-            
+            // 新規ファイルを作成
             await gapi.client.request({
                 path: '/upload/drive/v3/files',
                 method: 'POST',
@@ -170,117 +136,81 @@ async function saveJsonFile(fileName, data) {
                 body: multipartRequestBody
             });
         }
-        
-        console.log(`${fileName} を保存しました`);
     } catch (error) {
-        console.error('Error saving file:', error);
+        console.error(`${filename}保存エラー:`, error);
         throw error;
     }
 }
 
-// JSONファイル読み込み
-async function loadJsonFile(fileName) {
+// ファイルアップロード
+async function uploadFile(file, filename, contactName) {
     try {
-        await ensureValidToken(); // トークンチェック
+        await ensureValidToken();
         
-        console.log(`loadJsonFile(${fileName}): 読み込み開始`);
-        
-        const searchResponse = await gapi.client.drive.files.list({
-            q: `name='${fileName}' and '${appFolderId}' in parents and trashed=false`,
-            fields: 'files(id)'
-        });
-        
-        if (!searchResponse.result.files || searchResponse.result.files.length === 0) {
-            console.log(`${fileName} が見つかりません`);
-            return null;
+        if (!APP_FOLDER_ID) {
+            await ensureAppFolder();
         }
         
-        const fileId = searchResponse.result.files[0].id;
+        // メタデータ
+        const metadata = {
+            name: filename || file.name,
+            parents: [APP_FOLDER_ID]
+        };
         
-        const response = await gapi.client.drive.files.get({
-            fileId: fileId,
-            alt: 'media'
-        });
+        // ファイルをアップロード
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
         
-        console.log(`${fileName} を読み込みました`);
-        return response.result;
-    } catch (error) {
-        console.error('Error loading file:', error);
-        return null;
-    }
-}
-
-// ファイルアップロード（画像URL修正版）
-async function uploadFile(file, customName = null, contactName = null) {
-    await ensureValidToken(); // トークンチェック
-    
-    let parentFolderId = appFolderId;
-    if (contactName) {
-        parentFolderId = await ensureContactFolder(contactName);
-    }
-    
-    const fileName = customName || file.name;
-    const metadata = {
-        name: fileName,
-        parents: [parentFolderId]
-    };
-    
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
-    
-    try {
-        // まずファイルをアップロード
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
             method: 'POST',
-            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+            headers: {
+                'Authorization': `Bearer ${gapi.client.getToken().access_token}`
+            },
             body: form
         });
         
         if (!response.ok) {
-            throw new Error('Upload failed');
+            throw new Error(`Upload failed: ${response.statusText}`);
         }
         
         const result = await response.json();
         
-        // アップロード後、画像ファイルの場合は適切なURLを取得
-        let imageUrl = '';
-        if (file.type.startsWith('image/')) {
-            // 画像ファイルの場合、直接アクセス可能なURLを生成
-            imageUrl = `https://lh3.googleusercontent.com/d/${result.id}`;
-        }
+        // ダイレクトURLを生成
+        const directUrl = `https://lh3.googleusercontent.com/d/${result.id}`;
         
         return {
             id: result.id,
-            url: imageUrl || `https://drive.google.com/file/d/${result.id}/view`
+            url: directUrl
         };
     } catch (error) {
-        console.error('Error uploading file:', error);
+        console.error('ファイルアップロードエラー:', error);
         throw error;
     }
 }
 
-// ファイルアクセスURL生成（認証付き）
-async function getAuthenticatedFileUrl(fileIdOrPath) {
+// 認証付きファイルURLの取得
+async function getAuthenticatedFileUrl(fileId) {
     try {
         await ensureValidToken();
         
-        // ファイルパスの場合はそのまま返す（旧データ形式対応）
-        if (fileIdOrPath && fileIdOrPath.startsWith('/')) {
-            console.warn('ファイルパス形式のデータが検出されました:', fileIdOrPath);
-            return null;
+        // ファイルのメタデータを取得
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            fields: 'webContentLink,webViewLink,mimeType'
+        });
+        
+        if (response.result.webContentLink) {
+            return response.result.webContentLink;
+        } else if (response.result.webViewLink) {
+            return response.result.webViewLink;
         }
         
-        // Google Drive IDの妥当性チェック
-        if (!fileIdOrPath || fileIdOrPath.length < 10) {
-            console.warn('無効なファイルID:', fileIdOrPath);
-            return null;
-        }
-        
-        // 画像ファイルの場合は直接アクセス可能なURLを返す
-        return `https://lh3.googleusercontent.com/d/${fileIdOrPath}`;
+        // 直接アクセスURLを返す
+        return `https://lh3.googleusercontent.com/d/${fileId}`;
     } catch (error) {
-        console.error('Error getting authenticated URL:', error);
-        return null;
+        console.error('ファイルURL取得エラー:', error);
+        // エラー時はダイレクトURLを返す
+        return `https://lh3.googleusercontent.com/d/${fileId}`;
     }
 }

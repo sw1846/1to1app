@@ -687,6 +687,39 @@
             margin-bottom: 20px;
         }
 
+        /* 複数入力用スタイル */
+        .multi-input-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .multi-input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .multi-input-row input,
+        .multi-input-row select {
+            flex: 1;
+        }
+
+        .add-input-button {
+            margin-top: 5px;
+        }
+
+        .related-contact-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .related-contact-row select {
+            flex: 1;
+        }
+
         /* ファイルアップロード */
         .file-drop-zone {
             border: 2px dashed #444444;
@@ -1992,16 +2025,6 @@
                         </div>
 
                         <div class="form-group">
-                            <label>メールアドレス</label>
-                            <input type="email" name="email">
-                        </div>
-
-                        <div class="form-group">
-                            <label>電話番号</label>
-                            <input type="tel" name="phone">
-                        </div>
-
-                        <div class="form-group">
                             <label>ホームページ</label>
                             <input type="url" name="homepage">
                         </div>
@@ -2060,6 +2083,27 @@
                             <label>紹介元</label>
                             <input type="text" name="referredBy" placeholder="紹介者の名前を入力">
                         </div>
+                    </div>
+
+                    <!-- 複数メールアドレス -->
+                    <div class="form-group">
+                        <label>メールアドレス</label>
+                        <div id="emailContainer" class="multi-input-container"></div>
+                        <button type="button" class="btn-small btn-secondary add-input-button" onclick="addEmailInput()">+ メールアドレスを追加</button>
+                    </div>
+
+                    <!-- 複数電話番号 -->
+                    <div class="form-group">
+                        <label>電話番号</label>
+                        <div id="phoneContainer" class="multi-input-container"></div>
+                        <button type="button" class="btn-small btn-secondary add-input-button" onclick="addPhoneInput()">+ 電話番号を追加</button>
+                    </div>
+
+                    <!-- 関係者 -->
+                    <div class="form-group">
+                        <label>関係者</label>
+                        <div id="relatedContactsContainer"></div>
+                        <button type="button" class="btn-small btn-secondary add-input-button" onclick="addRelatedContact()">+ 関係者を追加</button>
                     </div>
 
                     <!-- 全幅項目 -->
@@ -2148,8 +2192,8 @@
                 <h2>連絡先詳細</h2>
                 <span class="close-modal" onclick="closeModal('contactDetailModal')">&times;</span>
             </div>
-            <div id="contactDetailBody" class="modal-body">
-                <!-- 詳細情報がここに表示される -->
+            <div class="modal-body" id="contactDetailBody">
+                <!-- 詳細内容がここに動的に挿入される -->
             </div>
         </div>
     </div>
@@ -2170,7 +2214,7 @@
 
                     <div class="form-group">
                         <label>打ち合わせ内容 <span style="color: #d93025;">*</span></label>
-                        <textarea name="content" rows="5" required placeholder="Markdown記法が使えます"></textarea>
+                        <textarea name="content" rows="10" required placeholder="Markdown記法が使えます"></textarea>
                     </div>
 
                     <div class="form-group">
@@ -2207,87 +2251,80 @@
             </div>
             <div class="modal-body">
                 <div class="settings-list">
+                    <div class="settings-item" onclick="exportData()">
+                        <div class="settings-item-icon">💾</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">データエクスポート</div>
+                            <div class="settings-item-description">すべてのデータをJSONファイルとしてダウンロード</div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-item" onclick="document.getElementById('importFile').click()">
+                        <div class="settings-item-icon">📥</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">データインポート</div>
+                            <div class="settings-item-description">JSONファイルからデータを追加</div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-item" onclick="showTemplateEditor()">
+                        <div class="settings-item-icon">📝</div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-title">テンプレート設定</div>
+                            <div class="settings-item-description">ミーティング記録のテンプレートを編集</div>
+                        </div>
+                    </div>
+                    
                     <div class="settings-item" onclick="syncData()">
                         <div class="settings-item-icon">🔄</div>
                         <div class="settings-item-content">
                             <div class="settings-item-title">同期</div>
-                            <div class="settings-item-description">Google Driveと最新のデータを同期します</div>
+                            <div class="settings-item-description">Google Driveと手動で同期</div>
                         </div>
                     </div>
-                    <div class="settings-item" onclick="exportData()">
-                        <div class="settings-item-icon">📤</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">データエクスポート</div>
-                            <div class="settings-item-description">すべてのデータをJSONファイルとして保存します</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="document.getElementById('importInput').click()">
-                        <div class="settings-item-icon">📥</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">データインポート</div>
-                            <div class="settings-item-description">JSONファイルからデータを読み込みます</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="showTemplateEditor()">
-                        <div class="settings-item-icon">📝</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">テンプレート編集</div>
-                            <div class="settings-item-description">ミーティング内容のテンプレートを編集します</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="migrateFromSpecificFolder()">
-                        <div class="settings-item-icon">🚀</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">フォルダ間データ移行</div>
-                            <div class="settings-item-description">指定フォルダから新構造への一括移行を実行します</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="checkFileStructure()">
-                        <div class="settings-item-icon">🔍</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">ファイル構造確認</div>
-                            <div class="settings-item-description">現在のファイル保存状況を確認します</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="migrateExistingFiles()">
-                        <div class="settings-item-icon">📁</div>
-                        <div class="settings-item-content">
-                            <div class="settings-item-title">ファイル整理</div>
-                            <div class="settings-item-description">既存のファイルを新しいフォルダ構造に移動します</div>
-                        </div>
-                    </div>
-                    <div class="settings-item" onclick="showSetupWizardFromSettings()">
+                    
+                    <div class="settings-item" onclick="showSetupWizard(true)">
                         <div class="settings-item-icon">⚙️</div>
                         <div class="settings-item-content">
                             <div class="settings-item-title">セットアップ</div>
-                            <div class="settings-item-description">Google Drive APIの設定を変更します</div>
+                            <div class="settings-item-description">Google API設定を確認・変更</div>
                         </div>
                     </div>
+                    
                     <div class="settings-item" onclick="logout()">
                         <div class="settings-item-icon">🚪</div>
                         <div class="settings-item-content">
                             <div class="settings-item-title">ログアウト</div>
-                            <div class="settings-item-description">Googleアカウントとの接続を解除します</div>
+                            <div class="settings-item-description">Googleアカウントからログアウト</div>
                         </div>
                     </div>
                 </div>
-                <div class="template-editor" id="templateEditor">
-                    <h3 style="margin-bottom: 20px;">ミーティング内容テンプレート</h3>
-                    <div class="form-group">
-                        <label>Markdownテンプレート</label>
-                        <textarea id="templateContent" placeholder="## 議題&#10;&#10;## 決定事項&#10;&#10;## 次回までのアクション&#10;"></textarea>
-                    </div>
+                
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importData(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- テンプレート編集モーダル -->
+    <div id="templateModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>テンプレート設定</h2>
+                <span class="close-modal" onclick="closeModal('templateModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="template-editor">
+                    <label>ミーティング記録テンプレート</label>
+                    <textarea id="templateContent" placeholder="ミーティング記録のデフォルトテンプレートを入力してください。&#10;&#10;例：&#10;## 相談内容&#10;&#10;## 次回アクション&#10;- [ ] &#10;&#10;## メモ"></textarea>
                     <div class="template-actions">
                         <button class="btn-primary" onclick="saveTemplate()">保存</button>
-                        <button class="btn-secondary" onclick="hideTemplateEditor()">キャンセル</button>
+                        <button class="btn-secondary" onclick="loadTemplate()">リセット</button>
+                        <button class="btn-secondary" onclick="closeModal('templateModal')">キャンセル</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- インポート用の隠しinput -->
-    <input type="file" id="importInput" accept=".json" style="display: none;" onchange="importData(event)">
 
     <!-- ローディングオーバーレイ -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
@@ -2297,24 +2334,240 @@
         </div>
     </div>
 
+    <!-- ドラフト保存インジケーター -->
     <div id="draftStatus" class="draft-status">
         下書きを保存しました
     </div>
 
-    <!-- JavaScriptファイルの読み込み -->
-    <script src="js/config.js"></script>
+    <!-- トークンリフレッシュインジケーター -->
+    <div id="tokenRefreshIndicator" class="token-refresh-indicator">
+        <div class="loading"></div>
+        <span>認証を更新中...</span>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // グローバル変数
+        let contacts = [];
+        let meetings = [];
+        let dropdownOptions = {
+            types: [],
+            affiliations: [],
+            wantToConnect: [],
+            goldenEgg: []
+        };
+        let userSettings = {};
+        let currentEditingContactId = null;
+        let currentEditingMeetingId = null;
+        let currentPhotoFile = null;
+        let currentCardImageFile = null;
+        let selectedFiles = [];
+        let selectedMeetingFiles = [];
+        let selectedFirstMeetingFiles = [];
+        let deletedAttachments = [];
+        let deletedMeetingAttachments = [];
+        let hasUnsavedDraft = false;
+        let draftSaveTimer = null;
+        let hasFirstMeeting = {};
+        let gapiInited = false;
+        let gisInited = false;
+        let tokenClient = null;
+        let accessToken = null;
+        let tokenExpiresAt = null;
+        let APP_FOLDER_ID = null;
+        let CLIENT_ID = localStorage.getItem('googleClientId');
+        let viewMode = 'card';
+        let filterVisible = false;
+
+        // Google API設定
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
+
+        // 初期化時にクライアントIDをチェック
+        if (!CLIENT_ID) {
+            // セットアップが必要
+            document.getElementById('setupWizard').style.display = 'block';
+        } else {
+            // Google APIの初期化
+            gapiLoaded();
+            gisLoaded();
+        }
+    </script>
+
+    <!-- 各種JSファイルを統合 -->
+    <script src="js/setup.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/google-auth.js"></script>
     <script src="js/google-drive.js"></script>
     <script src="js/data-manager.js"></script>
+    <script src="js/file-upload.js"></script>
+    <script src="js/ui-modals.js"></script>
+    <script src="js/ui-render.js"></script>
     <script src="js/contacts.js"></script>
     <script src="js/meetings.js"></script>
-    <script src="js/tasks.js"></script>
-    <script src="js/ui-common.js"></script>
-    <script src="js/ui-modals.js"></script>
     <script src="js/search-filter.js"></script>
-    <script src="js/file-upload.js"></script>
-    <script src="js/setup-wizard.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/outstanding-actions.js"></script>
+
+    <script>
+        // ページ読み込み時の初期設定
+        document.addEventListener('DOMContentLoaded', function() {
+            // ドロップゾーンの設定
+            setupFileDragDrop();
+            
+            // モバイル対応
+            if (window.matchMedia("(max-width: 768px)").matches) {
+                const uploadHints = document.querySelectorAll('.upload-hint');
+                uploadHints.forEach(hint => hint.style.display = 'none');
+            }
+            
+            // クリックイベントが外側に伝播しないようにする
+            document.addEventListener('click', function(e) {
+                const dropdowns = document.querySelectorAll('.multi-select-dropdown.show, .searchable-select-dropdown.show');
+                const isClickInsideDropdown = Array.from(dropdowns).some(dropdown => 
+                    dropdown.contains(e.target) || dropdown.previousElementSibling.contains(e.target)
+                );
+                
+                if (!isClickInsideDropdown) {
+                    dropdowns.forEach(dropdown => {
+                        dropdown.classList.remove('show');
+                    });
+                }
+            });
+        });
+
+        // Google API読み込み完了時のコールバック
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
+        }
+
+        // Google Identity Services読み込み完了時のコールバック
+        function gisLoaded() {
+            if (CLIENT_ID) {
+                initializeGisClient();
+            }
+        }
+
+        // ビューモード切り替え
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('cardViewBtn').classList.toggle('active', mode === 'card');
+            document.getElementById('listViewBtn').classList.toggle('active', mode === 'list');
+            
+            userSettings.viewMode = mode;
+            saveOptions().catch(console.error);
+            
+            renderContactList();
+        }
+
+        // フィルター表示切り替え
+        function toggleFilters() {
+            filterVisible = !filterVisible;
+            const filterContent = document.getElementById('filterContent');
+            const toggleIcon = document.getElementById('filterToggleIcon');
+            
+            filterContent.classList.toggle('show', filterVisible);
+            toggleIcon.textContent = filterVisible ? '▼' : '▶';
+            
+            userSettings.filterVisible = filterVisible;
+            saveOptions().catch(console.error);
+        }
+
+        // 初期化
+        function initializeViewMode() {
+            if (userSettings.viewMode) {
+                viewMode = userSettings.viewMode;
+                document.getElementById('cardViewBtn').classList.toggle('active', viewMode === 'card');
+                document.getElementById('listViewBtn').classList.toggle('active', viewMode === 'list');
+            }
+        }
+
+        function initializeFilterVisibility() {
+            if (userSettings.filterVisible !== undefined) {
+                filterVisible = userSettings.filterVisible;
+                const filterContent = document.getElementById('filterContent');
+                const toggleIcon = document.getElementById('filterToggleIcon');
+                
+                filterContent.classList.toggle('show', filterVisible);
+                toggleIcon.textContent = filterVisible ? '▼' : '▶';
+            }
+        }
+
+        // タブ切り替え
+        function switchTab(event, tabName) {
+            const tabs = document.querySelectorAll('.detail-tab');
+            const contents = document.querySelectorAll('.tab-content');
+            
+            tabs.forEach(tab => tab.classList.remove('active'));
+            contents.forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        // 折りたたみコンテンツのトグル
+        function toggleCollapsible(id) {
+            const content = document.getElementById(id);
+            const link = event.target;
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                link.textContent = '折りたたむ';
+            } else {
+                content.classList.add('collapsed');
+                link.textContent = '続きを読む';
+            }
+        }
+
+        // 設定モーダル表示
+        function showSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'block';
+        }
+
+        // テンプレート編集表示
+        function showTemplateEditor() {
+            closeModal('settingsModal');
+            const template = localStorage.getItem('meetingTemplate') || '';
+            document.getElementById('templateContent').value = template;
+            document.getElementById('templateModal').style.display = 'block';
+        }
+
+        // テンプレート保存
+        function saveTemplate() {
+            const template = document.getElementById('templateContent').value;
+            localStorage.setItem('meetingTemplate', template);
+            userSettings.meetingTemplate = template;
+            saveOptions().catch(console.error);
+            showNotification('テンプレートを保存しました');
+            closeModal('templateModal');
+        }
+
+        // テンプレート読み込み
+        function loadTemplate() {
+            const defaultTemplate = `## 相談内容
+
+
+## 次回アクション
+- [ ] 
+
+
+## メモ
+`;
+            document.getElementById('templateContent').value = defaultTemplate;
+        }
+
+        // セットアップ画面から戻る
+        function closeSetupAndReturn() {
+            document.getElementById('setupWizard').style.display = 'none';
+            if (CLIENT_ID) {
+                // 既にセットアップ済みの場合はメイン画面に戻る
+                document.getElementById('mainContainer').style.display = 'block';
+            }
+        }
+
+        // タスク入力削除
+        function removeTaskInput(button) {
+            button.closest('.task-input-row').remove();
+        }
+    </script>
 </body>
 </html>

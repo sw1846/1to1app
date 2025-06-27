@@ -2,50 +2,53 @@
 
 // ミーティングフォーム表示
 function showMeetingForm(contactId, meetingId = null) {
-    currentEditingContactId = contactId;
+    const contact = contacts.find(c => c.id === contactId);
+    if (!contact) return;
+    
+    closeModal('contactDetailModal');
     currentEditingMeetingId = meetingId;
     resetMeetingForm();
     
-    const contact = contacts.find(c => c.id === contactId);
     document.getElementById('meetingFormTitle').textContent = 
-        `${contact.name}さんとのミーティング記録${meetingId ? '編集' : ''}`;
+        `${contact.name} - ${meetingId ? 'ミーティング編集' : 'ミーティング記録'}`);
+    
+    const form = document.getElementById('meetingForm');
     
     if (meetingId) {
         const meeting = meetings.find(m => m.id === meetingId);
         if (meeting) {
-            const form = document.getElementById('meetingForm');
-            form.datetime.value = meeting.datetime;
+            const datetime = new Date(meeting.datetime);
+            datetime.setMinutes(datetime.getMinutes() - datetime.getTimezoneOffset());
+            form.datetime.value = datetime.toISOString().slice(0, 16);
             form.content.value = meeting.content || '';
             
+            // タスクを復元
             if (meeting.tasks && meeting.tasks.length > 0) {
-                displayTaskInputs(meeting.tasks);
+                meeting.tasks.forEach(task => {
+                    addTaskInputWithData(task);
+                });
             }
             
-            displayExistingMeetingAttachments(meeting.attachments || []);
+            // 添付ファイルを表示
+            if (meeting.attachments && meeting.attachments.length > 0) {
+                displayExistingMeetingAttachments(meeting.attachments);
+            }
         }
     } else {
+        // 新規の場合、現在時刻をセット
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('meetingForm').datetime.value = now.toISOString().slice(0, 16);
+        form.datetime.value = now.toISOString().slice(0, 16);
         
+        // テンプレートを適用
         const template = localStorage.getItem('meetingTemplate') || '';
-        document.getElementById('meetingForm').content.value = template;
+        form.content.value = template;
         
-        displayTaskInputs([]);
-    }
-    
-    restoreDraft();
-    
-    const contentTextarea = document.querySelector('#meetingForm textarea[name="content"]');
-    if (contentTextarea) {
-        contentTextarea.addEventListener('input', () => {
-            clearTimeout(draftSaveTimer);
-            draftSaveTimer = setTimeout(saveDraft, 5000);
-        });
+        // ドラフト保存の設定
+        setupDraftSave();
     }
     
     document.getElementById('meetingFormModal').style.display = 'block';
-    document.querySelector('#meetingFormModal .modal-content').scrollTop = 0;
 }
 
 // ミーティング保存
@@ -54,8 +57,12 @@ async function saveMeetingForm(event) {
     showLoading();
     
     const formData = new FormData(event.target);
+    const contactId = currentEditingContactId;
+    
+    // タスクデータを収集
     const taskTexts = formData.getAll('taskText[]');
     const taskDues = formData.getAll('taskDue[]');
+    const taskDones = Array.from(document.querySelectorAll('input[name="taskDone[]"]')).map(cb => cb.checked);
     
     const tasks = [];
     taskTexts.forEach((text, index) => {
@@ -63,43 +70,40 @@ async function saveMeetingForm(event) {
             tasks.push({
                 text: text.trim(),
                 due: taskDues[index] || null,
-                done: false
+                done: taskDones[index] || false
             });
         }
     });
     
     const meeting = {
         id: currentEditingMeetingId || generateId(),
-        contactId: currentEditingContactId,
+        contactId: contactId,
         datetime: formData.get('datetime'),
         content: formData.get('content'),
         tasks: tasks,
         attachments: [],
         createdAt: currentEditingMeetingId ? 
-            meetings.find(m => m.id === currentEditingMeetingId)?.createdAt : 
+            meetings.find(m => m.id === currentEditingMeetingId)?.createdAt || new Date().toISOString() : 
             new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
     
-    if (currentEditingMeetingId) {
-        const existing = meetings.find(m => m.id === currentEditingMeetingId);
-        if (existing) {
-            meeting.attachments = existing.attachments || [];
-            if (existing.tasks) {
-                tasks.forEach((task, index) => {
-                    if (existing.tasks[index] && existing.tasks[index].text === task.text) {
-                        task.done = existing.tasks[index].done;
-                    }
-                });
+    try {
+        // 既存のミーティングの場合、添付ファイルを引き継ぐ
+        if (currentEditingMeetingId) {
+            const existingMeeting = meetings.find(m => m.id === currentEditingMeetingId);
+            if (existingMeeting && existingMeeting.attachments) {
+                meeting.attachments = existingMeeting.attachments.filter(att => 
+                    !deletedMeetingAttachments.includes(att.id)
+                );
             }
         }
-    }
-    
-    try {
-        const contact = contacts.find(c => c.id === currentEditingContactId);
+        
+        // 新しい添付ファイルをアップロード
+        const contact = contacts.find(c => c.id === contactId);
         for (const file of selectedMeetingFiles) {
             const timestamp = new Date().getTime();
-            const fileName = `meeting_${timestamp}_${sanitizeFileName(file.name)}`;
+            const fileName = addContactNameToFileName(`meeting_${timestamp}_${file.name}`, contact.name);
             const fileResult = await uploadFile(file, fileName, contact.name);
             meeting.attachments.push({
                 name: file.name,
@@ -109,25 +113,34 @@ async function saveMeetingForm(event) {
             });
         }
         
-        meeting.attachments = meeting.attachments.filter(att => 
-            !deletedMeetingAttachments.includes(att.id)
-        );
-        
-        const index = meetings.findIndex(m => m.id === meeting.id);
-        if (index >= 0) {
-            meetings[index] = meeting;
+        // ミーティングを保存
+        if (currentEditingMeetingId) {
+            const index = meetings.findIndex(m => m.id === currentEditingMeetingId);
+            if (index >= 0) {
+                meetings[index] = meeting;
+            }
         } else {
             meetings.push(meeting);
         }
         
         await saveData();
         
-        clearDraft();
+        // ドラフトをクリア
+        if (draftSaveTimer) {
+            clearTimeout(draftSaveTimer);
+            localStorage.removeItem('meetingDraft');
+        }
         
         closeModal('meetingFormModal');
-        showContactDetail(currentEditingContactId);
-        renderContactList();
-        renderOutstandingActions();
+        resetMeetingForm();
+        
+        // 連絡先詳細を再表示
+        showContactDetail(contactId);
+        
+        // 未完了アクションを更新
+        if (outstandingActionsVisible) {
+            renderOutstandingActions();
+        }
         
         hideLoading();
         showNotification('ミーティング記録を保存しました');
@@ -144,16 +157,21 @@ async function deleteMeeting(meetingId) {
         return;
     }
     
+    const meeting = meetings.find(m => m.id === meetingId);
+    if (!meeting) return;
+    
     showLoading();
     
     try {
         meetings = meetings.filter(m => m.id !== meetingId);
-        
         await saveData();
         
-        showContactDetail(currentEditingContactId);
-        renderContactList();
-        renderOutstandingActions();
+        showContactDetail(meeting.contactId);
+        
+        // 未完了アクションを更新
+        if (outstandingActionsVisible) {
+            renderOutstandingActions();
+        }
         
         hideLoading();
         showNotification('ミーティング記録を削除しました');
@@ -164,166 +182,157 @@ async function deleteMeeting(meetingId) {
     }
 }
 
-// ミーティング編集
-function editMeeting(meetingId) {
+// タスク入力追加
+function addTaskInput() {
+    const container = document.getElementById('taskInputContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'task-input-row';
+    newRow.innerHTML = `
+        <input type="checkbox" name="taskDone[]" style="width: auto;">
+        <input type="text" name="taskText[]" placeholder="タスク内容">
+        <input type="datetime-local" name="taskDue[]" placeholder="期限">
+        <button type="button" class="btn-small btn-danger" onclick="removeTaskInput(this)">削除</button>
+    `;
+    container.appendChild(newRow);
+}
+
+// データ付きタスク入力追加
+function addTaskInputWithData(task) {
+    const container = document.getElementById('taskInputContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'task-input-row';
+    
+    let dueValue = '';
+    if (task.due) {
+        const dueDate = new Date(task.due);
+        dueDate.setMinutes(dueDate.getMinutes() - dueDate.getTimezoneOffset());
+        dueValue = dueDate.toISOString().slice(0, 16);
+    }
+    
+    newRow.innerHTML = `
+        <input type="checkbox" name="taskDone[]" ${task.done ? 'checked' : ''} style="width: auto;">
+        <input type="text" name="taskText[]" value="${escapeHtml(task.text)}" placeholder="タスク内容">
+        <input type="datetime-local" name="taskDue[]" value="${dueValue}" placeholder="期限">
+        <button type="button" class="btn-small btn-danger" onclick="removeTaskInput(this)">削除</button>
+    `;
+    container.appendChild(newRow);
+}
+
+// タスクのステータス切り替え
+async function toggleTaskStatus(meetingId, taskIndex) {
     const meeting = meetings.find(m => m.id === meetingId);
-    if (meeting) {
-        showMeetingForm(meeting.contactId, meetingId);
+    if (!meeting || !meeting.tasks || !meeting.tasks[taskIndex]) return;
+    
+    meeting.tasks[taskIndex].done = !meeting.tasks[taskIndex].done;
+    meeting.updatedAt = new Date().toISOString();
+    
+    try {
+        await saveData();
+        
+        // UIを更新
+        const checkbox = event.target;
+        const taskItem = checkbox.closest('.task-item');
+        if (taskItem) {
+            taskItem.classList.toggle('completed', meeting.tasks[taskIndex].done);
+        }
+    } catch (error) {
+        console.error('タスクステータス更新エラー:', error);
+        // エラー時は元に戻す
+        meeting.tasks[taskIndex].done = !meeting.tasks[taskIndex].done;
+        showNotification('タスクの更新に失敗しました', 'error');
     }
 }
 
-// ミーティング履歴レンダリング
-function renderMeetingHistory(meetings) {
-    return meetings.map(meeting => `
-        <div class="meeting-card">
-            <div class="meeting-card-header">
-                <div class="meeting-card-date">${formatDateTime(meeting.datetime)}</div>
-                <div class="meeting-card-actions">
-                    <button class="btn-small btn-secondary" onclick="editMeeting('${meeting.id}')">編集</button>
-                    <button class="btn-small btn-danger" onclick="deleteMeeting('${meeting.id}')">削除</button>
-                </div>
-            </div>
-            <div class="markdown-content ${meeting.content.length > 500 ? 'truncated' : ''}" id="content-${meeting.id}">
-                ${renderMarkdown(meeting.content)}
-            </div>
-            ${meeting.content.length > 500 ? `
-                <a href="#" class="read-more" onclick="toggleContent('${meeting.id}'); return false;">続きを読む</a>
-            ` : ''}
-            ${meeting.tasks && meeting.tasks.length > 0 ? `
-                <div class="meeting-tasks">
-                    <strong>次回アクション:</strong>
-                    ${renderTaskListNew(meeting)}
-                </div>
-            ` : ''}
-            ${meeting.attachments && meeting.attachments.length > 0 ? `
-                <div style="margin-top: 10px;">
-                    <strong>添付ファイル:</strong>
-                    ${meeting.attachments.map(att => {
-                        const escapedName = escapeHtml(att.name).replace(/'/g, "\\'");
-                        return `<a href="#" onclick="openFile('${att.id || att.url}', '${escapedName}'); return false;" style="margin-left: 10px;">${escapeHtml(att.name)}</a>`;
-                    }).join('')}
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
-}
-
-// ドラフト保存
-function saveDraft() {
-    const meetingForm = document.getElementById('meetingForm');
-    if (!meetingForm || meetingForm.style.display === 'none') return;
+// タスクテキストの更新
+async function updateTaskText(meetingId, taskIndex, newText) {
+    const meeting = meetings.find(m => m.id === meetingId);
+    if (!meeting || !meeting.tasks || !meeting.tasks[taskIndex]) return;
     
-    const content = meetingForm.content.value;
-    const taskTexts = Array.from(meetingForm.querySelectorAll('input[name="taskText[]"]')).map(input => input.value);
-    const taskDues = Array.from(meetingForm.querySelectorAll('input[name="taskDue[]"]')).map(input => input.value);
+    const trimmedText = newText.trim();
+    if (!trimmedText) {
+        event.target.textContent = meeting.tasks[taskIndex].text;
+        showNotification('タスクの内容は空にできません', 'error');
+        return;
+    }
     
-    if (content || taskTexts.some(text => text)) {
-        const draftKey = currentEditingMeetingId ? 
-            `draft_meeting_${currentEditingMeetingId}` : 
-            `draft_meeting_${currentEditingContactId || 'new'}`;
-        
-        const draftData = {
-            content: content,
-            datetime: meetingForm.datetime.value,
-            tasks: taskTexts.map((text, index) => ({
-                text: text,
-                due: taskDues[index]
-            })).filter(task => task.text),
-            timestamp: new Date().toISOString()
-        };
-        
-        sessionStorage.setItem(draftKey, JSON.stringify(draftData));
-        hasUnsavedDraft = true;
-        
-        const indicator = document.getElementById('draftStatus');
-        indicator.classList.add('show');
-        setTimeout(() => {
-            indicator.classList.remove('show');
-        }, 2000);
+    meeting.tasks[taskIndex].text = trimmedText;
+    meeting.updatedAt = new Date().toISOString();
+    
+    try {
+        await saveData();
+        showNotification('タスクを更新しました');
+    } catch (error) {
+        console.error('タスクテキスト更新エラー:', error);
+        event.target.textContent = meeting.tasks[taskIndex].text;
+        showNotification('タスクの更新に失敗しました', 'error');
     }
 }
 
-// ドラフト復元
-function restoreDraft() {
-    const draftKey = currentEditingMeetingId ? 
-        `draft_meeting_${currentEditingMeetingId}` : 
-        `draft_meeting_${currentEditingContactId || 'new'}`;
+// タスク編集時のキーボードハンドリング
+function handleTaskKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        event.target.blur();
+    }
+}
+
+// ドラフト保存の設定
+function setupDraftSave() {
+    const form = document.getElementById('meetingForm');
+    const inputs = form.querySelectorAll('input, textarea');
     
-    const draftData = sessionStorage.getItem(draftKey);
-    if (draftData) {
-        const draft = JSON.parse(draftData);
-        const form = document.getElementById('meetingForm');
-        
-        if (!form.content.value || confirm('保存されていない下書きがあります。復元しますか？')) {
-            form.content.value = draft.content;
-            if (draft.datetime) form.datetime.value = draft.datetime;
-            
-            if (draft.tasks && draft.tasks.length > 0) {
-                displayTaskInputs(draft.tasks);
+    inputs.forEach(input => {
+        input.addEventListener('input', () => {
+            hasUnsavedDraft = true;
+            scheduleDraftSave();
+        });
+    });
+    
+    // 既存のドラフトがあれば復元
+    const savedDraft = localStorage.getItem('meetingDraft');
+    if (savedDraft && !currentEditingMeetingId) {
+        const draft = JSON.parse(savedDraft);
+        if (draft.contactId === currentEditingContactId) {
+            if (confirm('保存されていない下書きがあります。復元しますか？')) {
+                form.datetime.value = draft.datetime || '';
+                form.content.value = draft.content || '';
+                hasUnsavedDraft = true;
+            } else {
+                localStorage.removeItem('meetingDraft');
             }
-            
-            showNotification('下書きを復元しました');
         }
     }
 }
 
-// ドラフトクリア
-function clearDraft() {
-    const draftKey = currentEditingMeetingId ? 
-        `draft_meeting_${currentEditingMeetingId}` : 
-        `draft_meeting_${currentEditingContactId || 'new'}`;
-    
-    sessionStorage.removeItem(draftKey);
-    hasUnsavedDraft = false;
-}
-
-// 既存ミーティング添付ファイル表示
-function displayExistingMeetingAttachments(attachments) {
-    const container = document.getElementById('existingMeetingAttachments');
-    container.innerHTML = attachments.map(att => `
-        <div class="file-item">
-            <span>${escapeHtml(att.name)}</span>
-            <div class="file-item-actions">
-                <a href="#" onclick="openFile('${att.id || att.url}', '${escapeHtml(att.name).replace(/'/g, "\\'")}'); return false;" class="btn-small btn-secondary">開く</a>
-                <button type="button" class="btn-small btn-danger" onclick="markMeetingAttachmentForDeletion('${att.id}')">削除</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-// ミーティング添付ファイル削除マーク
-function markMeetingAttachmentForDeletion(fileId) {
-    deletedMeetingAttachments.push(fileId);
-    event.target.closest('.file-item').style.display = 'none';
-}
-
-// 新規ミーティング添付ファイル表示
-function displayNewMeetingAttachments() {
-    const container = document.getElementById('newMeetingAttachments');
-    container.innerHTML = selectedMeetingFiles.map((file, index) => `
-        <div class="file-item">
-            <span>${escapeHtml(file.name)}</span>
-            <button type="button" class="btn-small btn-danger" onclick="removeNewMeetingAttachment(${index})">削除</button>
-        </div>
-    `).join('');
-}
-
-// 新規ミーティング添付ファイル削除
-function removeNewMeetingAttachment(index) {
-    selectedMeetingFiles.splice(index, 1);
-    displayNewMeetingAttachments();
-}
-
-// コンテンツのトグル
-function toggleContent(meetingId) {
-    const content = document.getElementById(`content-${meetingId}`);
-    const link = event.target;
-    
-    if (content.classList.contains('truncated')) {
-        content.classList.remove('truncated');
-        link.textContent = '折りたたむ';
-    } else {
-        content.classList.add('truncated');
-        link.textContent = '続きを読む';
+// ドラフト保存のスケジュール
+function scheduleDraftSave() {
+    if (draftSaveTimer) {
+        clearTimeout(draftSaveTimer);
     }
+    
+    draftSaveTimer = setTimeout(() => {
+        saveDraft();
+    }, 2000);
+}
+
+// ドラフト保存
+function saveDraft() {
+    if (!hasUnsavedDraft || currentEditingMeetingId) return;
+    
+    const form = document.getElementById('meetingForm');
+    const draft = {
+        contactId: currentEditingContactId,
+        datetime: form.datetime.value,
+        content: form.content.value,
+        savedAt: new Date().toISOString()
+    };
+    
+    localStorage.setItem('meetingDraft', JSON.stringify(draft));
+    
+    // インジケーター表示
+    const indicator = document.getElementById('draftStatus');
+    indicator.classList.add('show');
+    setTimeout(() => {
+        indicator.classList.remove('show');
+    }, 2000);
 }
