@@ -2,52 +2,70 @@
 
 // Google API初期化
 async function initializeGapiClient() {
-    await gapi.client.init({
-        discoveryDocs: DISCOVERY_DOCS,
-    });
-    gapiInited = true;
-    maybeEnableButtons();
+    try {
+        await gapi.client.init({
+            discoveryDocs: DISCOVERY_DOCS,
+        });
+        gapiInited = true;
+        console.log('GAPI初期化完了');
+        maybeEnableButtons();
+    } catch (error) {
+        console.error('GAPI初期化エラー:', error);
+        showNotification('Google APIの初期化に失敗しました', 'error');
+    }
 }
 
 // Google Identity Services初期化
 function initializeGisClient() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: (response) => {
-            if (response.error !== undefined) {
-                throw (response);
-            }
-            // トークンの有効期限を管理
-            accessToken = response.access_token;
-            const expiresIn = response.expires_in || 3600; // デフォルト1時間
-            tokenExpiresAt = Date.now() + (expiresIn * 1000);
-            
-            // ローカルストレージに保存（より長期的な保存）
-            localStorage.setItem('google_access_token', accessToken);
-            localStorage.setItem('token_expires_at', tokenExpiresAt);
-            
-            handleAuthSuccess();
-        },
-    });
-    gisInited = true;
-    maybeEnableButtons();
+    try {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: (response) => {
+                if (response.error !== undefined) {
+                    console.error('認証エラー:', response);
+                    showNotification('認証に失敗しました', 'error');
+                    return;
+                }
+                // トークンの有効期限を管理
+                accessToken = response.access_token;
+                const expiresIn = response.expires_in || 3600; // デフォルト1時間
+                tokenExpiresAt = Date.now() + (expiresIn * 1000);
+                
+                // ローカルストレージに保存（より長期的な保存）
+                localStorage.setItem('google_access_token', accessToken);
+                localStorage.setItem('token_expires_at', tokenExpiresAt);
+                
+                handleAuthSuccess();
+            },
+        });
+        gisInited = true;
+        console.log('GIS初期化完了');
+        maybeEnableButtons();
+    } catch (error) {
+        console.error('GIS初期化エラー:', error);
+        showNotification('認証サービスの初期化に失敗しました', 'error');
+    }
 }
 
 // 初期化完了チェック
 function maybeEnableButtons() {
+    console.log('初期化状態確認 - GAPI:', gapiInited, 'GIS:', gisInited);
+    
     if (gapiInited && gisInited) {
         // ローカルストレージから取得（永続化）
         const savedToken = localStorage.getItem('google_access_token');
         const expiresAt = localStorage.getItem('token_expires_at');
         
         if (savedToken && expiresAt && Date.now() < parseInt(expiresAt)) {
+            console.log('保存済みトークンを使用');
             gapi.client.setToken({ access_token: savedToken });
             accessToken = savedToken;
             tokenExpiresAt = parseInt(expiresAt);
             validateTokenAndInitialize();
         } else {
             // 期限切れまたは無効なトークンをクリア
+            console.log('認証画面を表示');
             clearTokens();
             showAuthScreen();
         }
@@ -72,12 +90,15 @@ function isTokenValid() {
 // トークン検証
 async function validateTokenAndInitialize() {
     try {
+        console.log('トークン検証中...');
         await gapi.client.drive.about.get({ fields: 'user' });
+        console.log('トークン有効');
         handleAuthSuccess();
     } catch (error) {
         console.error('Token validation failed:', error);
         // エラー時は再認証を試みる
         if (tokenClient) {
+            console.log('サイレント再認証を試行');
             tokenClient.requestAccessToken({ prompt: '' });
         } else {
             clearTokens();
@@ -88,6 +109,8 @@ async function validateTokenAndInitialize() {
 
 // Google認証実行
 function authenticateGoogle() {
+    console.log('Google認証開始');
+    
     if (!CLIENT_ID) {
         showNotification('先にセットアップを完了してください', 'error');
         showSetupWizard();
@@ -104,8 +127,15 @@ function authenticateGoogle() {
 
 // 認証画面表示
 function showAuthScreen() {
+    console.log('認証画面を表示');
+    
     const authContainer = document.getElementById('authContainer');
     const mainContainer = document.getElementById('mainContainer');
+    const setupWizard = document.getElementById('setupWizard');
+    
+    if (setupWizard) {
+        setupWizard.style.display = 'none';
+    }
     
     if (authContainer) {
         authContainer.style.display = 'block';
@@ -120,6 +150,8 @@ function showAuthScreen() {
 
 // 認証成功時の処理
 async function handleAuthSuccess() {
+    console.log('認証成功 - データ読み込み開始');
+    
     try {
         showLoading();
         
@@ -242,4 +274,73 @@ function updateConnectionStatus() {
         dot.classList.add('disconnected');
         tooltip.textContent = '未接続';
     }
+}
+
+// 必要な関数のスタブ（他のJSファイルが読み込まれるまでの仮実装）
+if (typeof showLoading === 'undefined') {
+    window.showLoading = function() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'flex';
+    };
+}
+
+if (typeof hideLoading === 'undefined') {
+    window.hideLoading = function() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'none';
+    };
+}
+
+if (typeof showNotification === 'undefined') {
+    window.showNotification = function(message, type = 'success') {
+        console.log(`[${type}] ${message}`);
+    };
+}
+
+if (typeof ensureAppFolder === 'undefined') {
+    window.ensureAppFolder = async function() {
+        console.log('ensureAppFolder - stub');
+    };
+}
+
+if (typeof loadData === 'undefined') {
+    window.loadData = async function() {
+        console.log('loadData - stub');
+    };
+}
+
+if (typeof initializeViewMode === 'undefined') {
+    window.initializeViewMode = function() {
+        console.log('initializeViewMode - stub');
+    };
+}
+
+if (typeof initializeFilterVisibility === 'undefined') {
+    window.initializeFilterVisibility = function() {
+        console.log('initializeFilterVisibility - stub');
+    };
+}
+
+if (typeof updateDropdownOptions === 'undefined') {
+    window.updateDropdownOptions = function() {
+        console.log('updateDropdownOptions - stub');
+    };
+}
+
+if (typeof renderContactList === 'undefined') {
+    window.renderContactList = function() {
+        console.log('renderContactList - stub');
+    };
+}
+
+if (typeof renderOutstandingActions === 'undefined') {
+    window.renderOutstandingActions = function() {
+        console.log('renderOutstandingActions - stub');
+    };
+}
+
+if (typeof updateContactCount === 'undefined') {
+    window.updateContactCount = function() {
+        console.log('updateContactCount - stub');
+    };
 }
