@@ -327,7 +327,7 @@ async function openFile(fileIdOrUrl, filename) {
     }
 }
 
-// CSPヘッダー相当の設定をメタタグで追加する関数
+// CSPヘッダー相当の設定をメタタグで追加する関数（修正版）
 function setContentSecurityPolicy() {
     const meta = document.createElement('meta');
     meta.httpEquiv = 'Content-Security-Policy';
@@ -336,7 +336,7 @@ function setContentSecurityPolicy() {
                    "style-src 'self' 'unsafe-inline'; " +
                    "img-src 'self' data: https://*.googleusercontent.com https://*.googleapis.com https://drive.google.com https://lh3.googleusercontent.com https://www.google.com; " +
                    "connect-src 'self' https://*.googleapis.com https://apis.google.com https://www.google.com; " +
-                   "frame-src 'self' https://drive.google.com https://accounts.google.com";
+                   "frame-src 'self' https://drive.google.com https://accounts.google.com https://content.googleapis.com"; // content.googleapis.com を追加
     document.head.appendChild(meta);
 }
 
