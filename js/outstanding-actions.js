@@ -1,6 +1,7 @@
 // ===== 未完了アクション管理機能 =====
 
-let outstandingActionsVisible = false;
+// outstandingActionsVisible はグローバル変数として index.html で定義済み
+// let outstandingActionsVisible = false; // この行を削除
 
 // 未完了アクションの表示/非表示切り替え
 function toggleOutstandingActions() {
