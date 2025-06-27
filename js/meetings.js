@@ -10,7 +10,7 @@ function showMeetingForm(contactId, meetingId = null) {
     resetMeetingForm();
     
     document.getElementById('meetingFormTitle').textContent = 
-        `${contact.name} - ${meetingId ? 'ミーティング編集' : 'ミーティング記録'}`);
+        `${contact.name} - ${meetingId ? 'ミーティング編集' : 'ミーティング記録'}`;
     
     const form = document.getElementById('meetingForm');
     
