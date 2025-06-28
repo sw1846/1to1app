@@ -3,7 +3,7 @@
 
 const CONFIG = {
     // Google OAuth クライアントID
-    GOOGLE_CLIENT_ID: 'YOUR-CLIENT-ID.apps.googleusercontent.com',
+    GOOGLE_CLIENT_ID: '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com',
     
     // アプリケーション設定
     APP_NAME: '1対1ミーティング管理システム',

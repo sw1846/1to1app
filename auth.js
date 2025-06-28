@@ -2,7 +2,7 @@
 
 class AuthManager {
     constructor() {
-        this.CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; // 実際のClient IDに置き換えてください
+        this.CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com'; // 実際のClient IDに置き換えてください
         this.SCOPES = 'https://www.googleapis.com/auth/drive.file';
         this.DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         
