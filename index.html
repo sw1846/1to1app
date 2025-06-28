@@ -2435,7 +2435,7 @@
         let viewMode = 'card';
         let filterVisible = false;
         let currentStep = 1;
-        let outstandingActionsVisible = false;
+        let outstandingActionsVisible = false;  // ここで一度だけ宣言
 
         // Google API設定
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -2687,14 +2687,44 @@
             });
         }
 
-        // その他の基本的な関数（仮実装）
+        // その他の基本的な関数（定義されていない場合のみ定義）
+        if (typeof showSettingsModal === 'undefined') {
+            window.showSettingsModal = function() {
+                const modal = document.getElementById('settingsModal');
+                if (modal) modal.style.display = 'block';
+            };
+        }
+        
         if (typeof showContactForm === 'undefined') {
             window.showContactForm = function() { console.log('showContactForm - stub'); };
         }
+        
         if (typeof closeModal === 'undefined') {
             window.closeModal = function(id) {
                 const modal = document.getElementById(id);
                 if (modal) modal.style.display = 'none';
+            };
+        }
+        
+        if (typeof showTemplateEditor === 'undefined') {
+            window.showTemplateEditor = function() {
+                document.getElementById('templateModal').style.display = 'block';
+            };
+        }
+        
+        if (typeof saveTemplate === 'undefined') {
+            window.saveTemplate = function() {
+                const content = document.getElementById('templateContent').value;
+                localStorage.setItem('meetingTemplate', content);
+                closeModal('templateModal');
+                showNotification('テンプレートを保存しました');
+            };
+        }
+        
+        if (typeof loadTemplate === 'undefined') {
+            window.loadTemplate = function() {
+                const template = localStorage.getItem('meetingTemplate') || '';
+                document.getElementById('templateContent').value = template;
             };
         }
     </script>
