@@ -301,7 +301,7 @@ async function saveMeeting() {
         // 新規添付ファイルアップロード
         const fileInput = document.getElementById('meetingAttachmentsInput');
         if (fileInput.files.length > 0) {
-            const contact = contacts.getContactById(meetingData.contactId);
+            const contact = contactsModule.getContactById(meetingData.contactId);
             
             for (const file of fileInput.files) {
                 const attachmentData = await drive.uploadFile(file, contact.name);

@@ -717,6 +717,7 @@ function editContact() {
 
 // グローバル関数として公開
 window.showNewContactModal = showNewContactModal;
+window.showEditContactModal = showEditContactModal;
 window.showContactDetail = showContactDetail;
 window.saveContact = saveContact;
 window.deleteContact = deleteContact;
@@ -783,8 +784,8 @@ window.addNewMultiSelectOption = (field) => {
 
 window.removePendingAttachment = removePendingAttachment;
 
-// エクスポート
-window.contacts = {
+// エクスポート（モジュールとして）
+window.contactsModule = {
     getContacts,
     searchContacts,
     getContactById,

@@ -14,10 +14,10 @@ function initialize() {
     setupEventListeners();
     
     // マルチセレクト初期化
-    contacts.initializeMultiSelects();
+    contactsModule.initializeMultiSelects();
     
     // ファイルアップロード初期化
-    contacts.initializeFileUploads();
+    contactsModule.initializeFileUploads();
     
     // フィルター初期化
     updateFilterOptions();
@@ -109,7 +109,7 @@ function setViewMode(mode) {
 // 連絡先表示
 function renderContacts() {
     const container = document.getElementById('contactsContainer');
-    const contactsList = contacts.searchContacts(searchQuery, filters);
+    const contactsList = contactsModule.searchContacts(searchQuery, filters);
     
     if (contactsList.length === 0) {
         container.innerHTML = `

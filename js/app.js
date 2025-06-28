@@ -1,6 +1,8 @@
 // app.js - メインアプリケーション
 
 // グローバル変数初期化
+window._contacts = [];
+window._meetings = [];
 window.contacts = [];
 window.meetings = [];
 window.options = {

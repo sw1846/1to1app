@@ -1,7 +1,7 @@
 // auth.js - Google認証処理
 
 // Google OAuth設定
-const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com'; // 実際のClient IDに置き換えてください
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // 実際のClient IDに置き換えてください
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile';
 
 // 認証状態管理
