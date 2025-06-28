@@ -62,7 +62,7 @@ function setupEventListeners() {
     
     // インポート/エクスポート
     document.getElementById('importBtn').addEventListener('click', importData);
-    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('exportBtn').addEventListener('click', () => exportData());
     
     // インポート用input
     const importInput = document.getElementById('importInput');
@@ -293,29 +293,49 @@ async function handleImport(e) {
     
     try {
         const text = await file.text();
-        const data = JSON.parse(text);
+        let data = JSON.parse(text);
         
-        // データ検証
-        if (!data.contacts || !Array.isArray(data.contacts)) {
-            throw new Error('Invalid data format');
+        // 旧形式のデータ（配列のみ）への対応
+        if (Array.isArray(data)) {
+            data = { contacts: data };
         }
         
-        // 確認
-        if (!confirm(`${data.contacts.length}件の連絡先をインポートします。既存のデータは上書きされます。続行しますか？`)) {
+        // データ検証と初期化
+        const importData = {
+            contacts: Array.isArray(data.contacts) ? data.contacts : [],
+            meetings: Array.isArray(data.meetings) ? data.meetings : [],
+            options: data.options || {
+                types: [],
+                affiliations: [],
+                wantToConnect: [],
+                goldenEgg: []
+            }
+        };
+        
+        // 確認メッセージ
+        const counts = [];
+        if (importData.contacts.length > 0) counts.push(`${importData.contacts.length}件の連絡先`);
+        if (importData.meetings.length > 0) counts.push(`${importData.meetings.length}件のミーティング記録`);
+        
+        const message = counts.length > 0 
+            ? `${counts.join('と')}をインポートします。既存のデータは上書きされます。続行しますか？`
+            : 'インポート可能なデータが見つかりませんでした。';
+        
+        if (counts.length === 0) {
+            utils.showNotification(message, 'warning');
+            return;
+        }
+        
+        if (!confirm(message)) {
             return;
         }
         
         utils.showLoading();
         
         // データ設定
-        window.contacts = data.contacts || [];
-        window.meetings = data.meetings || [];
-        window.options = data.options || {
-            types: [],
-            affiliations: [],
-            wantToConnect: [],
-            goldenEgg: []
-        };
+        window.contacts = importData.contacts;
+        window.meetings = importData.meetings;
+        window.options = importData.options;
         
         // Drive に保存
         await drive.saveData();
@@ -328,7 +348,15 @@ async function handleImport(e) {
         
     } catch (error) {
         console.error('Import error:', error);
-        utils.showNotification('インポートに失敗しました', 'error');
+        
+        let errorMessage = 'インポートに失敗しました';
+        if (error instanceof SyntaxError) {
+            errorMessage = 'ファイルの形式が正しくありません（JSONファイルを選択してください）';
+        } else if (error.message) {
+            errorMessage = `インポートエラー: ${error.message}`;
+        }
+        
+        utils.showNotification(errorMessage, 'error');
     } finally {
         utils.hideLoading();
         e.target.value = ''; // inputをリセット
@@ -338,13 +366,24 @@ async function handleImport(e) {
 // データエクスポート
 function exportData() {
     try {
+        // 現在のデータを収集
         const exportData = {
             version: '1.0',
             exportDate: new Date().toISOString(),
             contacts: window.contacts || [],
             meetings: window.meetings || [],
-            options: window.options || {}
+            options: window.options || {
+                types: [],
+                affiliations: [],
+                wantToConnect: [],
+                goldenEgg: []
+            }
         };
+        
+        // データ件数を表示
+        const counts = [];
+        if (exportData.contacts.length > 0) counts.push(`${exportData.contacts.length}件の連絡先`);
+        if (exportData.meetings.length > 0) counts.push(`${exportData.meetings.length}件のミーティング記録`);
         
         const jsonStr = JSON.stringify(exportData, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -357,7 +396,11 @@ function exportData() {
         
         URL.revokeObjectURL(url);
         
-        utils.showNotification('データをエクスポートしました');
+        const message = counts.length > 0 
+            ? `${counts.join('と')}をエクスポートしました`
+            : 'エクスポートするデータがありません';
+            
+        utils.showNotification(message, counts.length > 0 ? 'success' : 'warning');
         
     } catch (error) {
         console.error('Export error:', error);
@@ -394,5 +437,6 @@ window.ui = {
     renderContacts,
     updateFilterOptions,
     showProgress,
-    handleError
+    handleError,
+    exportData  // exportDataを追加
 };
