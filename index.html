@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1対1ミーティング管理システム</title>
+    
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --danger: #f85149;
+            --warning: #d29922;
+            --border: #30363d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        /* ヘッダー */
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+        
+        /* メインコンテナ */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* ツールバー */
+        .toolbar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+        
+        .btn:hover {
+            opacity: 0.8;
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+        }
+        
+        .btn-success {
+            background: var(--success);
+        }
+        
+        /* ビュー切替 */
+        .view-toggle {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--bg-tertiary);
+            padding: 0.25rem;
+            border-radius: 6px;
+        }
+        
+        .view-toggle button {
+            padding: 0.5rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .view-toggle button.active {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        
+        /* フィルター */
+        .filters {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .filter-select {
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            min-width: 150px;
+        }
+        
+        /* カードビュー */
+        .contacts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .contact-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        
+        .contact-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .contact-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .contact-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--accent);
+            overflow: hidden;
+        }
+        
+        .contact-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .contact-info h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .contact-info .company {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .contact-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .tag {
+            padding: 0.25rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 16px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        /* リストビュー */
+        .contacts-list {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .list-header {
+            display: grid;
+            grid-template-columns: 60px 2fr 2fr 1fr 1fr 100px;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .list-item {
+            display: grid;
+            grid-template-columns: 60px 2fr 2fr 1fr 1fr 100px;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .list-item:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        .list-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: var(--accent);
+            overflow: hidden;
+        }
+        
+        .list-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            max-width: 800px;
+            margin: 2rem auto;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        
+        /* フォーム */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        textarea.form-control {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        /* マルチセレクト */
+        .multi-select {
+            position: relative;
+        }
+        
+        .multi-select-display {
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-top: 0.25rem;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 100;
+        }
+        
+        .multi-select-dropdown.show {
+            display: block;
+        }
+        
+        .multi-select-search {
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .multi-select-search input {
+            width: 100%;
+            padding: 0.25rem 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 12px;
+        }
+        
+        .multi-select-option {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .multi-select-option:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .multi-select-option.selected {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .multi-select-add {
+            padding: 0.5rem 1rem;
+            color: var(--accent);
+            cursor: pointer;
+            border-top: 1px solid var(--border);
+        }
+        
+        /* ファイルアップロード */
+        .file-upload {
+            border: 2px dashed var(--border);
+            border-radius: 6px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        
+        .file-upload:hover,
+        .file-upload.drag-over {
+            border-color: var(--accent);
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .file-list {
+            margin-top: 1rem;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* ミーティング記録 */
+        .meeting-item {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .meeting-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .meeting-date {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+        }
+        
+        .todo-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .todo-item.completed {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+        
+        /* ローディング */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        
+        .loading-overlay.show {
+            display: flex;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 通知 */
+        .notification {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateX(400px);
+            transition: transform 0.3s;
+            z-index: 1500;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            border-color: var(--success);
+            color: var(--success);
+        }
+        
+        .notification.error {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        
+        /* ログイン画面 */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-box {
+            background: var(--bg-secondary);
+            padding: 3rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .login-box h2 {
+            margin-bottom: 2rem;
+            color: var(--accent);
+        }
+        
+        /* レスポンシブ */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .contacts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .list-header,
+            .list-item {
+                grid-template-columns: 50px 1fr 1fr;
+            }
+            
+            .list-header > :nth-child(n+4),
+            .list-item > :nth-child(n+4) {
+                display: none;
+            }
+            
+            .modal-content {
+                margin: 0;
+                height: 100%;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ログイン画面 -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <h2>1対1ミーティング管理システム</h2>
+            <p style="margin-bottom: 2rem; color: var(--text-secondary);">
+                Googleアカウントでログインして開始
+            </p>
+            <button id="loginButton" class="btn">
+                Googleでログイン
+            </button>
+        </div>
+    </div>
+    
+    <!-- メイン画面 -->
+    <div id="mainScreen" style="display: none;">
+        <!-- ヘッダー -->
+        <header class="header">
+            <h1>1対1ミーティング管理</h1>
+            <div class="user-info">
+                <span id="userName"></span>
+                <img id="userAvatar" class="user-avatar" alt="User">
+                <button id="logoutButton" class="btn btn-secondary">
+                    ログアウト
+                </button>
+            </div>
+        </header>
+        
+        <!-- メインコンテンツ -->
+        <div class="container">
+            <!-- ツールバー -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="名前、会社名で検索...">
+                </div>
+                
+                <div class="filters">
+                    <select id="typeFilter" class="filter-select">
+                        <option value="">種別で絞り込み</option>
+                    </select>
+                    <select id="affiliationFilter" class="filter-select">
+                        <option value="">所属で絞り込み</option>
+                    </select>
+                </div>
+                
+                <div class="view-toggle">
+                    <button id="cardViewBtn" class="active" title="カードビュー">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M0 0h7v7H0zM9 0h7v7H9zM0 9h7v7H0zM9 9h7v7H9z"/>
+                        </svg>
+                    </button>
+                    <button id="listViewBtn" title="リストビュー">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M0 2h16v2H0zM0 7h16v2H0zM0 12h16v2H0z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <button id="addContactBtn" class="btn">
+                    新規連絡先
+                </button>
+                
+                <button id="importBtn" class="btn btn-secondary">
+                    インポート
+                </button>
+                <button id="exportBtn" class="btn btn-secondary">
+                    エクスポート
+                </button>
+            </div>
+            
+            <!-- 連絡先表示エリア -->
+            <div id="contactsContainer"></div>
+        </div>
+    </div>
+    
+    <!-- 連絡先編集モーダル -->
+    <div id="contactModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">新規連絡先</h2>
+                <button class="btn btn-secondary" onclick="closeContactModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="contactForm">
+                    <!-- 基本情報 -->
+                    <div class="form-group">
+                        <label>氏名 *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>ふりがな</label>
+                        <input type="text" name="yomi" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>会社名</label>
+                        <input type="text" name="company" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>メールアドレス</label>
+                        <input type="email" name="email" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>電話番号</label>
+                        <input type="tel" name="phone" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>ホームページURL</label>
+                        <input type="url" name="homepage" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>紹介者</label>
+                        <input type="text" name="referredBy" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>活動エリア</label>
+                        <input type="text" name="area" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>居住地</label>
+                        <input type="text" name="residence" class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>趣味</label>
+                        <input type="text" name="interest" class="form-control">
+                    </div>
+                    
+                    <!-- 複数選択フィールド -->
+                    <div class="form-group">
+                        <label>種別</label>
+                        <div class="multi-select" data-field="types">
+                            <div class="multi-select-display">
+                                <span style="color: var(--text-secondary);">選択してください</span>
+                            </div>
+                            <div class="multi-select-dropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>所属・チャプター</label>
+                        <div class="multi-select" data-field="affiliations">
+                            <div class="multi-select-display">
+                                <span style="color: var(--text-secondary);">選択してください</span>
+                            </div>
+                            <div class="multi-select-dropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>繋がりたい人・業種</label>
+                        <div class="multi-select" data-field="wantToConnect">
+                            <div class="multi-select-display">
+                                <span style="color: var(--text-secondary);">選択してください</span>
+                            </div>
+                            <div class="multi-select-dropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>金の卵</label>
+                        <div class="multi-select" data-field="goldenEgg">
+                            <div class="multi-select-display">
+                                <span style="color: var(--text-secondary);">選択してください</span>
+                            </div>
+                            <div class="multi-select-dropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 自由入力フィールド -->
+                    <div class="form-group">
+                        <label>強み</label>
+                        <textarea name="strengths" class="form-control"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>過去の経歴</label>
+                        <textarea name="careerHistory" class="form-control"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>印象的な一言</label>
+                        <textarea name="cutout" class="form-control"></textarea>
+                    </div>
+                    
+                    <!-- ファイルアップロード -->
+                    <div class="form-group">
+                        <label>顔写真</label>
+                        <div class="file-upload" data-type="photo">
+                            <input type="file" accept="image/*" id="photoInput">
+                            <p>クリックまたはドラッグ＆ドロップ</p>
+                            <div id="photoPreview"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>名刺画像</label>
+                        <div class="file-upload" data-type="businessCard">
+                            <input type="file" accept="image/*" id="businessCardInput">
+                            <p>クリックまたはドラッグ＆ドロップ</p>
+                            <div id="businessCardPreview"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>添付ファイル</label>
+                        <div class="file-upload" data-type="attachments">
+                            <input type="file" multiple id="attachmentsInput">
+                            <p>クリックまたはドラッグ＆ドロップ（複数可）</p>
+                            <div id="attachmentsList" class="file-list"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 初回ミーティング記録（新規作成時のみ） -->
+                    <div id="initialMeetingSection" style="display: none;">
+                        <h3 style="margin: 2rem 0 1rem;">初回ミーティング記録</h3>
+                        <div class="form-group">
+                            <label>日時</label>
+                            <input type="datetime-local" name="meetingDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>内容</label>
+                            <textarea name="meetingContent" class="form-control"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeContactModal()">
+                    キャンセル
+                </button>
+                <button type="button" class="btn" onclick="saveContact()">
+                    保存
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 連絡先詳細モーダル -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detailName"></h2>
+                <button class="btn btn-secondary" onclick="closeDetailModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="detailContent"></div>
+                
+                <!-- ミーティング記録セクション -->
+                <div style="margin-top: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3>ミーティング記録</h3>
+                        <button class="btn" onclick="addMeeting()">新規ミーティング</button>
+                    </div>
+                    <div id="meetingsList"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="deleteContact()">
+                    削除
+                </button>
+                <button type="button" class="btn" onclick="editContact()">
+                    編集
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ローディングオーバーレイ -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+    
+    <!-- 通知 -->
+    <div id="notification" class="notification"></div>
+    
+    <!-- インポート用の隠しinput -->
+    <input type="file" id="importInput" accept=".json" style="display: none;">
+    
+    <!-- JavaScript モジュール -->
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/drive.js"></script>
+    <script src="js/contacts.js"></script>
+    <script src="js/meetings.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
