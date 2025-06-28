@@ -11,13 +11,13 @@ function getMeetings() {
 
 // 連絡先のミーティング取得
 function getMeetingsByContactId(contactId) {
-    return getMeetings().filter(meeting => meeting.contactId === contactId)
+    return (window.meetings || []).filter(meeting => meeting.contactId === contactId)
         .sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
 }
 
 // ミーティング取得
 function getMeetingById(id) {
-    return getMeetings().find(meeting => meeting.id === id);
+    return (window.meetings || []).find(meeting => meeting.id === id);
 }
 
 // 連絡先のミーティングリスト表示
@@ -329,7 +329,7 @@ async function saveMeeting() {
         closeMeetingModal();
         
         // 表示更新
-        renderMeetingsForContact(meetingData.contactId);
+        meetingsModule.renderMeetingsForContact(meetingData.contactId);
         
         utils.showNotification(currentMeeting ? 'ミーティングを更新しました' : 'ミーティングを登録しました');
         
@@ -389,7 +389,7 @@ async function deleteMeeting(meetingId) {
         await drive.saveData();
         
         // 表示更新
-        renderMeetingsForContact(meeting.contactId);
+        meetingsModule.renderMeetingsForContact(meeting.contactId);
         
         utils.showNotification('ミーティングを削除しました');
         
@@ -403,7 +403,7 @@ async function deleteMeeting(meetingId) {
 
 // ToDo状態切替
 async function toggleTodoStatus(todoId) {
-    const meetingsList = getMeetings();
+    const meetingsList = window.meetings || [];
     let updated = false;
     
     for (const meeting of meetingsList) {
@@ -421,7 +421,7 @@ async function toggleTodoStatus(todoId) {
     if (updated) {
         try {
             await drive.saveData();
-            renderMeetingsForContact(currentContactId);
+            meetingsModule.renderMeetingsForContact(currentContactId);
         } catch (error) {
             console.error('Toggle todo error:', error);
             utils.showNotification('更新に失敗しました', 'error');
@@ -598,8 +598,8 @@ window.removeExistingAttachment = (fileId) => {
 
 window.applyMeetingTemplate = applyMeetingTemplate;
 
-// エクスポート
-window.meetings = {
+// エクスポート（モジュールとして）
+window.meetingsModule = {
     getMeetings,
     getMeetingsByContactId,
     getMeetingById,

@@ -422,7 +422,7 @@ async function showContactDetail(contactId) {
     document.getElementById('detailContent').innerHTML = detailHtml;
     
     // ミーティングリスト表示
-    meetings.renderMeetingsForContact(contactId);
+    meetingsModule.renderMeetingsForContact(contactId);
     
     document.getElementById('detailModal').style.display = 'block';
 }
