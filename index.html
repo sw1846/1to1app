@@ -159,40 +159,67 @@
     <!-- JavaScript読み込み順序を調整 -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/data-google.js"></script>
+    <script src="js/data.js"></script><!-- 既存のdata.jsをベースに使用 -->
+    <script src="js/data-google.js"></script><!-- Google Drive拡張機能 -->
     <script src="js/contacts.js"></script>
     <script src="js/meetings.js"></script>
     <script src="js/ui.js"></script>
-    <script src="js/main-google.js"></script>
+    <script src="js/main.js"></script><!-- 既存のmain.js -->
+    <script src="js/main-google.js"></script><!-- Google Drive拡張 -->
 
     <!-- 初期化スクリプト -->
     <script>
         // ページ読み込み時の処理
         window.addEventListener('load', async () => {
             // Google APIの初期化を待つ
-            if (typeof gapi !== 'undefined') {
+            if (typeof gapi !== 'undefined' && typeof initializeGoogleAPI === 'function') {
                 await initializeGoogleAPI();
             }
             
-            if (typeof google !== 'undefined') {
+            if (typeof google !== 'undefined' && typeof initializeGIS === 'function') {
                 initializeGIS();
             }
             
             // ローディング画面を非表示
-            document.getElementById('loadingScreen').style.display = 'none';
+            const loadingScreen = document.getElementById('loadingScreen');
+            if (loadingScreen) {
+                loadingScreen.style.display = 'none';
+            }
             
             // 認証状態をチェック
-            if (gapi && gapi.client && gapi.client.getToken()) {
-                await initializeDataFolder();
-                await loadAllData();
+            if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken()) {
+                if (typeof initializeDataFolder === 'function') {
+                    await initializeDataFolder();
+                }
+                if (typeof loadAllData === 'function') {
+                    await loadAllData();
+                }
             } else {
-                document.getElementById('authMessage').style.display = 'block';
+                const authMessage = document.getElementById('authMessage');
+                if (authMessage) {
+                    authMessage.style.display = 'block';
+                }
             }
         });
 
         // 認証ボタンのイベント設定
-        document.getElementById('authorizeBtn').onclick = handleAuthClick;
-        document.getElementById('signoutBtn').onclick = handleSignoutClick;
+        const authorizeBtn = document.getElementById('authorizeBtn');
+        if (authorizeBtn) {
+            authorizeBtn.onclick = function() {
+                if (typeof handleAuthClick === 'function') {
+                    handleAuthClick();
+                }
+            };
+        }
+        
+        const signoutBtn = document.getElementById('signoutBtn');
+        if (signoutBtn) {
+            signoutBtn.onclick = function() {
+                if (typeof handleSignoutClick === 'function') {
+                    handleSignoutClick();
+                }
+            };
+        }
         
         // 同期ボタン
         document.getElementById('syncBtn').onclick = async () => {
