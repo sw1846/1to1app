@@ -1,0 +1,1591 @@
+/* styles.css - 全スタイル定義（改修版） */
+
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --bg-tertiary: #e0e0e0;
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --text-tertiary: #999999;
+    --border-color: #dddddd;
+    --accent-color: #007bff;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+    --shadow-hover: 0 4px 8px rgba(0,0,0,0.15);
+    --expand-btn-text: #007bff;
+    --expand-btn-bg: rgba(255,255,255,0.95);
+    --expand-btn-border: #ddd;
+}
+
+[data-theme="dark"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #3a3a3a;
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --text-tertiary: #808080;
+    --border-color: #404040;
+    --accent-color: #4a9eff;
+    --success-color: #45c765;
+    --warning-color: #ffd43b;
+    --danger-color: #ff6b6b;
+    --shadow: 0 2px 4px rgba(0,0,0,0.3);
+    --shadow-hover: 0 4px 8px rgba(0,0,0,0.4);
+    --expand-btn-text: #6ab7ff;
+    --expand-btn-bg: rgba(42,42,42,0.95);
+    --expand-btn-border: #505050;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* ヘッダー */
+.header {
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ボタン */
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-icon {
+    padding: 0.5rem;
+    background: transparent;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* クリアボタン（新規追加） */
+.btn-clear {
+    background-color: var(--warning-color);
+    color: #333;
+}
+
+.btn-clear:hover {
+    background-color: #f0a000;
+    opacity: 1;
+}
+
+/* リンクのスタイル改善 */
+a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+a:hover {
+    text-decoration: underline;
+    opacity: 0.8;
+}
+
+[data-theme="dark"] a {
+    color: #6ab7ff;
+}
+
+/* クリック可能なスパン（リンク風） */
+.clickable-link {
+    color: var(--accent-color);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.clickable-link:hover {
+    text-decoration: underline;
+    opacity: 0.8;
+}
+
+[data-theme="dark"] .clickable-link {
+    color: #6ab7ff;
+}
+
+/* メインコンテンツ */
+.main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0;
+    height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
+}
+
+/* 固定ヘッダー部分 */
+.fixed-header {
+    background-color: var(--bg-primary);
+    padding: 2rem 1rem 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* スクロール可能なコンテンツ */
+.scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    padding-top: 0;
+    min-height: 0;
+}
+
+/* タブナビゲーション */
+.tab-nav {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    position: relative;
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tab-btn.active {
+    color: var(--accent-color);
+}
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--accent-color);
+}
+
+/* タブバッジ（未完了ToDo数表示用） */
+.tab-badge {
+    background-color: var(--danger-color);
+    color: white;
+    padding: 0.125rem 0.375rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 1.25rem;
+    text-align: center;
+}
+
+/* 検索・フィルター */
+.search-filter-section {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.search-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.sort-select {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.filter-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.filter-select {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* フィルター検索入力 */
+.filter-search-input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    min-width: 200px;
+}
+
+.filter-search-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* 紹介者フィルターメッセージ */
+.referrer-filter-message {
+    background-color: var(--warning-color);
+    color: #333;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* 表示切替 */
+.view-toggle {
+    display: flex;
+    gap: 0.25rem;
+    background-color: var(--bg-tertiary);
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.view-btn {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: all 0.2s;
+}
+
+.view-btn.active {
+    background-color: var(--bg-primary);
+    color: var(--accent-color);
+    box-shadow: var(--shadow);
+}
+
+/* カードビュー */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.contact-card {
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    padding-left: calc(1.5rem + 6px);
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.contact-card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+}
+
+.contact-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background-color: transparent;
+}
+
+.contact-card.type-customer-candidate::before {
+    background-color: #FF1744;
+}
+
+.contact-card.type-customer::before {
+    background-color: #FFD600;
+}
+
+.contact-card.type-distributor::before {
+    background-color: #2979FF;
+}
+
+.contact-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 1rem;
+    background-color: var(--bg-tertiary);
+}
+
+.contact-info h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.contact-info p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 0.125rem;
+}
+
+/* リストビュー */
+.list-view {
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.list-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    padding-left: calc(1rem + 6px);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.list-item:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.list-item:last-child {
+    border-bottom: none;
+}
+
+.list-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background-color: transparent;
+}
+
+.list-item.type-customer-candidate::before {
+    background-color: #FF1744;
+}
+
+.list-item.type-customer::before {
+    background-color: #FFD600;
+}
+
+.list-item.type-distributor::before {
+    background-color: #2979FF;
+}
+
+.list-photo {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 1rem;
+    background-color: var(--bg-tertiary);
+}
+
+.list-info {
+    flex: 1;
+}
+
+.list-info h4 {
+    font-size: 1rem;
+    margin-bottom: 0.125rem;
+}
+
+.list-info p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* ツリービュー */
+.tree-view {
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.tree-node {
+    margin-left: 1.5rem;
+    border-left: 1px solid var(--border-color);
+    padding-left: 1rem;
+}
+
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    padding-left: calc(0.5rem + 6px);
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-radius: 0.25rem;
+    position: relative;
+}
+
+.tree-item:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.tree-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background-color: transparent;
+    border-top-left-radius: 0.25rem;
+    border-bottom-left-radius: 0.25rem;
+}
+
+.tree-item.type-customer-candidate::before {
+    background-color: #FF1744;
+}
+
+.tree-item.type-customer::before {
+    background-color: #FFD600;
+}
+
+.tree-item.type-distributor::before {
+    background-color: #2979FF;
+}
+
+.tree-expand {
+    width: 20px;
+    height: 20px;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* モーダル */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+.modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.modal-content {
+    background-color: var(--bg-primary);
+    border-radius: 0.5rem;
+    max-width: 800px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background-color: var(--bg-primary);
+    z-index: 10;
+}
+
+.modal-header h2 {
+    font-size: 1.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    position: sticky;
+    bottom: 0;
+    background-color: var(--bg-primary);
+}
+
+/* フォーム */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+/* 接触方法選択 */
+.contact-method-selector {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.contact-method-radio {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.contact-method-radio input[type="radio"] {
+    cursor: pointer;
+}
+
+.contact-method-radio label {
+    cursor: pointer;
+    font-weight: normal;
+}
+
+/* Markdownプレビュー付きテキストエリア */
+.markdown-editor-container {
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    overflow: hidden;
+}
+
+.markdown-editor-tabs {
+    display: flex;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.markdown-editor-tab {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.markdown-editor-tab.active {
+    background-color: var(--bg-primary);
+    color: var(--accent-color);
+    border-bottom: 2px solid var(--accent-color);
+}
+
+.markdown-editor-content {
+    min-height: 150px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.markdown-editor-content .form-textarea {
+    border: none;
+    border-radius: 0;
+    min-height: 150px;
+}
+
+.markdown-editor-preview {
+    padding: 0.5rem;
+    min-height: 150px;
+    background-color: var(--bg-primary);
+}
+
+/* ドロップゾーン */
+.drop-zone {
+    border: 2px dashed var(--border-color);
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.drop-zone.dragover {
+    border-color: var(--accent-color);
+    background-color: var(--bg-secondary);
+}
+
+.drop-zone-content {
+    pointer-events: none;
+}
+
+/* 画像プレビュー */
+.image-preview-container {
+    position: relative;
+    display: inline-block;
+    margin-top: 1rem;
+}
+
+.image-preview {
+    width: 150px;
+    height: 150px;
+    border-radius: 0.5rem;
+    object-fit: cover;
+    box-shadow: var(--shadow);
+}
+
+#businessCardPreview {
+    width: auto;
+    max-width: 300px;
+    height: auto;
+    max-height: 200px;
+}
+
+.image-delete-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background-color: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: var(--shadow);
+}
+
+/* 画像ホバー効果 */
+img[onclick*="showImageModal"] {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+img[onclick*="showImageModal"]:hover {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-hover);
+}
+
+/* 複数項目入力 */
+.multi-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.multi-input-item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.multi-input-item input {
+    flex: 1;
+}
+
+/* 複数選択タグ */
+.multi-select-container {
+    position: relative;
+}
+
+.multi-select-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    min-height: 42px;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    cursor: pointer;
+}
+
+.multi-select-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--accent-color);
+    color: white;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.multi-select-tag button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.multi-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    box-shadow: var(--shadow-hover);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.multi-select-dropdown.show {
+    display: block;
+}
+
+/* 複数選択検索欄 */
+.multi-select-search {
+    position: sticky;
+    top: 0;
+    background-color: var(--bg-primary);
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    z-index: 1;
+}
+
+.multi-select-search input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.multi-select-options {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.multi-select-option {
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.multi-select-option:hover {
+    background-color: var(--bg-secondary);
+}
+
+.multi-select-option.hidden {
+    display: none;
+}
+
+.multi-select-option input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.multi-select-no-results {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* 折りたたみコンテンツのラッパー */
+.collapsible-wrapper {
+    position: relative;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+}
+
+/* 折りたたみコンテンツ */
+.collapsible-content {
+    max-height: 10.5rem;
+    overflow: auto;
+    transition: max-height 0.3s;
+    padding-right: 0.75rem;
+    padding-bottom: 2rem;
+}
+
+.collapsible-content.expanded {
+    max-height: none;
+    overflow: auto;
+    padding-bottom: 2rem;
+}
+
+/* スクロールバーのスタイル */
+.collapsible-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.collapsible-content::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+}
+
+.collapsible-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.collapsible-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+.expand-btn {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    background-color: var(--expand-btn-bg);
+    color: var(--expand-btn-text);
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--expand-btn-border);
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.expand-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-hover);
+}
+
+/* ToDoリスト */
+.todo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.todo-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+}
+
+.todo-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.todo-text {
+    flex: 1;
+}
+
+.todo-text.completed {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.todo-date {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* ToDo表示セクション */
+.todo-section {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+}
+
+.todo-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--accent-color);
+}
+
+.todo-badge {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 0.125rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+}
+
+/* 通知 */
+.notification {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-hover);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 2000;
+    transform: translateX(400px);
+    transition: transform 0.3s;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification.success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.notification.error {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.notification.warning {
+    background-color: var(--warning-color);
+    color: #333;
+}
+
+/* ローディング */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ToDoサマリー */
+.todo-summary {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.todo-summary-header {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.todo-summary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.todo-summary-item {
+    background-color: var(--bg-secondary);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.todo-summary-contact {
+    font-weight: 500;
+    color: var(--accent-color);
+    margin-right: 0.5rem;
+}
+
+/* 連絡先詳細の2段組レイアウト */
+.contact-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.contact-detail-section {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+}
+
+.contact-detail-section h4 {
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.contact-detail-section p {
+    margin-bottom: 0.25rem;
+}
+
+/* データマージボタン */
+.merge-data-btn {
+    background-color: var(--warning-color);
+    color: #333;
+    font-weight: 600;
+}
+
+.merge-data-btn:hover {
+    background-color: #f0a000;
+}
+
+/* ミーティング詳細 */
+.meeting-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid var(--border-color);
+}
+
+.meeting-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.meeting-item {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow);
+    position: relative;
+}
+
+.meeting-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.meeting-date {
+    font-weight: 600;
+    color: var(--accent-color);
+}
+
+.meeting-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.meeting-content {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    position: relative;
+}
+
+.meeting-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.meeting-content::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+}
+
+.meeting-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* ファイル添付 */
+.file-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--bg-tertiary);
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.file-item a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.file-item a:hover {
+    text-decoration: underline;
+}
+
+/* Markdownプレビュー */
+.markdown-preview {
+    padding: 1rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+}
+
+/* collapsible-content内のmarkdown-previewはパディングとボーダーを削除 */
+.collapsible-content.markdown-preview {
+    padding: 1rem;
+    padding-right: 1rem;
+    padding-bottom: 2rem;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-preview p {
+    margin-bottom: 0.5rem;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-preview code {
+    background-color: var(--bg-tertiary);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+    font-family: monospace;
+}
+
+.markdown-preview pre {
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-preview blockquote {
+    border-left: 4px solid var(--accent-color);
+    padding-left: 1rem;
+    margin-left: 0;
+    color: var(--text-secondary);
+}
+
+/* インクリメンタルサーチ */
+.autocomplete-container {
+    position: relative;
+}
+
+.autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    box-shadow: var(--shadow-hover);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.autocomplete-dropdown.show {
+    display: block;
+}
+
+.autocomplete-item {
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+    background-color: var(--bg-secondary);
+}
+
+/* カンバンビュー */
+.kanban-view {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+}
+
+.kanban-header {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.kanban-board {
+    display: flex;
+    gap: 1rem;
+    min-width: max-content;
+    padding-bottom: 1rem;
+}
+
+.kanban-column {
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    min-width: 300px;
+    max-width: 350px;
+    display: flex;
+    flex-direction: column;
+    transition: background-color 0.2s;
+}
+
+.kanban-column.drag-over {
+    background-color: var(--bg-tertiary);
+    box-shadow: inset 0 0 0 2px var(--accent-color);
+}
+
+.kanban-column-header {
+    padding: 1rem;
+    border-bottom: 2px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kanban-column-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.kanban-count {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.kanban-cards {
+    padding: 1rem;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 100px;
+}
+
+.kanban-card {
+    background-color: var(--bg-primary);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    border-left: 4px solid transparent;
+}
+
+.kanban-card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+}
+
+.kanban-card.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.kanban-card.type-customer-candidate {
+    border-left-color: #FF1744;
+}
+
+.kanban-card.type-customer {
+    border-left-color: #FFD600;
+}
+
+.kanban-card.type-distributor {
+    border-left-color: #2979FF;
+}
+
+.kanban-card-content {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.kanban-card-photo {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.kanban-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.kanban-card-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kanban-card-company {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kanban-card-revenue,
+.kanban-card-todo {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.125rem;
+}
+
+/* ステータス管理（改修版） */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    min-height: 200px;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    background-color: var(--bg-primary);
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    cursor: move;
+    transition: all 0.2s;
+}
+
+.status-item.dragging {
+    opacity: 0.5;
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.status-item:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.status-drag-handle {
+    cursor: grab;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    user-select: none;
+}
+
+.status-drag-handle:active {
+    cursor: grabbing;
+}
+
+.status-item input {
+    flex: 1;
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        margin: 1rem;
+    }
+
+    .filter-controls {
+        flex-direction: column;
+    }
+
+    .filter-select,
+    .filter-search-input {
+        width: 100%;
+    }
+
+    .search-bar {
+        flex-direction: column;
+    }
+
+    .search-input {
+        width: 100%;
+    }
+    
+    .contact-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 印刷対応 */
+@media print {
+    .header,
+    .tab-nav,
+    .search-filter-section,
+    .btn,
+    .modal {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .contact-card {
+        break-inside: avoid;
+    }
+}
