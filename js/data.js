@@ -1,8 +1,7 @@
-// data-google.js - Google Drive APIを使用したデータ管理
+// data.js - Google Drive APIを使用したデータ管理（API_KEYなし対応版）
 
-// Google API設定
-const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com'; // Google Cloud Consoleで取得
-const API_KEY = 'YOUR_API_KEY'; // Google Cloud Consoleで取得
+// Google API設定（API_KEYなし）
+const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
@@ -18,8 +17,8 @@ async function initializeGoogleAPI() {
         gapi.load('client', resolve);
     });
 
+    // API_KEYなしで初期化
     await gapi.client.init({
-        apiKey: API_KEY,
         discoveryDocs: [DISCOVERY_DOC],
     });
 
