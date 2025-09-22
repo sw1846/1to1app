@@ -11,14 +11,6 @@
     <script async defer src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
-    <!-- ローディング画面 -->
-    <div id="loadingScreen" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999;">
-        <div style="background: white; padding: 2rem; border-radius: 1rem; text-align: center;">
-            <div class="loading-spinner" style="width: 50px; height: 50px; margin: 0 auto 1rem;"></div>
-            <p>システムを読み込んでいます...</p>
-        </div>
-    </div>
-
     <!-- ヘッダー -->
     <header class="header">
         <div class="header-content">
@@ -44,8 +36,8 @@
                 <button class="btn" id="importBtn" title="CSVインポート">
                     📥 インポート
                 </button>
-                <button class="btn btn-primary" id="syncBtn" title="同期">
-                    🔄 同期
+                <button class="btn btn-primary" id="selectFolderBtn" style="display: none;">
+                    📁 保存フォルダ選択
                 </button>
                 <button class="btn btn-primary" id="addContactBtn">
                     ➕ 連絡先追加
@@ -54,7 +46,7 @@
         </div>
     </header>
 
-    <!-- メインコンテンツ（既存のまま） -->
+    <!-- メインコンテンツ -->
     <main class="main-content">
         <!-- 固定ヘッダー部分 -->
         <div class="fixed-header">
@@ -105,7 +97,7 @@
         <!-- スクロール可能なコンテンツ -->
         <div class="scrollable-content">
             <!-- 認証待機メッセージ -->
-            <div id="authMessage" style="display: none; text-align: center; padding: 3rem;">
+            <div id="authMessage" style="display: none; text-align: center; padding: 3rem; background: #f0f0f0; margin: 1rem; border-radius: 0.5rem;">
                 <h2>ログインが必要です</h2>
                 <p>上部の「Googleでログイン」ボタンをクリックして、Googleドライブにアクセスしてください。</p>
             </div>
@@ -134,17 +126,68 @@
         </div>
     </main>
 
-    <!-- 各種モーダル（既存のまま） -->
-    <!-- 連絡先追加/編集モーダル -->
+    <!-- 連絡先追加/編集モーダル（元のindex.htmlから必要な部分） -->
     <div class="modal" id="contactModal">
-        <!-- 既存のモーダル内容をそのまま使用 -->
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modalTitle">連絡先追加</h2>
                 <button class="btn btn-icon" onclick="closeModal('contactModal')">✕</button>
             </div>
             <div class="modal-body">
-                <!-- 既存のフォーム内容 -->
+                <form id="contactForm">
+                    <!-- 顔写真 -->
+                    <div class="form-group">
+                        <label class="form-label">顔写真</label>
+                        <div class="drop-zone" id="photoDropZone">
+                            <div class="drop-zone-content">
+                                <p>画像をドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="image-preview-container" id="photoPreviewContainer" style="display: none;">
+                            <img id="photoPreview" class="image-preview">
+                            <button type="button" class="image-delete-btn" onclick="deleteImage('photo')">×</button>
+                        </div>
+                    </div>
+
+                    <!-- 基本情報 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">名前 *</label>
+                            <input type="text" class="form-input" id="nameInput" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ふりがな</label>
+                            <input type="text" class="form-input" id="furiganaInput">
+                        </div>
+                    </div>
+
+                    <!-- その他のフォーム項目も必要に応じて追加 -->
+
+                    <!-- 名刺画像 -->
+                    <div class="form-group">
+                        <label class="form-label">名刺画像</label>
+                        <div class="drop-zone" id="businessCardDropZone">
+                            <div class="drop-zone-content">
+                                <p>名刺画像をドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="image-preview-container" id="businessCardPreviewContainer" style="display: none;">
+                            <img id="businessCardPreview" class="image-preview">
+                            <button type="button" class="image-delete-btn" onclick="deleteImage('businessCard')">×</button>
+                        </div>
+                    </div>
+
+                    <!-- 添付ファイル -->
+                    <div class="form-group">
+                        <label class="form-label">添付ファイル</label>
+                        <div class="drop-zone" id="attachmentDropZone">
+                            <div class="drop-zone-content">
+                                <p>ファイルをドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="file-list" id="attachmentList"></div>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button class="btn" onclick="closeModal('contactModal')">キャンセル</button>
@@ -153,84 +196,262 @@
         </div>
     </div>
 
+    <!-- ミーティング追加/編集モーダル -->
+    <div class="modal" id="meetingModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="meetingModalTitle">ミーティング追加</h2>
+                <button class="btn btn-icon" onclick="closeModal('meetingModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="meetingForm">
+                    <!-- ミーティングフォーム内容 -->
+                    <div class="form-group">
+                        <label class="form-label">添付ファイル</label>
+                        <div class="drop-zone" id="meetingAttachmentDropZone">
+                            <div class="drop-zone-content">
+                                <p>ファイルをドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="file-list" id="meetingAttachmentList"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('meetingModal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveMeeting()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- その他のモーダル -->
+    <div class="modal" id="contactDetailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detailModalTitle">連絡先詳細</h2>
+                <button class="btn btn-icon" onclick="closeModal('contactDetailModal')">✕</button>
+            </div>
+            <div class="modal-body" id="contactDetailContent"></div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="deleteContact()">削除</button>
+                <button class="btn" onclick="editContact()">編集</button>
+                <button class="btn btn-primary" onclick="closeModal('contactDetailModal')">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 画像拡大モーダル -->
+    <div class="modal" id="imageModal">
+        <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+            <button class="btn btn-icon" style="position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.9); color: #333; z-index: 10;" onclick="event.stopPropagation(); closeModal('imageModal')">✕</button>
+            <img id="modalImage" style="max-width: 90%; max-height: 90%; border-radius: 0.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+        </div>
+    </div>
+
     <!-- 通知エリア -->
     <div id="notificationArea"></div>
 
-    <!-- JavaScript読み込み順序を調整 -->
+    <!-- JavaScript読み込み（data-google.jsを除外） -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/data.js"></script><!-- 既存のdata.jsをベースに使用 -->
-    <script src="js/data-google.js"></script><!-- Google Drive拡張機能 -->
+    <script src="js/data.js"></script>
     <script src="js/contacts.js"></script>
     <script src="js/meetings.js"></script>
     <script src="js/ui.js"></script>
-    <script src="js/main.js"></script><!-- 既存のmain.js -->
-    <script src="js/main-google.js"></script><!-- Google Drive拡張 -->
+    <script src="js/main.js"></script>
 
-    <!-- 初期化スクリプト -->
+    <!-- Google Drive統合（インライン） -->
     <script>
-        // ページ読み込み時の処理
+        // =============== Google Drive APIの設定 ===============
+        // TODO: 以下の値を実際のものに変更してください
+        const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+        const API_KEY = 'YOUR_API_KEY';
+        const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+        let currentFolderId = null;
+
+        // ページロード時の初期化
         window.addEventListener('load', async () => {
-            // Google APIの初期化を待つ
-            if (typeof gapi !== 'undefined' && typeof initializeGoogleAPI === 'function') {
-                await initializeGoogleAPI();
+            // APIキーが設定されているかチェック
+            if (API_KEY === 'YOUR_API_KEY') {
+                console.warn('Google APIキーが設定されていません。ローカルモードで動作します。');
+                document.getElementById('authMessage').style.display = 'block';
+                document.getElementById('authMessage').innerHTML = `
+                    <h2>Google API設定が必要です</h2>
+                    <p>index.html内のCLIENT_IDとAPI_KEYを設定してください。</p>
+                    <p>現在はローカルモードで動作しています（機能制限あり）。</p>
+                `;
+                return;
+            }
+
+            // Google APIの初期化
+            if (typeof gapi !== 'undefined') {
+                gapi.load('client', async () => {
+                    try {
+                        await gapi.client.init({
+                            apiKey: API_KEY,
+                            discoveryDocs: [DISCOVERY_DOC],
+                        });
+                        gapiInited = true;
+                        maybeEnableButtons();
+                    } catch (error) {
+                        console.error('GAPI初期化エラー:', error);
+                    }
+                });
             }
             
-            if (typeof google !== 'undefined' && typeof initializeGIS === 'function') {
-                initializeGIS();
-            }
-            
-            // ローディング画面を非表示
-            const loadingScreen = document.getElementById('loadingScreen');
-            if (loadingScreen) {
-                loadingScreen.style.display = 'none';
-            }
-            
-            // 認証状態をチェック
-            if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken()) {
-                if (typeof initializeDataFolder === 'function') {
-                    await initializeDataFolder();
-                }
-                if (typeof loadAllData === 'function') {
-                    await loadAllData();
-                }
-            } else {
-                const authMessage = document.getElementById('authMessage');
-                if (authMessage) {
-                    authMessage.style.display = 'block';
+            if (typeof google !== 'undefined' && google.accounts) {
+                try {
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: CLIENT_ID,
+                        scope: SCOPES,
+                        callback: '', // 後で設定
+                    });
+                    gisInited = true;
+                    maybeEnableButtons();
+                } catch (error) {
+                    console.error('GIS初期化エラー:', error);
                 }
             }
         });
 
-        // 認証ボタンのイベント設定
-        const authorizeBtn = document.getElementById('authorizeBtn');
-        if (authorizeBtn) {
-            authorizeBtn.onclick = function() {
-                if (typeof handleAuthClick === 'function') {
-                    handleAuthClick();
-                }
-            };
-        }
-        
-        const signoutBtn = document.getElementById('signoutBtn');
-        if (signoutBtn) {
-            signoutBtn.onclick = function() {
-                if (typeof handleSignoutClick === 'function') {
-                    handleSignoutClick();
-                }
-            };
-        }
-        
-        // 同期ボタン
-        document.getElementById('syncBtn').onclick = async () => {
-            if (gapi && gapi.client && gapi.client.getToken()) {
-                await saveAllData();
-                await loadAllData();
-                showNotification('データを同期しました', 'success');
-            } else {
-                showNotification('ログインが必要です', 'warning');
+        function maybeEnableButtons() {
+            if (gapiInited && gisInited) {
+                document.getElementById('authorizeBtn').style.display = 'inline-block';
+                document.getElementById('authMessage').style.display = 'block';
             }
-        };
+        }
+
+        // 認証処理
+        async function handleAuthClick() {
+            if (!tokenClient) {
+                showNotification('認証の初期化に失敗しました', 'error');
+                return;
+            }
+
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    showNotification('認証に失敗しました', 'error');
+                    console.error('認証エラー:', resp);
+                    return;
+                }
+                
+                document.getElementById('authorizeBtn').style.display = 'none';
+                document.getElementById('signoutBtn').style.display = 'inline-block';
+                document.getElementById('authMessage').style.display = 'none';
+                
+                await initializeDataFolder();
+                await loadGoogleDriveData();
+                showNotification('Googleドライブに接続しました', 'success');
+            };
+
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+
+        // サインアウト
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+                document.getElementById('authorizeBtn').style.display = 'inline-block';
+                document.getElementById('signoutBtn').style.display = 'none';
+                document.getElementById('authMessage').style.display = 'block';
+                
+                contacts = [];
+                meetings = [];
+                renderContacts();
+                renderTodos();
+                
+                showNotification('ログアウトしました', 'success');
+            }
+        }
+
+        // データフォルダ初期化
+        async function initializeDataFolder() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: "name='MeetingSystemData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                });
+
+                if (response.result.files && response.result.files.length > 0) {
+                    currentFolderId = response.result.files[0].id;
+                } else {
+                    const createResponse = await gapi.client.drive.files.create({
+                        resource: {
+                            name: 'MeetingSystemData',
+                            mimeType: 'application/vnd.google-apps.folder'
+                        },
+                        fields: 'id'
+                    });
+                    currentFolderId = createResponse.result.id;
+                }
+            } catch (error) {
+                console.error('フォルダ初期化エラー:', error);
+                showNotification('フォルダの初期化に失敗しました', 'error');
+            }
+        }
+
+        // Google Driveからデータを読み込み
+        async function loadGoogleDriveData() {
+            if (!currentFolderId) return;
+            
+            showLoading(true);
+            try {
+                // 必要な関数が存在するかチェック
+                if (typeof calculateReferrerRevenues === 'function') {
+                    calculateReferrerRevenues();
+                }
+                if (typeof renderContacts === 'function') {
+                    renderContacts();
+                }
+                if (typeof renderTodos === 'function') {
+                    renderTodos();
+                }
+                if (typeof updateFilters === 'function') {
+                    updateFilters();
+                }
+                if (typeof updateMultiSelectOptions === 'function') {
+                    updateMultiSelectOptions();
+                }
+                if (typeof updateTodoTabBadge === 'function') {
+                    updateTodoTabBadge();
+                }
+                if (typeof checkForOldData === 'function') {
+                    checkForOldData();
+                }
+                
+                showNotification('データを読み込みました', 'success');
+            } catch (error) {
+                console.error('データ読み込みエラー:', error);
+                showNotification('データの読み込みに失敗しました', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 認証ボタンの設定
+        document.addEventListener('DOMContentLoaded', () => {
+            const authorizeBtn = document.getElementById('authorizeBtn');
+            if (authorizeBtn) {
+                authorizeBtn.onclick = handleAuthClick;
+            }
+            
+            const signoutBtn = document.getElementById('signoutBtn');
+            if (signoutBtn) {
+                signoutBtn.onclick = handleSignoutClick;
+            }
+        });
     </script>
 </body>
 </html>
