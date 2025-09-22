@@ -126,7 +126,7 @@
         </div>
     </main>
 
-    <!-- 連絡先追加/編集モーダル（元のindex.htmlから必要な部分） -->
+    <!-- 連絡先追加/編集モーダル -->
     <div class="modal" id="contactModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -160,8 +160,6 @@
                             <input type="text" class="form-input" id="furiganaInput">
                         </div>
                     </div>
-
-                    <!-- その他のフォーム項目も必要に応じて追加 -->
 
                     <!-- 名刺画像 -->
                     <div class="form-group">
@@ -205,7 +203,6 @@
             </div>
             <div class="modal-body">
                 <form id="meetingForm">
-                    <!-- ミーティングフォーム内容 -->
                     <div class="form-group">
                         <label class="form-label">添付ファイル</label>
                         <div class="drop-zone" id="meetingAttachmentDropZone">
@@ -251,7 +248,7 @@
     <!-- 通知エリア -->
     <div id="notificationArea"></div>
 
-    <!-- JavaScript読み込み（data-google.jsを除外） -->
+    <!-- JavaScript読み込み -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/data.js"></script>
@@ -260,10 +257,9 @@
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 
-    <!-- Google Drive統合（インライン）-->
+    <!-- Google Drive統合 -->
     <script>
-        // =============== Google Drive APIの設定 ===============
-        // CLIENT_IDのみ設定（API_KEYは不要）
+        // Google Drive API設定（API_KEYなし対応）
         const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -275,17 +271,14 @@
 
         // ページロード時の初期化
         window.addEventListener('load', async () => {
-            console.log('Google API初期化を開始します...');
-            
-            // Google APIの初期化（API_KEYなし）
+            // Google APIの初期化
             if (typeof gapi !== 'undefined') {
                 gapi.load('client', async () => {
                     try {
                         await gapi.client.init({
-                            discoveryDocs: [DISCOVERY_DOC], // API_KEYは不要
+                            discoveryDocs: [DISCOVERY_DOC],
                         });
                         gapiInited = true;
-                        console.log('GAPI初期化完了');
                         maybeEnableButtons();
                     } catch (error) {
                         console.error('GAPI初期化エラー:', error);
@@ -293,7 +286,6 @@
                 });
             }
             
-            // GIS（Google Identity Services）の初期化
             if (typeof google !== 'undefined' && google.accounts) {
                 try {
                     tokenClient = google.accounts.oauth2.initTokenClient({
@@ -302,7 +294,6 @@
                         callback: '', // 後で設定
                     });
                     gisInited = true;
-                    console.log('GIS初期化完了');
                     maybeEnableButtons();
                 } catch (error) {
                     console.error('GIS初期化エラー:', error);
@@ -314,7 +305,6 @@
             if (gapiInited && gisInited) {
                 document.getElementById('authorizeBtn').style.display = 'inline-block';
                 document.getElementById('authMessage').style.display = 'block';
-                console.log('認証ボタンを有効化しました');
             }
         }
 
@@ -323,8 +313,6 @@
             if (!tokenClient) {
                 if (typeof showNotification === 'function') {
                     showNotification('認証の初期化に失敗しました', 'error');
-                } else {
-                    console.error('認証の初期化に失敗しました');
                 }
                 return;
             }
@@ -333,14 +321,11 @@
                 if (resp.error !== undefined) {
                     if (typeof showNotification === 'function') {
                         showNotification('認証に失敗しました', 'error');
-                    } else {
-                        console.error('認証に失敗しました');
                     }
                     console.error('認証エラー:', resp);
                     return;
                 }
                 
-                console.log('認証成功');
                 document.getElementById('authorizeBtn').style.display = 'none';
                 document.getElementById('signoutBtn').style.display = 'inline-block';
                 document.getElementById('authMessage').style.display = 'none';
@@ -350,8 +335,6 @@
                 
                 if (typeof showNotification === 'function') {
                     showNotification('Googleドライブに接続しました', 'success');
-                } else {
-                    console.log('Googleドライブに接続しました');
                 }
             };
 
@@ -372,7 +355,6 @@
                 document.getElementById('signoutBtn').style.display = 'none';
                 document.getElementById('authMessage').style.display = 'block';
                 
-                // データをクリア（関数が存在する場合のみ）
                 if (typeof contacts !== 'undefined') {
                     contacts = [];
                 }
@@ -388,8 +370,6 @@
                 
                 if (typeof showNotification === 'function') {
                     showNotification('ログアウトしました', 'success');
-                } else {
-                    console.log('ログアウトしました');
                 }
             }
         }
@@ -405,7 +385,6 @@
 
                 if (response.result.files && response.result.files.length > 0) {
                     currentFolderId = response.result.files[0].id;
-                    console.log('既存のデータフォルダを使用:', currentFolderId);
                 } else {
                     const createResponse = await gapi.client.drive.files.create({
                         resource: {
@@ -415,7 +394,6 @@
                         fields: 'id'
                     });
                     currentFolderId = createResponse.result.id;
-                    console.log('新しいデータフォルダを作成:', currentFolderId);
                 }
             } catch (error) {
                 console.error('フォルダ初期化エラー:', error);
@@ -429,14 +407,12 @@
         async function loadGoogleDriveData() {
             if (!currentFolderId) return;
             
-            console.log('Google Driveからデータを読み込み中...');
-            
             if (typeof showLoading === 'function') {
                 showLoading(true);
             }
             
             try {
-                // 必要な関数が存在するかチェックして実行
+                // 必要な関数が存在するかチェック
                 if (typeof calculateReferrerRevenues === 'function') {
                     calculateReferrerRevenues();
                 }
@@ -459,7 +435,6 @@
                     checkForOldData();
                 }
                 
-                console.log('データの読み込み完了');
                 if (typeof showNotification === 'function') {
                     showNotification('データを読み込みました', 'success');
                 }
