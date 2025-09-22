@@ -126,7 +126,7 @@
         </div>
     </main>
 
-    <!-- 連絡先追加/編集モーダル -->
+    <!-- 連絡先追加/編集モーダル（元のindex.htmlから必要な部分） -->
     <div class="modal" id="contactModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -160,6 +160,8 @@
                             <input type="text" class="form-input" id="furiganaInput">
                         </div>
                     </div>
+
+                    <!-- その他のフォーム項目も必要に応じて追加 -->
 
                     <!-- 名刺画像 -->
                     <div class="form-group">
@@ -203,6 +205,7 @@
             </div>
             <div class="modal-body">
                 <form id="meetingForm">
+                    <!-- ミーティングフォーム内容 -->
                     <div class="form-group">
                         <label class="form-label">添付ファイル</label>
                         <div class="drop-zone" id="meetingAttachmentDropZone">
@@ -248,7 +251,7 @@
     <!-- 通知エリア -->
     <div id="notificationArea"></div>
 
-    <!-- JavaScript読み込み -->
+    <!-- JavaScript読み込み（data-google.jsを除外） -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/data.js"></script>
@@ -257,200 +260,30 @@
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 
-    <!-- Google Drive統合 -->
+    <!-- Google Drive統合（簡素化版） -->
     <script>
-        // Google Drive API設定（API_KEYなし対応）
-        const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
-        const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-
-        let tokenClient;
-        let gapiInited = false;
-        let gisInited = false;
-        let currentFolderId = null;
-
-        // ページロード時の初期化
+        // Google API初期化とイベント設定（API_KEYなし対応）
         window.addEventListener('load', async () => {
-            // Google APIの初期化
+            console.log('Google API初期化を開始します...');
+            
+            // Google APIが利用可能になるまで待機
             if (typeof gapi !== 'undefined') {
-                gapi.load('client', async () => {
-                    try {
-                        await gapi.client.init({
-                            discoveryDocs: [DISCOVERY_DOC],
-                        });
-                        gapiInited = true;
-                        maybeEnableButtons();
-                    } catch (error) {
-                        console.error('GAPI初期化エラー:', error);
-                    }
-                });
+                console.log('GAPI利用可能');
+                await initializeGoogleAPI();
+            } else {
+                console.warn('GAPIが利用できません');
             }
             
+            // Google Identity Services初期化
             if (typeof google !== 'undefined' && google.accounts) {
-                try {
-                    tokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: CLIENT_ID,
-                        scope: SCOPES,
-                        callback: '', // 後で設定
-                    });
-                    gisInited = true;
-                    maybeEnableButtons();
-                } catch (error) {
-                    console.error('GIS初期化エラー:', error);
-                }
+                console.log('GIS利用可能');
+                initializeGIS();
+            } else {
+                console.warn('GISが利用できません');
             }
         });
 
-        function maybeEnableButtons() {
-            if (gapiInited && gisInited) {
-                document.getElementById('authorizeBtn').style.display = 'inline-block';
-                document.getElementById('authMessage').style.display = 'block';
-            }
-        }
-
-        // 認証処理
-        async function handleAuthClick() {
-            if (!tokenClient) {
-                if (typeof showNotification === 'function') {
-                    showNotification('認証の初期化に失敗しました', 'error');
-                }
-                return;
-            }
-
-            tokenClient.callback = async (resp) => {
-                if (resp.error !== undefined) {
-                    if (typeof showNotification === 'function') {
-                        showNotification('認証に失敗しました', 'error');
-                    }
-                    console.error('認証エラー:', resp);
-                    return;
-                }
-                
-                document.getElementById('authorizeBtn').style.display = 'none';
-                document.getElementById('signoutBtn').style.display = 'inline-block';
-                document.getElementById('authMessage').style.display = 'none';
-                
-                await initializeDataFolder();
-                await loadGoogleDriveData();
-                
-                if (typeof showNotification === 'function') {
-                    showNotification('Googleドライブに接続しました', 'success');
-                }
-            };
-
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
-            }
-        }
-
-        // サインアウト
-        function handleSignoutClick() {
-            const token = gapi.client.getToken();
-            if (token !== null) {
-                google.accounts.oauth2.revoke(token.access_token);
-                gapi.client.setToken('');
-                document.getElementById('authorizeBtn').style.display = 'inline-block';
-                document.getElementById('signoutBtn').style.display = 'none';
-                document.getElementById('authMessage').style.display = 'block';
-                
-                if (typeof contacts !== 'undefined') {
-                    contacts = [];
-                }
-                if (typeof meetings !== 'undefined') {
-                    meetings = [];
-                }
-                if (typeof renderContacts === 'function') {
-                    renderContacts();
-                }
-                if (typeof renderTodos === 'function') {
-                    renderTodos();
-                }
-                
-                if (typeof showNotification === 'function') {
-                    showNotification('ログアウトしました', 'success');
-                }
-            }
-        }
-
-        // データフォルダ初期化
-        async function initializeDataFolder() {
-            try {
-                const response = await gapi.client.drive.files.list({
-                    q: "name='MeetingSystemData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                    fields: 'files(id, name)',
-                    spaces: 'drive'
-                });
-
-                if (response.result.files && response.result.files.length > 0) {
-                    currentFolderId = response.result.files[0].id;
-                } else {
-                    const createResponse = await gapi.client.drive.files.create({
-                        resource: {
-                            name: 'MeetingSystemData',
-                            mimeType: 'application/vnd.google-apps.folder'
-                        },
-                        fields: 'id'
-                    });
-                    currentFolderId = createResponse.result.id;
-                }
-            } catch (error) {
-                console.error('フォルダ初期化エラー:', error);
-                if (typeof showNotification === 'function') {
-                    showNotification('フォルダの初期化に失敗しました', 'error');
-                }
-            }
-        }
-
-        // Google Driveからデータを読み込み
-        async function loadGoogleDriveData() {
-            if (!currentFolderId) return;
-            
-            if (typeof showLoading === 'function') {
-                showLoading(true);
-            }
-            
-            try {
-                // 必要な関数が存在するかチェック
-                if (typeof calculateReferrerRevenues === 'function') {
-                    calculateReferrerRevenues();
-                }
-                if (typeof renderContacts === 'function') {
-                    renderContacts();
-                }
-                if (typeof renderTodos === 'function') {
-                    renderTodos();
-                }
-                if (typeof updateFilters === 'function') {
-                    updateFilters();
-                }
-                if (typeof updateMultiSelectOptions === 'function') {
-                    updateMultiSelectOptions();
-                }
-                if (typeof updateTodoTabBadge === 'function') {
-                    updateTodoTabBadge();
-                }
-                if (typeof checkForOldData === 'function') {
-                    checkForOldData();
-                }
-                
-                if (typeof showNotification === 'function') {
-                    showNotification('データを読み込みました', 'success');
-                }
-            } catch (error) {
-                console.error('データ読み込みエラー:', error);
-                if (typeof showNotification === 'function') {
-                    showNotification('データの読み込みに失敗しました', 'error');
-                }
-            } finally {
-                if (typeof showLoading === 'function') {
-                    showLoading(false);
-                }
-            }
-        }
-
-        // 認証ボタンの設定
+        // 認証ボタンのイベント設定
         document.addEventListener('DOMContentLoaded', () => {
             const authorizeBtn = document.getElementById('authorizeBtn');
             if (authorizeBtn) {
