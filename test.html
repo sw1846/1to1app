@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Drive認証テスト</title>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .success { background: #4CAF50; color: white; }
+        .danger { background: #f44336; color: white; }
+        .info { background: #2196F3; color: white; }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Google Drive認証テスト</h1>
+    
+    <div id="status">
+        <p>ステータス: 初期化中...</p>
+    </div>
+    
+    <div>
+        <button id="loginBtn" class="success" style="display:none;">Googleでログイン</button>
+        <button id="logoutBtn" class="danger" style="display:none;">ログアウト</button>
+        <button id="testBtn" class="info" style="display:none;">ファイル一覧取得テスト</button>
+    </div>
+    
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <script>
+        // ==================== 設定 ====================
+        // TODO: 以下を実際の値に変更してください
+        const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+        const API_KEY = 'YOUR_API_KEY';
+        
+        // ==================== 以下は変更不要 ====================
+        const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+        
+        let tokenClient = null;
+        let gapiInited = false;
+        let gisInited = false;
+        
+        const statusDiv = document.getElementById('status');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const testBtn = document.getElementById('testBtn');
+        const resultDiv = document.getElementById('result');
+        
+        // 初期化
+        window.addEventListener('load', () => {
+            console.log('初期化開始...');
+            updateStatus('Google APIを初期化中...');
+            
+            // APIキーチェック
+            if (CLIENT_ID === 'YOUR_CLIENT_ID.apps.googleusercontent.com' || API_KEY === 'YOUR_API_KEY') {
+                updateStatus('エラー: CLIENT_IDとAPI_KEYを設定してください', 'error');
+                resultDiv.innerHTML = `
+                    <h3>設定方法:</h3>
+                    <ol>
+                        <li>Google Cloud Consoleでプロジェクトを作成</li>
+                        <li>Google Drive APIを有効化</li>
+                        <li>認証情報を作成（OAuth 2.0クライアントIDとAPIキー）</li>
+                        <li>このファイルのCLIENT_IDとAPI_KEYを更新</li>
+                    </ol>
+                `;
+                return;
+            }
+            
+            // GAPI初期化
+            if (typeof gapi !== 'undefined') {
+                gapi.load('client', async () => {
+                    try {
+                        await gapi.client.init({
+                            apiKey: API_KEY,
+                            discoveryDocs: [DISCOVERY_DOC],
+                        });
+                        gapiInited = true;
+                        updateStatus('Google API初期化完了');
+                        checkReady();
+                    } catch (error) {
+                        updateStatus('GAPI初期化エラー: ' + error.message, 'error');
+                        console.error(error);
+                    }
+                });
+            } else {
+                updateStatus('エラー: Google APIが読み込まれていません', 'error');
+            }
+            
+            // GIS初期化
+            if (typeof google !== 'undefined' && google.accounts) {
+                try {
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: CLIENT_ID,
+                        scope: SCOPES,
+                        callback: handleAuthCallback,
+                    });
+                    gisInited = true;
+                    updateStatus('Google Identity Services初期化完了');
+                    checkReady();
+                } catch (error) {
+                    updateStatus('GIS初期化エラー: ' + error.message, 'error');
+                    console.error(error);
+                }
+            } else {
+                updateStatus('エラー: Google Identity Servicesが読み込まれていません', 'error');
+            }
+        });
+        
+        function updateStatus(message, type = 'info') {
+            console.log(message);
+            statusDiv.innerHTML = `<p>ステータス: ${message}</p>`;
+            if (type === 'error') {
+                statusDiv.style.background = '#ffcdd2';
+            } else if (type === 'success') {
+                statusDiv.style.background = '#c8e6c9';
+            } else {
+                statusDiv.style.background = '#f0f0f0';
+            }
+        }
+        
+        function checkReady() {
+            if (gapiInited && gisInited) {
+                updateStatus('準備完了', 'success');
+                loginBtn.style.display = 'inline-block';
+                loginBtn.onclick = handleLogin;
+            }
+        }
+        
+        function handleLogin() {
+            updateStatus('ログイン中...');
+            tokenClient.requestAccessToken({prompt: 'consent'});
+        }
+        
+        function handleAuthCallback(resp) {
+            if (resp.error) {
+                updateStatus('認証エラー: ' + resp.error, 'error');
+                return;
+            }
+            
+            updateStatus('ログイン成功！', 'success');
+            loginBtn.style.display = 'none';
+            logoutBtn.style.display = 'inline-block';
+            testBtn.style.display = 'inline-block';
+            
+            logoutBtn.onclick = handleLogout;
+            testBtn.onclick = testDriveAccess;
+        }
+        
+        function handleLogout() {
+            const token = gapi.client.getToken();
+            if (token) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+            }
+            
+            updateStatus('ログアウトしました');
+            loginBtn.style.display = 'inline-block';
+            logoutBtn.style.display = 'none';
+            testBtn.style.display = 'none';
+            resultDiv.innerHTML = '';
+        }
+        
+        async function testDriveAccess() {
+            updateStatus('Google Driveにアクセス中...');
+            try {
+                // MeetingSystemDataフォルダを検索
+                const response = await gapi.client.drive.files.list({
+                    q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+                    fields: 'files(id, name)',
+                    pageSize: 10
+                });
+                
+                const files = response.result.files || [];
+                if (files.length === 0) {
+                    resultDiv.innerHTML = '<p>フォルダが見つかりません。新規作成が必要です。</p>';
+                } else {
+                    let html = '<h3>フォルダ一覧:</h3><ul>';
+                    files.forEach(file => {
+                        html += `<li>${file.name} (ID: ${file.id})</li>`;
+                    });
+                    html += '</ul>';
+                    resultDiv.innerHTML = html;
+                }
+                updateStatus('アクセス成功！', 'success');
+            } catch (error) {
+                updateStatus('エラー: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
