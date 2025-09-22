@@ -1,46 +1,65 @@
-// data.js - Google Drive APIを使用したデータ管理（API_KEYなし対応版）
+// data.js - Google Drive APIを使用したデータ管理（OAuth 2.0のみ・APIキー不要版）
 
-// Google API設定（API_KEYなし）
+// Google OAuth 2.0設定
 const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
-const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 let tokenClient;
 let gapiInited = false;
 let gisInited = false;
 let currentFolderId = null;
+let accessToken = null;
 
-// Google API初期化
+// Google API初期化（APIキーなし）
 async function initializeGoogleAPI() {
-    // GAPIのロードを待つ
-    await new Promise((resolve) => {
-        gapi.load('client', resolve);
-    });
+    try {
+        console.log('Google API初期化開始（APIキーなし）...');
+        
+        // GAPIのロードを待つ
+        await new Promise((resolve) => {
+            gapi.load('client', resolve);
+        });
 
-    // API_KEYなしで初期化
-    await gapi.client.init({
-        discoveryDocs: [DISCOVERY_DOC],
-    });
+        // クライアントの初期化（APIキーなし）
+        await gapi.client.init({
+            // apiKeyは指定しない
+            // discoveryDocsも指定しない（後でOAuth認証後に読み込む）
+        });
 
-    gapiInited = true;
-    maybeEnableButtons();
+        gapiInited = true;
+        maybeEnableButtons();
+        console.log('Google API初期化完了（認証待機中）');
+    } catch (error) {
+        console.error('Google API初期化エラー:', error);
+        showNotification('Google APIの初期化に失敗しました', 'error');
+    }
 }
 
 // Google Identity Services初期化
 function initializeGIS() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: '', // 後で設定
-    });
-    gisInited = true;
-    maybeEnableButtons();
+    try {
+        console.log('Google Identity Services初期化開始...');
+        
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: '', // 後で設定
+        });
+        
+        gisInited = true;
+        maybeEnableButtons();
+        console.log('Google Identity Services初期化完了');
+    } catch (error) {
+        console.error('GIS初期化エラー:', error);
+        showNotification('認証システムの初期化に失敗しました', 'error');
+    }
 }
 
 // ボタンの有効化チェック
 function maybeEnableButtons() {
     if (gapiInited && gisInited) {
         document.getElementById('authorizeBtn').style.display = 'inline-block';
+        document.getElementById('authMessage').style.display = 'block';
     }
 }
 
@@ -55,12 +74,30 @@ async function handleAuthClick() {
             throw resp;
         }
         
-        document.getElementById('authorizeBtn').style.display = 'none';
-        document.getElementById('signoutBtn').style.display = 'inline-block';
+        // アクセストークンを保存
+        accessToken = resp.access_token;
         
-        await initializeDataFolder();
-        await loadAllData();
-        showNotification('Googleドライブに接続しました', 'success');
+        // トークンを設定
+        gapi.client.setToken(resp);
+        
+        // 認証後にDiscovery Documentを読み込む
+        try {
+            console.log('Drive API Discovery Document読み込み中...');
+            await gapi.client.load('drive', 'v3');
+            console.log('Drive API準備完了');
+            
+            document.getElementById('authorizeBtn').style.display = 'none';
+            document.getElementById('signoutBtn').style.display = 'inline-block';
+            document.getElementById('authMessage').style.display = 'none';
+            
+            await initializeDataFolder();
+            await loadAllData();
+            showNotification('Googleドライブに接続しました', 'success');
+        } catch (error) {
+            console.error('Drive API読み込みエラー:', error);
+            showNotification('Drive APIの読み込みに失敗しました', 'error');
+        }
+        
         showLoading(false);
     };
 
@@ -77,8 +114,11 @@ function handleSignoutClick() {
     if (token !== null) {
         google.accounts.oauth2.revoke(token.access_token);
         gapi.client.setToken('');
+        accessToken = null;
+        
         document.getElementById('authorizeBtn').style.display = 'inline-block';
         document.getElementById('signoutBtn').style.display = 'none';
+        document.getElementById('authMessage').style.display = 'block';
         
         // データをクリア
         contacts = [];
@@ -102,6 +142,7 @@ async function initializeDataFolder() {
 
         if (response.result.files && response.result.files.length > 0) {
             currentFolderId = response.result.files[0].id;
+            console.log('既存のデータフォルダを使用:', currentFolderId);
         } else {
             // フォルダが存在しない場合は作成
             const createResponse = await gapi.client.drive.files.create({
@@ -112,6 +153,7 @@ async function initializeDataFolder() {
                 fields: 'id'
             });
             currentFolderId = createResponse.result.id;
+            console.log('新しいデータフォルダを作成:', currentFolderId);
         }
     } catch (error) {
         console.error('フォルダ初期化エラー:', error);
@@ -135,7 +177,11 @@ async function loadAllData() {
         updateFilters();
         updateMultiSelectOptions();
         updateTodoTabBadge();
-        checkForOldData();
+        
+        // 旧データのチェック（必要に応じて）
+        if (typeof checkForOldData === 'function') {
+            checkForOldData();
+        }
     } catch (err) {
         console.error('データ読み込みエラー:', err);
         showNotification('データの読み込みに失敗しました', 'error');
@@ -160,7 +206,7 @@ async function loadContacts() {
 
         contacts = JSON.parse(response.body);
         
-        // データ変換（既存のコードと同じ）
+        // データ変換
         contacts = contacts.map(contact => {
             if (contact.referrer && !contact.contactMethod) {
                 contact.contactMethod = 'referral';
@@ -195,6 +241,8 @@ async function loadContacts() {
             
             return contact;
         });
+        
+        console.log(`${contacts.length}件の連絡先を読み込みました`);
     } catch (err) {
         console.error('連絡先読み込みエラー:', err);
         contacts = [];
@@ -216,6 +264,7 @@ async function loadMeetings() {
         });
 
         meetings = JSON.parse(response.body);
+        console.log(`${meetings.length}件のミーティングを読み込みました`);
     } catch (err) {
         console.error('ミーティング読み込みエラー:', err);
         meetings = [];
@@ -246,6 +295,8 @@ async function loadOptions() {
             statuses: loadedOptions.statuses && loadedOptions.statuses.length > 0 ? 
                      loadedOptions.statuses : ['新規', '接触中', '提案中', '商談中', '成約', '失注', '保留']
         };
+        
+        console.log('オプションデータを読み込みました');
     } catch (err) {
         console.error('オプション読み込みエラー:', err);
         // デフォルト値を使用
@@ -254,7 +305,7 @@ async function loadOptions() {
 
 // データ保存
 async function saveAllData() {
-    if (!currentFolderId) {
+    if (!currentFolderId || !gapi.client.getToken()) {
         showNotification('Googleドライブに接続されていません', 'error');
         return;
     }
@@ -301,6 +352,7 @@ async function saveJsonFile(filename, data) {
         'mimeType': 'application/json'
     };
     
+    // 新規作成の場合のみparentsを指定
     if (!fileId) {
         metadata.parents = [currentFolderId];
     }
@@ -350,7 +402,7 @@ async function getFileId(filename) {
 
 // 画像ファイルのアップロード
 async function uploadImageToGoogleDrive(fileName, base64Data, contactName) {
-    if (!currentFolderId) return base64Data;
+    if (!currentFolderId || !gapi.client.getToken()) return base64Data;
 
     try {
         // attachmentsフォルダを作成または取得
@@ -439,11 +491,17 @@ async function loadImageFromGoogleDrive(driveId) {
     }
 }
 
-// 添付ファイル管理（既存の関数を置き換え）
+// 添付ファイル管理
 async function saveAttachmentToFileSystem(fileName, dataUrl, contactName) {
     return await uploadImageToGoogleDrive(fileName, dataUrl, contactName);
 }
 
 async function loadAttachmentFromFileSystem(filePath) {
     return await loadImageFromGoogleDrive(filePath);
+}
+
+// 旧データのチェック（オプション）
+function checkForOldData() {
+    // 必要に応じて旧データの存在チェック
+    console.log('データチェック完了');
 }
