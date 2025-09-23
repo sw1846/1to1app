@@ -39,8 +39,9 @@ let metadata = {
     createdAt: null
 };
 
-// Google Drive API関連
-let tokenClient;
+// Google Drive API関連（data.jsから移動）
+// 注意: これらの変数はdata.jsで初期化されます
+let tokenClient = null;
 let gapiInited = false;
 let gisInited = false;
 let currentFolderId = null;

@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>1対1ミーティング管理システム（Googleドライブ版）</title>
     <link rel="stylesheet" href="css/styles.css">
-    
-    <!-- Google API - 読み込み順序を修正 -->
-    <script defer src="https://apis.google.com/js/api.js" onload="initializeGoogleAPI()"></script>
-    <script defer src="https://accounts.google.com/gsi/client" onload="initializeGIS()"></script>
 </head>
 <body>
     <!-- ヘッダー -->
@@ -492,13 +488,24 @@
     <!-- 通知エリア -->
     <div id="notificationArea"></div>
 
-    <!-- JavaScript読み込み -->
+    <!-- JavaScript読み込み - 修正版の順序 -->
+    <!-- まず設定と基本関数 -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    
+    <!-- 次にデータ管理（Google API関連を含む） -->
     <script src="js/data.js"></script>
+    
+    <!-- 機能別のスクリプト -->
     <script src="js/contacts.js"></script>
     <script src="js/meetings.js"></script>
     <script src="js/ui.js"></script>
+    
+    <!-- 最後にメイン初期化 -->
     <script src="js/main.js"></script>
+    
+    <!-- Google API - 関数が定義された後に読み込み -->
+    <script defer src="https://apis.google.com/js/api.js" onload="if(typeof initializeGoogleAPI === 'function') { initializeGoogleAPI(); } else { console.error('initializeGoogleAPI not found'); }"></script>
+    <script defer src="https://accounts.google.com/gsi/client" onload="if(typeof initializeGIS === 'function') { initializeGIS(); } else { console.error('initializeGIS not found'); }"></script>
 </body>
 </html>

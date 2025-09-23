@@ -674,10 +674,6 @@ function showSystemInfo() {
     return info;
 }
 
-// Google API関連の関数をグローバルスコープで利用可能にする
-window.initializeGoogleAPI = initializeGoogleAPI;
-window.initializeGIS = initializeGIS;
-
 // 初期化完了後の処理
 window.addEventListener('load', () => {
     console.log('ページ読み込み完了 - 追加初期化開始');

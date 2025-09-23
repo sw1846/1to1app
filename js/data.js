@@ -1,38 +1,8 @@
 // data.js - Google Drive APIを使用した分散ファイル構造データ管理
 
-// Google OAuth 2.0設定
-const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-
-let tokenClient;
-let gapiInited = false;
-let gisInited = false;
-let currentFolderId = null;
-let accessToken = null;
-
-// フォルダ構造のID管理
-let folderStructure = {
-    root: null,
-    index: null,
-    contacts: null,
-    meetings: null,
-    attachments: null,
-    attachmentsContacts: null,
-    attachmentsMeetings: null
-};
-
-// インデックス管理
-let contactsIndex = {};
-let meetingsIndex = {};
-let searchIndex = {};
-let metadata = {
-    version: '2.0',
-    lastUpdated: null,
-    totalContacts: 0,
-    totalMeetings: 0,
-    nextContactId: 1,
-    nextMeetingId: 1
-};
+// Google OAuth 2.0設定（config.jsから参照）
+const CLIENT_ID = GOOGLE_DRIVE_CONFIG.CLIENT_ID;
+const SCOPES = GOOGLE_DRIVE_CONFIG.SCOPES;
 
 // Google API初期化（APIキーなし）
 async function initializeGoogleAPI() {
@@ -50,7 +20,9 @@ async function initializeGoogleAPI() {
         console.log('Google API初期化完了（認証待機中）');
     } catch (error) {
         console.error('Google API初期化エラー:', error);
-        showNotification('Google APIの初期化に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('Google APIの初期化に失敗しました', 'error');
+        }
     }
 }
 
@@ -70,26 +42,37 @@ function initializeGIS() {
         console.log('Google Identity Services初期化完了');
     } catch (error) {
         console.error('GIS初期化エラー:', error);
-        showNotification('認証システムの初期化に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('認証システムの初期化に失敗しました', 'error');
+        }
     }
 }
 
 // ボタンの有効化チェック
 function maybeEnableButtons() {
     if (gapiInited && gisInited) {
-        document.getElementById('authorizeBtn').style.display = 'inline-block';
-        document.getElementById('authMessage').style.display = 'block';
+        const authorizeBtn = document.getElementById('authorizeBtn');
+        const authMessage = document.getElementById('authMessage');
+        
+        if (authorizeBtn) authorizeBtn.style.display = 'inline-block';
+        if (authMessage) authMessage.style.display = 'block';
     }
 }
 
 // 認証処理
 async function handleAuthClick() {
-    showLoading(true);
+    if (typeof showLoading === 'function') {
+        showLoading(true);
+    }
     
     tokenClient.callback = async (resp) => {
         if (resp.error !== undefined) {
-            showNotification('認証に失敗しました', 'error');
-            showLoading(false);
+            if (typeof showNotification === 'function') {
+                showNotification('認証に失敗しました', 'error');
+            }
+            if (typeof showLoading === 'function') {
+                showLoading(false);
+            }
             throw resp;
         }
         
@@ -101,18 +84,26 @@ async function handleAuthClick() {
             await gapi.client.load('drive', 'v3');
             console.log('Drive API準備完了');
             
-            document.getElementById('authorizeBtn').style.display = 'none';
-            document.getElementById('signoutBtn').style.display = 'inline-block';
-            document.getElementById('authMessage').style.display = 'none';
+            const authorizeBtn = document.getElementById('authorizeBtn');
+            const signoutBtn = document.getElementById('signoutBtn');
+            const authMessage = document.getElementById('authMessage');
+            
+            if (authorizeBtn) authorizeBtn.style.display = 'none';
+            if (signoutBtn) signoutBtn.style.display = 'inline-block';
+            if (authMessage) authMessage.style.display = 'none';
             
             await showDataFolderSelector();
             
         } catch (error) {
             console.error('Drive API読み込みエラー:', error);
-            showNotification('Drive APIの読み込みに失敗しました', 'error');
+            if (typeof showNotification === 'function') {
+                showNotification('Drive APIの読み込みに失敗しました', 'error');
+            }
         }
         
-        showLoading(false);
+        if (typeof showLoading === 'function') {
+            showLoading(false);
+        }
     };
 
     if (gapi.client.getToken() === null) {
@@ -216,10 +207,14 @@ async function selectExistingFolder(folderId, folderName) {
             onAuthStateChanged(true);
         }
         
-        showNotification(`フォルダ「${folderName}」からデータを読み込みました (連絡先: ${contacts.length}件)`, 'success');
+        if (typeof showNotification === 'function') {
+            showNotification(`フォルダ「${folderName}」からデータを読み込みました (連絡先: ${contacts.length}件)`, 'success');
+        }
     } catch (error) {
         console.error('フォルダ選択エラー:', error);
-        showNotification('データの読み込みに失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('データの読み込みに失敗しました', 'error');
+        }
     }
 }
 
@@ -246,10 +241,15 @@ async function createNewDataFolder() {
         
         closeDataFolderModal();
         await loadAllData();
-        showNotification('新しいデータフォルダを作成しました', 'success');
+        
+        if (typeof showNotification === 'function') {
+            showNotification('新しいデータフォルダを作成しました', 'success');
+        }
     } catch (error) {
         console.error('フォルダ作成エラー:', error);
-        showNotification('フォルダの作成に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('フォルダの作成に失敗しました', 'error');
+        }
     }
 }
 
@@ -287,26 +287,30 @@ async function browseFolders(parentId = 'root') {
         });
 
         const folderBrowser = document.getElementById('folderBrowser');
-        folderBrowser.innerHTML = `
-            <div class="folder-browser">
-                ${parentId !== 'root' ? '<button class="btn btn-sm" onclick="browseFolders(\'root\')">📁 ルートに戻る</button>' : ''}
-                <div class="folder-list">
-                    ${response.result.files.map(folder => `
-                        <div class="folder-item">
-                            <span onclick="browseFolders('${folder.id}')" style="cursor: pointer;">
-                                📁 ${escapeHtml(folder.name)}
-                            </span>
-                            <button class="btn btn-sm btn-primary" onclick="selectCustomFolder('${folder.id}', '${escapeHtml(folder.name)}')">
-                                選択
-                            </button>
-                        </div>
-                    `).join('')}
+        if (folderBrowser) {
+            folderBrowser.innerHTML = `
+                <div class="folder-browser">
+                    ${parentId !== 'root' ? '<button class="btn btn-sm" onclick="browseFolders(\'root\')">📁 ルートに戻る</button>' : ''}
+                    <div class="folder-list">
+                        ${response.result.files.map(folder => `
+                            <div class="folder-item">
+                                <span onclick="browseFolders('${folder.id}')" style="cursor: pointer;">
+                                    📁 ${escapeHtml(folder.name)}
+                                </span>
+                                <button class="btn btn-sm btn-primary" onclick="selectCustomFolder('${folder.id}', '${escapeHtml(folder.name)}')">
+                                    選択
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     } catch (error) {
         console.error('フォルダ参照エラー:', error);
-        showNotification('フォルダの参照に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('フォルダの参照に失敗しました', 'error');
+        }
     }
 }
 
@@ -318,7 +322,10 @@ async function selectCustomFolder(folderId, folderName) {
     closeDataFolderModal();
     await initializeFolderStructure();
     await loadAllData();
-    showNotification(`フォルダ「${folderName}」を使用します`, 'success');
+    
+    if (typeof showNotification === 'function') {
+        showNotification(`フォルダ「${folderName}」を使用します`, 'success');
+    }
 }
 
 // レガシーJSONファイルインポート
@@ -347,7 +354,9 @@ function handleLegacyJsonImport(event) {
                 
             } catch (error) {
                 console.error(`${file.name}のインポートエラー:`, error);
-                showNotification(`${file.name}の読み込みに失敗しました`, 'error');
+                if (typeof showNotification === 'function') {
+                    showNotification(`${file.name}の読み込みに失敗しました`, 'error');
+                }
             }
         };
         reader.readAsText(file);
@@ -378,7 +387,9 @@ async function checkLegacyImportComplete(totalFiles, importData) {
         }
         
         // インデックスを再構築
-        await rebuildIndexes();
+        if (typeof rebuildIndexes === 'function') {
+            await rebuildIndexes();
+        }
         
         // UI更新
         if (typeof calculateReferrerRevenues === 'function') {
@@ -400,7 +411,9 @@ async function checkLegacyImportComplete(totalFiles, importData) {
             updateTodoTabBadge();
         }
         
-        showNotification('レガシーデータのインポートが完了しました', 'success');
+        if (typeof showNotification === 'function') {
+            showNotification('レガシーデータのインポートが完了しました', 'success');
+        }
         legacyImportedFileCount = 0;
     }
 }
@@ -427,17 +440,27 @@ function handleSignoutClick() {
         meetingsIndex = {};
         searchIndex = {};
         
-        document.getElementById('authorizeBtn').style.display = 'inline-block';
-        document.getElementById('signoutBtn').style.display = 'none';
-        document.getElementById('authMessage').style.display = 'block';
+        const authorizeBtn = document.getElementById('authorizeBtn');
+        const signoutBtn = document.getElementById('signoutBtn');
+        const authMessage = document.getElementById('authMessage');
+        
+        if (authorizeBtn) authorizeBtn.style.display = 'inline-block';
+        if (signoutBtn) signoutBtn.style.display = 'none';
+        if (authMessage) authMessage.style.display = 'block';
         
         // データをクリア
         contacts = [];
         meetings = [];
-        renderContacts();
-        renderTodos();
+        if (typeof renderContacts === 'function') {
+            renderContacts();
+        }
+        if (typeof renderTodos === 'function') {
+            renderTodos();
+        }
         
-        showNotification('ログアウトしました', 'success');
+        if (typeof showNotification === 'function') {
+            showNotification('ログアウトしました', 'success');
+        }
     }
 }
 
@@ -445,7 +468,10 @@ function handleSignoutClick() {
 async function loadAllData() {
     if (!currentFolderId) return;
 
-    showLoading(true);
+    if (typeof showLoading === 'function') {
+        showLoading(true);
+    }
+    
     try {
         console.log('データ読み込み開始...');
         
@@ -494,9 +520,13 @@ async function loadAllData() {
         
     } catch (err) {
         console.error('データ読み込みエラー:', err);
-        showNotification('データの読み込みに失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('データの読み込みに失敗しました', 'error');
+        }
     } finally {
-        showLoading(false);
+        if (typeof showLoading === 'function') {
+            showLoading(false);
+        }
     }
 }
 
@@ -718,7 +748,9 @@ async function loadContactsDirectly() {
                 contacts.push(normalizedContact);
                 
                 // インデックスも更新
-                updateContactIndex(normalizedContact);
+                if (typeof updateContactIndex === 'function') {
+                    updateContactIndex(normalizedContact);
+                }
                 
                 console.log(`直接読み込み成功: ${normalizedContact.name}`);
             } catch (err) {
@@ -754,7 +786,7 @@ async function loadMeetingsDirectly() {
                     meetings.push(...contactMeetings);
                     
                     // ミーティングインデックスも更新
-                    if (contactMeetings.length > 0) {
+                    if (contactMeetings.length > 0 && typeof updateMeetingIndex === 'function') {
                         updateMeetingIndex(contactMeetings[0].contactId);
                     }
                 }
@@ -801,24 +833,37 @@ async function loadOptions() {
 // データ保存
 async function saveAllData() {
     if (!currentFolderId || !gapi.client.getToken()) {
-        showNotification('Googleドライブに接続されていません', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('Googleドライブに接続されていません', 'error');
+        }
         return;
     }
 
-    showLoading(true);
+    if (typeof showLoading === 'function') {
+        showLoading(true);
+    }
+    
     try {
         await saveContactsDistributed();
         await saveMeetingsDistributed();
         await saveOptions();
-        await rebuildIndexes();
+        if (typeof rebuildIndexes === 'function') {
+            await rebuildIndexes();
+        }
         await saveMetadata();
         
-        showNotification('データを保存しました', 'success');
+        if (typeof showNotification === 'function') {
+            showNotification('データを保存しました', 'success');
+        }
     } catch (err) {
         console.error('保存エラー:', err);
-        showNotification('データの保存に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('データの保存に失敗しました', 'error');
+        }
     } finally {
-        showLoading(false);
+        if (typeof showLoading === 'function') {
+            showLoading(false);
+        }
     }
 }
 
@@ -899,37 +944,6 @@ async function saveContactMeetings(contactId, contactMeetings) {
 // オプションデータ保存
 async function saveOptions() {
     await saveJsonFileToFolder('options.json', options, folderStructure.root);
-}
-
-// インデックスの再構築
-async function rebuildIndexes() {
-    // 検索インデックスの構築
-    searchIndex = {};
-    contacts.forEach(contact => {
-        const searchText = [
-            contact.name,
-            contact.furigana,
-            contact.company,
-            ...(contact.types || []),
-            ...(contact.affiliations || []),
-            ...(contact.businesses || []),
-            contact.business,
-            contact.history,
-            contact.priorInfo
-        ].filter(text => text).join(' ').toLowerCase();
-        
-        searchIndex[contact.id] = searchText;
-    });
-    
-    // メタデータの更新
-    metadata.totalContacts = contacts.length;
-    metadata.totalMeetings = meetings.length;
-    metadata.lastUpdated = new Date().toISOString();
-    
-    // インデックスファイルを保存
-    await saveJsonFileToFolder('contacts-index.json', contactsIndex, folderStructure.index);
-    await saveJsonFileToFolder('meetings-index.json', meetingsIndex, folderStructure.index);
-    await saveJsonFileToFolder('search-index.json', searchIndex, folderStructure.index);
 }
 
 // メタデータ保存
@@ -1093,7 +1107,44 @@ async function loadAttachmentFromFileSystem(filePath) {
     }
 }
 
+// Google Driveから画像を読み込む関数
+async function loadImageFromGoogleDrive(drivePath) {
+    if (!drivePath || !drivePath.startsWith('drive:')) return null;
+    
+    try {
+        const fileId = drivePath.replace('drive:', '');
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
+        
+        // レスポンスがバイナリの場合の処理
+        if (response.body) {
+            return 'data:image/jpeg;base64,' + btoa(response.body);
+        }
+    } catch (error) {
+        console.error('Google Drive画像読み込みエラー:', error);
+        return null;
+    }
+    
+    return null;
+}
+
 // 旧データのチェック（オプション）
 function checkForOldData() {
     console.log('分散ファイル構造でのデータチェック完了');
+}
+
+// グローバルスコープに関数を公開
+if (typeof window !== 'undefined') {
+    window.initializeGoogleAPI = initializeGoogleAPI;
+    window.initializeGIS = initializeGIS;
+    window.handleAuthClick = handleAuthClick;
+    window.handleSignoutClick = handleSignoutClick;
+    window.selectExistingFolder = selectExistingFolder;
+    window.createNewDataFolder = createNewDataFolder;
+    window.selectCustomFolder = selectCustomFolder;
+    window.browseFolders = browseFolders;
+    window.handleLegacyJsonImport = handleLegacyJsonImport;
+    window.loadImageFromGoogleDrive = loadImageFromGoogleDrive;
 }
