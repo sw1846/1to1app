@@ -1,4 +1,4 @@
-// data.js - Google Drive APIを使用したデータ管理（OAuth 2.0のみ・APIキー不要版）
+// data.js - Google Drive APIを使用したデータ管理（フォルダ選択機能付き）
 
 // Google OAuth 2.0設定
 const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
@@ -90,9 +90,9 @@ async function handleAuthClick() {
             document.getElementById('signoutBtn').style.display = 'inline-block';
             document.getElementById('authMessage').style.display = 'none';
             
-            await initializeDataFolder();
-            await loadAllData();
-            showNotification('Googleドライブに接続しました', 'success');
+            // データフォルダ選択モーダルを表示
+            await showDataFolderSelector();
+            
         } catch (error) {
             console.error('Drive API読み込みエラー:', error);
             showNotification('Drive APIの読み込みに失敗しました', 'error');
@@ -108,6 +108,233 @@ async function handleAuthClick() {
     }
 }
 
+// データフォルダ選択モーダル表示
+async function showDataFolderSelector() {
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'dataFolderModal';
+
+    // 既存のMeetingSystemDataフォルダを検索
+    const existingFolders = await searchMeetingSystemFolders();
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>データフォルダを選択</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <h3>既存のMeetingSystemDataフォルダ</h3>
+                    ${existingFolders.length > 0 ? `
+                        <div class="folder-list">
+                            ${existingFolders.map(folder => `
+                                <div class="folder-item" onclick="selectExistingFolder('${folder.id}', '${escapeHtml(folder.name)}')">
+                                    📁 ${escapeHtml(folder.name)} 
+                                    <small>(作成日: ${new Date(folder.createdTime).toLocaleDateString('ja-JP')})</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <p style="color: var(--text-secondary);">既存のMeetingSystemDataフォルダが見つかりません</p>
+                    `}
+                </div>
+
+                <div class="form-group">
+                    <h3>新しいフォルダを作成</h3>
+                    <button class="btn btn-primary" onclick="createNewDataFolder()">
+                        ➕ 新しいMeetingSystemDataフォルダを作成
+                    </button>
+                </div>
+
+                <div class="form-group">
+                    <h3>手動でフォルダを選択</h3>
+                    <div id="folderBrowser"></div>
+                    <button class="btn" onclick="browseFolders()">
+                        📂 フォルダを参照
+                    </button>
+                </div>
+
+                <div class="form-group">
+                    <h3>データインポート</h3>
+                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;" multiple onchange="handleJsonImport(event)">
+                    <button class="btn" onclick="document.getElementById('jsonFileInput').click()">
+                        📥 JSONファイルからインポート
+                    </button>
+                    <small>contacts.json, meetings.json, options.jsonファイルを選択</small>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+// 既存のMeetingSystemDataフォルダを検索
+async function searchMeetingSystemFolders() {
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: "name='MeetingSystemData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields: 'files(id, name, createdTime, parents)',
+            spaces: 'drive'
+        });
+
+        return response.result.files || [];
+    } catch (error) {
+        console.error('フォルダ検索エラー:', error);
+        return [];
+    }
+}
+
+// 既存フォルダを選択
+async function selectExistingFolder(folderId, folderName) {
+    currentFolderId = folderId;
+    console.log(`既存フォルダ「${folderName}」を選択:`, folderId);
+    
+    closeDataFolderModal();
+    await loadAllData();
+    showNotification(`フォルダ「${folderName}」からデータを読み込みました`, 'success');
+}
+
+// 新しいフォルダを作成
+async function createNewDataFolder() {
+    try {
+        const createResponse = await gapi.client.drive.files.create({
+            resource: {
+                name: 'MeetingSystemData',
+                mimeType: 'application/vnd.google-apps.folder'
+            },
+            fields: 'id'
+        });
+        
+        currentFolderId = createResponse.result.id;
+        console.log('新しいデータフォルダを作成:', currentFolderId);
+        
+        closeDataFolderModal();
+        await loadAllData();
+        showNotification('新しいデータフォルダを作成しました', 'success');
+    } catch (error) {
+        console.error('フォルダ作成エラー:', error);
+        showNotification('フォルダの作成に失敗しました', 'error');
+    }
+}
+
+// フォルダブラウザ
+async function browseFolders(parentId = 'root') {
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+            fields: 'files(id, name)',
+            spaces: 'drive'
+        });
+
+        const folderBrowser = document.getElementById('folderBrowser');
+        folderBrowser.innerHTML = `
+            <div class="folder-browser">
+                ${parentId !== 'root' ? '<button class="btn btn-sm" onclick="browseFolders(\'root\')">📁 ルートに戻る</button>' : ''}
+                <div class="folder-list">
+                    ${response.result.files.map(folder => `
+                        <div class="folder-item">
+                            <span onclick="browseFolders('${folder.id}')" style="cursor: pointer;">
+                                📁 ${escapeHtml(folder.name)}
+                            </span>
+                            <button class="btn btn-sm btn-primary" onclick="selectCustomFolder('${folder.id}', '${escapeHtml(folder.name)}')">
+                                選択
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('フォルダ参照エラー:', error);
+        showNotification('フォルダの参照に失敗しました', 'error');
+    }
+}
+
+// カスタムフォルダを選択
+async function selectCustomFolder(folderId, folderName) {
+    currentFolderId = folderId;
+    console.log(`カスタムフォルダ「${folderName}」を選択:`, folderId);
+    
+    closeDataFolderModal();
+    await loadAllData();
+    showNotification(`フォルダ「${folderName}」を使用します`, 'success');
+}
+
+// JSONファイルインポート
+function handleJsonImport(event) {
+    const files = Array.from(event.target.files);
+    
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                if (file.name === 'contacts.json') {
+                    contacts = Array.isArray(data) ? data : [];
+                    console.log(`${contacts.length}件の連絡先をインポート`);
+                } else if (file.name === 'meetings.json') {
+                    meetings = Array.isArray(data) ? data : [];
+                    console.log(`${meetings.length}件のミーティングをインポート`);
+                } else if (file.name === 'options.json') {
+                    options = {...options, ...data};
+                    console.log('オプションをインポート');
+                }
+                
+                // すべてのファイルが読み込まれたかチェック
+                checkImportComplete(files.length);
+                
+            } catch (error) {
+                console.error(`${file.name}のインポートエラー:`, error);
+                showNotification(`${file.name}の読み込みに失敗しました`, 'error');
+            }
+        };
+        reader.readAsText(file);
+    });
+}
+
+let importedFileCount = 0;
+function checkImportComplete(totalFiles) {
+    importedFileCount++;
+    if (importedFileCount >= totalFiles) {
+        closeDataFolderModal();
+        
+        // 新しいフォルダを作成してデータを保存
+        createNewDataFolder().then(() => {
+            if (typeof calculateReferrerRevenues === 'function') {
+                calculateReferrerRevenues();
+            }
+            if (typeof renderContacts === 'function') {
+                renderContacts();
+            }
+            if (typeof renderTodos === 'function') {
+                renderTodos();
+            }
+            if (typeof updateFilters === 'function') {
+                updateFilters();
+            }
+            if (typeof updateMultiSelectOptions === 'function') {
+                updateMultiSelectOptions();
+            }
+            if (typeof updateTodoTabBadge === 'function') {
+                updateTodoTabBadge();
+            }
+            showNotification('データのインポートが完了しました', 'success');
+        });
+        
+        importedFileCount = 0;
+    }
+}
+
+// データフォルダモーダルを閉じる
+function closeDataFolderModal() {
+    const modal = document.getElementById('dataFolderModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
 // サインアウト
 function handleSignoutClick() {
     const token = gapi.client.getToken();
@@ -115,6 +342,7 @@ function handleSignoutClick() {
         google.accounts.oauth2.revoke(token.access_token);
         gapi.client.setToken('');
         accessToken = null;
+        currentFolderId = null;
         
         document.getElementById('authorizeBtn').style.display = 'inline-block';
         document.getElementById('signoutBtn').style.display = 'none';
@@ -127,37 +355,6 @@ function handleSignoutClick() {
         renderTodos();
         
         showNotification('ログアウトしました', 'success');
-    }
-}
-
-// データフォルダの初期化
-async function initializeDataFolder() {
-    try {
-        // "MeetingSystemData"フォルダを検索
-        const response = await gapi.client.drive.files.list({
-            q: "name='MeetingSystemData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-
-        if (response.result.files && response.result.files.length > 0) {
-            currentFolderId = response.result.files[0].id;
-            console.log('既存のデータフォルダを使用:', currentFolderId);
-        } else {
-            // フォルダが存在しない場合は作成
-            const createResponse = await gapi.client.drive.files.create({
-                resource: {
-                    name: 'MeetingSystemData',
-                    mimeType: 'application/vnd.google-apps.folder'
-                },
-                fields: 'id'
-            });
-            currentFolderId = createResponse.result.id;
-            console.log('新しいデータフォルダを作成:', currentFolderId);
-        }
-    } catch (error) {
-        console.error('フォルダ初期化エラー:', error);
-        showNotification('フォルダの初期化に失敗しました', 'error');
     }
 }
 
@@ -193,10 +390,7 @@ async function loadAllData() {
             updateTodoTabBadge();
         }
         
-        // 旧データのチェック（必要に応じて）
-        if (typeof checkForOldData === 'function') {
-            checkForOldData();
-        }
+        console.log('データ読み込み完了');
     } catch (err) {
         console.error('データ読み込みエラー:', err);
         showNotification('データの読み込みに失敗しました', 'error');

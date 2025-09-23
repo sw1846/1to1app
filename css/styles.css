@@ -1,4 +1,4 @@
-/* styles.css - 全スタイル定義（改修版） */
+/* styles.css - 全スタイル定義（フォルダ選択機能追加版） */
 
 :root {
     --bg-primary: #ffffff;
@@ -1530,6 +1530,102 @@ img[onclick*="showImageModal"]:hover {
     flex: 1;
 }
 
+/* ===== フォルダ選択機能のスタイル（新規追加） ===== */
+
+/* フォルダ選択モーダル */
+#dataFolderModal .modal-content {
+    max-width: 900px;
+}
+
+/* フォルダリスト */
+.folder-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+}
+
+.folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--border-color);
+}
+
+.folder-item:hover {
+    background-color: var(--bg-tertiary);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+.folder-item.selected {
+    background-color: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.folder-item small {
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* フォルダブラウザ */
+.folder-browser {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.folder-browser .folder-list .folder-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.folder-browser .folder-item span {
+    flex: 1;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s;
+}
+
+.folder-browser .folder-item span:hover {
+    background-color: var(--bg-tertiary);
+}
+
+/* JSONインポートセクション */
+.json-import-section {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px dashed var(--border-color);
+}
+
+.json-import-section h4 {
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+}
+
+.json-import-section small {
+    color: var(--text-secondary);
+    display: block;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
 /* レスポンシブ */
 @media (max-width: 768px) {
     .header-content {
@@ -1567,6 +1663,22 @@ img[onclick*="showImageModal"]:hover {
     
     .contact-detail-grid {
         grid-template-columns: 1fr;
+    }
+
+    /* フォルダ選択モーダルのレスポンシブ */
+    #dataFolderModal .modal-content {
+        max-width: 95%;
+        margin: 1rem;
+    }
+
+    .folder-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .folder-browser {
+        max-height: 250px;
     }
 }
 
