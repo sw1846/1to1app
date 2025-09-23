@@ -204,9 +204,23 @@ async function selectExistingFolder(folderId, folderName) {
     console.log(`既存フォルダ「${folderName}」を選択:`, folderId);
     
     closeDataFolderModal();
-    await initializeFolderStructure();
-    await loadAllData();
-    showNotification(`フォルダ「${folderName}」からデータを読み込みました`, 'success');
+    
+    try {
+        await initializeFolderStructure();
+        await loadAllData();
+        
+        console.log(`読み込み完了: 連絡先${contacts.length}件, ミーティング${meetings.length}件`);
+        
+        // 認証状態変更のコールバックを呼び出し
+        if (typeof onAuthStateChanged === 'function') {
+            onAuthStateChanged(true);
+        }
+        
+        showNotification(`フォルダ「${folderName}」からデータを読み込みました (連絡先: ${contacts.length}件)`, 'success');
+    } catch (error) {
+        console.error('フォルダ選択エラー:', error);
+        showNotification('データの読み込みに失敗しました', 'error');
+    }
 }
 
 // 新しいフォルダ構造を作成
@@ -433,35 +447,51 @@ async function loadAllData() {
 
     showLoading(true);
     try {
+        console.log('データ読み込み開始...');
+        
         await loadMetadata();
         await loadIndexes();
         await loadContactsFromIndex();
         await loadMeetingsFromIndex();
         await loadOptions();
         
+        console.log(`読み込み完了: 連絡先${contacts.length}件, ミーティング${meetings.length}件`);
+        
         // 紹介売上を計算
         if (typeof calculateReferrerRevenues === 'function') {
             calculateReferrerRevenues();
         }
         
-        // UI更新
-        if (typeof renderContacts === 'function') {
-            renderContacts();
-        }
-        if (typeof renderTodos === 'function') {
-            renderTodos();
-        }
-        if (typeof updateFilters === 'function') {
-            updateFilters();
-        }
-        if (typeof updateMultiSelectOptions === 'function') {
-            updateMultiSelectOptions();
-        }
-        if (typeof updateTodoTabBadge === 'function') {
-            updateTodoTabBadge();
-        }
+        // UI更新関数を確実に呼び出し
+        setTimeout(() => {
+            try {
+                if (typeof renderContacts === 'function') {
+                    renderContacts();
+                }
+                if (typeof renderTodos === 'function') {
+                    renderTodos();
+                }
+                if (typeof updateFilters === 'function') {
+                    updateFilters();
+                }
+                if (typeof updateMultiSelectOptions === 'function') {
+                    updateMultiSelectOptions();
+                }
+                if (typeof updateTodoTabBadge === 'function') {
+                    updateTodoTabBadge();
+                }
+                
+                // onDataLoaded を呼び出し
+                if (typeof onDataLoaded === 'function') {
+                    onDataLoaded();
+                }
+                
+                console.log('UI更新完了');
+            } catch (uiError) {
+                console.error('UI更新エラー:', uiError);
+            }
+        }, 100);
         
-        console.log('データ読み込み完了');
     } catch (err) {
         console.error('データ読み込みエラー:', err);
         showNotification('データの読み込みに失敗しました', 'error');
@@ -544,11 +574,15 @@ async function loadIndexes() {
 async function loadContactsFromIndex() {
     contacts = [];
     
+    console.log('連絡先インデックス:', contactsIndex);
+    console.log('インデックスエントリ数:', Object.keys(contactsIndex).length);
+    
     for (const contactId in contactsIndex) {
         try {
             const contact = await loadSingleContact(contactId);
             if (contact) {
                 contacts.push(contact);
+                console.log(`連絡先読み込み成功: ${contact.name}`);
             }
         } catch (err) {
             console.error(`連絡先${contactId}の読み込みエラー:`, err);
@@ -556,6 +590,12 @@ async function loadContactsFromIndex() {
     }
     
     console.log(`${contacts.length}件の連絡先を読み込みました`);
+    
+    // データが0件の場合、直接ファイル検索を試行
+    if (contacts.length === 0 && folderStructure.contacts) {
+        console.log('インデックスが空のため、直接ファイル検索を実行...');
+        await loadContactsDirectly();
+    }
 }
 
 // 単一連絡先の読み込み
@@ -614,6 +654,8 @@ function normalizeContactData(contact) {
 async function loadMeetingsFromIndex() {
     meetings = [];
     
+    console.log('ミーティングインデックス:', meetingsIndex);
+    
     for (const contactId in meetingsIndex) {
         try {
             const contactMeetings = await loadContactMeetings(contactId);
@@ -626,6 +668,12 @@ async function loadMeetingsFromIndex() {
     }
     
     console.log(`${meetings.length}件のミーティングを読み込みました`);
+    
+    // データが0件の場合、直接ファイル検索を試行
+    if (meetings.length === 0 && folderStructure.meetings) {
+        console.log('ミーティングインデックスが空のため、直接ファイル検索を実行...');
+        await loadMeetingsDirectly();
+    }
 }
 
 // 特定連絡先のミーティング読み込み
@@ -643,6 +691,79 @@ async function loadContactMeetings(contactId) {
     } catch (err) {
         console.error(`ミーティングファイル読み込みエラー:`, err);
         return [];
+    }
+}
+
+// 直接ファイル検索（インデックスが空の場合のフォールバック）
+async function loadContactsDirectly() {
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: `'${folderStructure.contacts}' in parents and name contains 'contact-' and name contains '.json' and trashed=false`,
+            fields: 'files(id, name)',
+            spaces: 'drive'
+        });
+
+        const files = response.result.files || [];
+        console.log(`直接検索で${files.length}個の連絡先ファイルを発見`);
+
+        for (const file of files) {
+            try {
+                const fileResponse = await gapi.client.drive.files.get({
+                    fileId: file.id,
+                    alt: 'media'
+                });
+
+                const contact = JSON.parse(fileResponse.body);
+                const normalizedContact = normalizeContactData(contact);
+                contacts.push(normalizedContact);
+                
+                // インデックスも更新
+                updateContactIndex(normalizedContact);
+                
+                console.log(`直接読み込み成功: ${normalizedContact.name}`);
+            } catch (err) {
+                console.error(`ファイル${file.name}の読み込みエラー:`, err);
+            }
+        }
+    } catch (error) {
+        console.error('直接ファイル検索エラー:', error);
+    }
+}
+
+// ミーティングデータの直接読み込み
+async function loadMeetingsDirectly() {
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: `'${folderStructure.meetings}' in parents and name contains 'meetings.json' and trashed=false`,
+            fields: 'files(id, name)',
+            spaces: 'drive'
+        });
+
+        const files = response.result.files || [];
+        console.log(`直接検索で${files.length}個のミーティングファイルを発見`);
+
+        for (const file of files) {
+            try {
+                const fileResponse = await gapi.client.drive.files.get({
+                    fileId: file.id,
+                    alt: 'media'
+                });
+
+                const contactMeetings = JSON.parse(fileResponse.body);
+                if (Array.isArray(contactMeetings)) {
+                    meetings.push(...contactMeetings);
+                    
+                    // ミーティングインデックスも更新
+                    if (contactMeetings.length > 0) {
+                        updateMeetingIndex(contactMeetings[0].contactId);
+                    }
+                }
+            } catch (err) {
+                console.error(`ミーティングファイル${file.name}の読み込みエラー:`, err);
+            }
+        }
+    } catch (error) {
+        console.error('直接ミーティング検索エラー:', error);
     }
 }
 
@@ -816,43 +937,53 @@ async function saveMetadata() {
     await saveJsonFileToFolder('metadata.json', metadata, folderStructure.index);
 }
 
-// フォルダ内のJSONファイル保存
+// フォルダ内のJSONファイル保存（修正版 - 400エラー対応）
 async function saveJsonFileToFolder(filename, data, folderId) {
-    const boundary = '-------314159265358979323846';
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const close_delim = "\r\n--" + boundary + "--";
-
-    const fileId = await getFileIdInFolder(filename, folderId);
-    
-    const metadata = {
-        'name': filename,
-        'mimeType': 'application/json'
-    };
-    
-    if (!fileId) {
-        metadata.parents = [folderId];
+    try {
+        const fileId = await getFileIdInFolder(filename, folderId);
+        const jsonData = JSON.stringify(data, null, 2);
+        
+        if (fileId) {
+            // 既存ファイルの更新
+            const response = await gapi.client.request({
+                path: `/drive/v3/files/${fileId}`,
+                method: 'PATCH',
+                body: jsonData,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            console.log(`ファイル更新成功: ${filename}`);
+        } else {
+            // 新規ファイル作成
+            const metadata = {
+                name: filename,
+                parents: [folderId],
+                mimeType: 'application/json'
+            };
+            
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+            form.append('file', new Blob([jsonData], {type: 'application/json'}));
+            
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${gapi.client.getToken().access_token}`
+                },
+                body: form
+            });
+            
+            if (!response.ok) {
+                throw new Error(`ファイル作成失敗: ${response.status} ${response.statusText}`);
+            }
+            
+            console.log(`ファイル作成成功: ${filename}`);
+        }
+    } catch (error) {
+        console.error(`ファイル保存エラー (${filename}):`, error);
+        throw error;
     }
-
-    const multipartRequestBody =
-        delimiter +
-        'Content-Type: application/json\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: application/json\r\n\r\n' +
-        JSON.stringify(data, null, 2) +
-        close_delim;
-
-    const request = gapi.client.request({
-        'path': fileId ? `/drive/v3/files/${fileId}` : '/drive/v3/files',
-        'method': fileId ? 'PATCH' : 'POST',
-        'params': {'uploadType': 'multipart'},
-        'headers': {
-            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-        },
-        'body': multipartRequestBody
-    });
-
-    await request.execute();
 }
 
 // 特定フォルダ内のファイルIDを取得
