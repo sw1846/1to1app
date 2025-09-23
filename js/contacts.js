@@ -1,4 +1,4 @@
-// contacts.js - 連絡先管理機能（完全版）
+// contacts.js - 分散ファイル構造対応の連絡先管理機能
 
 // 連絡先モーダルを開く
 function openContactModal(contactId = null) {
@@ -112,8 +112,18 @@ function loadContactData(contactId) {
     const photoPreview = document.getElementById('photoPreview');
     const photoPreviewContainer = document.getElementById('photoPreviewContainer');
     if (contact.photo && photoPreview && photoPreviewContainer) {
-        photoPreview.src = contact.photo;
-        photoPreviewContainer.style.display = 'block';
+        if (contact.photo.startsWith('drive:')) {
+            // Google Driveから画像を読み込み
+            loadImageFromGoogleDrive(contact.photo).then(dataUrl => {
+                if (dataUrl) {
+                    photoPreview.src = dataUrl;
+                    photoPreviewContainer.style.display = 'block';
+                }
+            });
+        } else {
+            photoPreview.src = contact.photo;
+            photoPreviewContainer.style.display = 'block';
+        }
     } else if (photoPreview && photoPreviewContainer) {
         photoPreview.src = '';
         photoPreview.removeAttribute('src');
@@ -124,8 +134,18 @@ function loadContactData(contactId) {
     const businessCardPreview = document.getElementById('businessCardPreview');
     const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
     if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
-        businessCardPreview.src = contact.businessCard;
-        businessCardPreviewContainer.style.display = 'block';
+        if (contact.businessCard.startsWith('drive:')) {
+            // Google Driveから画像を読み込み
+            loadImageFromGoogleDrive(contact.businessCard).then(dataUrl => {
+                if (dataUrl) {
+                    businessCardPreview.src = dataUrl;
+                    businessCardPreviewContainer.style.display = 'block';
+                }
+            });
+        } else {
+            businessCardPreview.src = contact.businessCard;
+            businessCardPreviewContainer.style.display = 'block';
+        }
     } else if (businessCardPreview && businessCardPreviewContainer) {
         businessCardPreview.src = '';
         businessCardPreview.removeAttribute('src');
@@ -282,6 +302,26 @@ function resetContactForm() {
     }
 }
 
+// 新しいIDを生成（分散ファイル構造用）
+function generateContactId() {
+    if (typeof metadata !== 'undefined' && metadata.nextContactId) {
+        const newId = String(metadata.nextContactId).padStart(6, '0');
+        metadata.nextContactId++;
+        return newId;
+    }
+    
+    // フォールバック：既存の最大IDから次のIDを生成
+    let maxId = 0;
+    contacts.forEach(contact => {
+        const id = parseInt(contact.id) || 0;
+        if (id > maxId) {
+            maxId = id;
+        }
+    });
+    
+    return String(maxId + 1).padStart(6, '0');
+}
+
 // 連絡先保存
 async function saveContact() {
     const nameInput = document.getElementById('nameInput');
@@ -308,7 +348,7 @@ async function saveContact() {
         // 添付ファイルの処理
         const attachments = typeof getAttachments === 'function' ? getAttachments('attachmentList') : [];
         for (let i = 0; i < attachments.length; i++) {
-            if (attachments[i].data && !attachments[i].path.includes('attachments/')) {
+            if (attachments[i].data && !attachments[i].path.includes('attachments/') && !attachments[i].path.startsWith('drive:')) {
                 if (typeof saveAttachmentToFileSystem === 'function') {
                     const filePath = await saveAttachmentToFileSystem(
                         attachments[i].name,
@@ -325,6 +365,22 @@ async function saveContact() {
         const businessCardPreview = document.getElementById('businessCardPreview');
         const photoSrc = photoPreview ? photoPreview.src : '';
         const businessCardSrc = businessCardPreview ? businessCardPreview.src : '';
+        
+        let photoPath = null;
+        let businessCardPath = null;
+        
+        // 新しい画像の場合はGoogle Driveにアップロード
+        if (photoSrc && photoSrc.startsWith('data:')) {
+            photoPath = await saveAttachmentToFileSystem('photo.jpg', photoSrc, name);
+        } else if (photoSrc && !photoSrc.endsWith('.html')) {
+            photoPath = photoSrc; // 既存の画像パス
+        }
+        
+        if (businessCardSrc && businessCardSrc.startsWith('data:')) {
+            businessCardPath = await saveAttachmentToFileSystem('business-card.jpg', businessCardSrc, name);
+        } else if (businessCardSrc && !businessCardSrc.endsWith('.html')) {
+            businessCardPath = businessCardSrc; // 既存の画像パス
+        }
         
         // 接触方法の処理
         const contactMethodDirect = document.getElementById('contactMethodDirect');
@@ -352,7 +408,7 @@ async function saveContact() {
         
         // 連絡先オブジェクトの作成
         const contact = {
-            id: currentContactId || (typeof generateId === 'function' ? generateId() : Date.now().toString()),
+            id: currentContactId || generateContactId(),
             name: name,
             furigana: furiganaInput ? furiganaInput.value : '',
             company: companyInput ? companyInput.value : '',
@@ -376,8 +432,8 @@ async function saveContact() {
             affiliations: selectedOptions.affiliation,
             industryInterests: selectedOptions.industryInterests,
             status: currentContactId ? (contacts.find(c => c.id === currentContactId)?.status || '新規') : '新規',
-            photo: photoSrc && photoSrc !== '' && !photoSrc.endsWith('.html') ? photoSrc : null,
-            businessCard: businessCardSrc && businessCardSrc !== '' && !businessCardSrc.endsWith('.html') ? businessCardSrc : null,
+            photo: photoPath,
+            businessCard: businessCardPath,
             attachments: attachments,
             createdAt: currentContactId ? (contacts.find(c => c.id === currentContactId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -427,7 +483,7 @@ async function saveContact() {
             calculateReferrerRevenues();
         }
 
-        // データを保存
+        // データを保存（分散ファイル構造）
         if (typeof saveAllData === 'function') {
             await saveAllData();
         }
@@ -474,8 +530,51 @@ async function deleteContact() {
         return;
     }
 
+    const contactToDelete = contacts.find(c => c.id === currentContactId);
+    if (!contactToDelete) return;
+
+    // 関連するミーティングも削除
+    const contactMeetings = meetings.filter(m => m.contactId === currentContactId);
+    
+    // データから削除
     contacts = contacts.filter(c => c.id !== currentContactId);
     meetings = meetings.filter(m => m.contactId !== currentContactId);
+    
+    // Google Driveからファイルを削除
+    try {
+        if (typeof folderStructure !== 'undefined' && folderStructure.contacts) {
+            const fileName = `contact-${String(currentContactId).padStart(6, '0')}.json`;
+            const fileId = await getFileIdInFolder(fileName, folderStructure.contacts);
+            if (fileId) {
+                await gapi.client.drive.files.delete({
+                    fileId: fileId
+                });
+            }
+        }
+        
+        if (typeof folderStructure !== 'undefined' && folderStructure.meetings && contactMeetings.length > 0) {
+            const meetingFileName = `contact-${String(currentContactId).padStart(6, '0')}-meetings.json`;
+            const meetingFileId = await getFileIdInFolder(meetingFileName, folderStructure.meetings);
+            if (meetingFileId) {
+                await gapi.client.drive.files.delete({
+                    fileId: meetingFileId
+                });
+            }
+        }
+    } catch (error) {
+        console.error('ファイル削除エラー:', error);
+    }
+    
+    // インデックスから削除
+    if (typeof contactsIndex !== 'undefined') {
+        delete contactsIndex[currentContactId];
+    }
+    if (typeof meetingsIndex !== 'undefined') {
+        delete meetingsIndex[currentContactId];
+    }
+    if (typeof searchIndex !== 'undefined') {
+        delete searchIndex[currentContactId];
+    }
     
     // 未使用オプションをクリーンアップ
     cleanupUnusedOptions();
@@ -589,10 +688,49 @@ function showContactDetail(contactId) {
     const contactMeetings = meetings.filter(m => m.contactId === contactId)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    // ヘッダー部分の画像読み込み処理を改善
+    let photoHtml = '';
+    let businessCardHtml = '';
+    
+    if (contact.photo) {
+        if (contact.photo.startsWith('drive:')) {
+            // Google Driveの画像の場合は非同期で読み込み
+            photoHtml = `<div id="photoPlaceholder" style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
+            // 非同期で画像を読み込み
+            loadImageFromGoogleDrive(contact.photo).then(dataUrl => {
+                if (dataUrl) {
+                    const placeholder = document.getElementById('photoPlaceholder');
+                    if (placeholder) {
+                        placeholder.outerHTML = `<img src="${dataUrl}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${dataUrl}', '顔写真')" title="クリックで拡大">`;
+                    }
+                }
+            });
+        } else {
+            photoHtml = `<img src="${contact.photo}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${contact.photo}', '顔写真')" title="クリックで拡大">`;
+        }
+    }
+    
+    if (contact.businessCard) {
+        if (contact.businessCard.startsWith('drive:')) {
+            businessCardHtml = `<div id="businessCardPlaceholder" style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
+            // 非同期で画像を読み込み
+            loadImageFromGoogleDrive(contact.businessCard).then(dataUrl => {
+                if (dataUrl) {
+                    const placeholder = document.getElementById('businessCardPlaceholder');
+                    if (placeholder) {
+                        placeholder.outerHTML = `<img src="${dataUrl}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${dataUrl}', '名刺画像')" title="クリックで拡大">`;
+                    }
+                }
+            });
+        } else {
+            businessCardHtml = `<img src="${contact.businessCard}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${contact.businessCard}', '名刺画像')" title="クリックで拡大">`;
+        }
+    }
+
     // ヘッダー部分
     let headerHtml = `
         <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
-            ${contact.photo ? `<img src="${contact.photo}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${contact.photo}', '顔写真')" title="クリックで拡大">` : ''}
+            ${photoHtml}
             <div style="flex: 1;">
                 <h3>${escapeHtml(contact.name)}${contact.furigana ? ` (${escapeHtml(contact.furigana)})` : ''}</h3>
                 ${contact.company ? `<p><strong>会社:</strong> ${escapeHtml(contact.company)}</p>` : ''}
@@ -602,7 +740,7 @@ function showContactDetail(contactId) {
                 ${contact.revenue ? `<p><strong>売上:</strong> ¥${contact.revenue.toLocaleString()}</p>` : ''}
                 ${contact.referrerRevenue ? `<p><strong>紹介売上:</strong> ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
             </div>
-            ${contact.businessCard && contact.businessCard !== 'data:' ? `<img src="${contact.businessCard}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${contact.businessCard}', '名刺画像')" title="クリックで拡大">` : ''}
+            ${businessCardHtml}
         </div>
     `;
 
@@ -753,7 +891,7 @@ function showContactDetail(contactId) {
                 <div class="file-list">
                     ${contact.attachments.map(file => `
                         <div class="file-item">
-                            📎 <a href="javascript:void(0)" onclick="openFile('${file.data}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
+                            📎 <a href="javascript:void(0)" onclick="openFile('${file.data || file.path}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
                         </div>
                     `).join('')}
                 </div>
@@ -801,7 +939,7 @@ function showContactDetail(contactId) {
                             <div class="file-list">
                                 ${meeting.attachments.map(file => `
                                     <div class="file-item">
-                                        📎 <a href="javascript:void(0)" onclick="openFile('${file.data}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
+                                        📎 <a href="javascript:void(0)" onclick="openFile('${file.data || file.path}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
                                     </div>
                                 `).join('')}
                             </div>

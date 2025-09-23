@@ -1,4 +1,4 @@
-// meetings.js - ミーティング・ToDo管理機能（完全版）
+// meetings.js - 分散ファイル構造対応のミーティング・ToDo管理機能
 
 // ミーティングモーダルを開く
 function openMeetingModal(contactId, meetingId = null) {
@@ -98,6 +98,26 @@ function loadMeetingData(meetingId) {
     }
 }
 
+// 新しいミーティングIDを生成
+function generateMeetingId() {
+    if (typeof metadata !== 'undefined' && metadata.nextMeetingId) {
+        const newId = String(metadata.nextMeetingId).padStart(6, '0');
+        metadata.nextMeetingId++;
+        return newId;
+    }
+    
+    // フォールバック：既存の最大IDから次のIDを生成
+    let maxId = 0;
+    meetings.forEach(meeting => {
+        const id = parseInt(meeting.id) || 0;
+        if (id > maxId) {
+            maxId = id;
+        }
+    });
+    
+    return String(maxId + 1).padStart(6, '0');
+}
+
 // ミーティング保存
 async function saveMeeting() {
     if (typeof showLoading === 'function') {
@@ -111,8 +131,16 @@ async function saveMeeting() {
         // 添付ファイルの処理
         const attachments = typeof getAttachments === 'function' ? getAttachments('meetingAttachmentList') : [];
         for (let i = 0; i < attachments.length; i++) {
-            if (attachments[i].data && !attachments[i].path.includes('attachments/')) {
-                if (typeof saveAttachmentToFileSystem === 'function') {
+            if (attachments[i].data && !attachments[i].path.includes('attachments/') && !attachments[i].path.startsWith('drive:')) {
+                if (typeof saveAttachmentToMeetingFileSystem === 'function') {
+                    const filePath = await saveAttachmentToMeetingFileSystem(
+                        attachments[i].name,
+                        attachments[i].data,
+                        currentMeetingId || generateMeetingId()
+                    );
+                    attachments[i].path = filePath;
+                } else if (typeof saveAttachmentToFileSystem === 'function') {
+                    // フォールバック：連絡先用のファイルシステムを使用
                     const filePath = await saveAttachmentToFileSystem(
                         attachments[i].name,
                         attachments[i].data,
@@ -147,13 +175,14 @@ async function saveMeeting() {
         } else {
             // 新規追加の場合
             const meeting = {
-                id: typeof generateId === 'function' ? generateId() : Date.now().toString(),
+                id: generateMeetingId(),
                 ...meetingData,
                 createdAt: new Date().toISOString()
             };
             meetings.push(meeting);
         }
 
+        // 分散ファイル構造でデータを保存
         if (typeof saveAllData === 'function') {
             await saveAllData();
         }
@@ -206,8 +235,15 @@ async function deleteMeeting(meetingId) {
         return;
     }
 
+    const meetingToDelete = meetings.find(m => m.id === meetingId);
+    if (!meetingToDelete) return;
+
+    const contactId = meetingToDelete.contactId;
+    
+    // データから削除
     meetings = meetings.filter(m => m.id !== meetingId);
     
+    // 分散ファイル構造でデータを保存（関連するミーティングファイルが更新される）
     if (typeof saveAllData === 'function') {
         await saveAllData();
     }
@@ -292,6 +328,7 @@ async function toggleTodoComplete(meetingId, todoIndex) {
     
     meeting.todos[todoIndex].completed = !meeting.todos[todoIndex].completed;
     
+    // 分散ファイル構造でデータを保存
     if (typeof saveAllData === 'function') {
         await saveAllData();
     }
@@ -507,7 +544,7 @@ function getTodoStatistics() {
     };
 }
 
-// ミーティング頻度の分析
+// ミーティング频度の分析
 function getMeetingFrequencyAnalysis() {
     const contactFrequency = {};
     const monthlyMeetings = {};
@@ -516,13 +553,13 @@ function getMeetingFrequencyAnalysis() {
         const contact = contacts.find(c => c.id === meeting.contactId);
         const contactName = contact ? contact.name : '不明';
         
-        // 連絡先別の頻度
+        // 連絡先別の频度
         if (!contactFrequency[contactName]) {
             contactFrequency[contactName] = 0;
         }
         contactFrequency[contactName]++;
         
-        // 月別の頻度
+        // 月別の频度
         if (meeting.date) {
             const monthKey = meeting.date.slice(0, 7); // YYYY-MM形式
             if (!monthlyMeetings[monthKey]) {
@@ -539,4 +576,70 @@ function getMeetingFrequencyAnalysis() {
         averageMeetingsPerContact: Object.keys(contactFrequency).length > 0 ? 
             (meetings.length / Object.keys(contactFrequency).length).toFixed(1) : 0
     };
+}
+
+// ミーティング用添付ファイルの保存（オプション）
+async function saveAttachmentToMeetingFileSystem(fileName, dataUrl, meetingId) {
+    if (!folderStructure.attachmentsMeetings || !gapi.client.getToken()) return dataUrl;
+
+    try {
+        // ミーティングIDのフォルダを作成または取得
+        const safeMeetingId = `meeting-${String(meetingId).padStart(6, '0')}`;
+        let meetingFolderId = await getOrCreateFolder(safeMeetingId, folderStructure.attachmentsMeetings);
+
+        // Base64をBlobに変換
+        const byteCharacters = atob(dataUrl.split(',')[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray]);
+
+        // ファイルをアップロード
+        const metadata = {
+            name: fileName,
+            parents: [meetingFolderId]
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+        form.append('file', blob);
+
+        const response = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+            {
+                method: 'POST',
+                headers: new Headers({'Authorization': 'Bearer ' + gapi.client.getToken().access_token}),
+                body: form
+            }
+        );
+
+        const file = await response.json();
+        return `drive:${file.id}`;
+    } catch (error) {
+        console.error('ミーティング添付ファイル保存エラー:', error);
+        return dataUrl;
+    }
+}
+
+// 連絡先のミーティングデータの完全同期
+async function syncContactMeetings(contactId) {
+    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+    
+    if (typeof folderStructure !== 'undefined' && folderStructure.meetings) {
+        const fileName = `contact-${String(contactId).padStart(6, '0')}-meetings.json`;
+        await saveJsonFileToFolder(fileName, contactMeetings, folderStructure.meetings);
+        
+        // ミーティングインデックスを更新
+        if (typeof meetingsIndex !== 'undefined') {
+            meetingsIndex[contactId] = {
+                contactId: contactId,
+                meetingCount: contactMeetings.length,
+                lastMeetingDate: contactMeetings.length > 0 ? 
+                    Math.max(...contactMeetings.map(m => new Date(m.date || 0).getTime())) : null,
+                lastUpdated: new Date().toISOString()
+            };
+        }
+    }
 }

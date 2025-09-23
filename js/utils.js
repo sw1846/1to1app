@@ -1,4 +1,4 @@
-// utils.js - ユーティリティ関数（完全版）
+// utils.js - 分散ファイル構造対応のユーティリティ関数
 
 // ユニークIDを生成
 function generateId() {
@@ -186,12 +186,12 @@ function parseAttachments(attachmentsStr) {
     });
 }
 
-// ToDoパース（既存の関数を置き換え）
+// ToDoパース（分散ファイル構造対応）
 function parseTodos(todosStr) {
     if (!todosStr) return [];
     
     return todosStr.split('|').filter(t => t).map(todoStr => {
-        const completed = /^[✓✔]/.test(todoStr);  // 両方の文字に対応
+        const completed = /^[✓✔]/.test(todoStr);
         const match = todoStr.match(/[☐✓✔]\s*(.+?)(?:\s*\(期限:(.+?)\))?$/);
         
         if (match) {
@@ -268,7 +268,345 @@ function downloadCSV(csv, filename) {
     URL.revokeObjectURL(link.href);
 }
 
-// ======= 追加された関数群 =======
+// ======= 分散ファイル構造対応の新機能 =======
+
+// 検索インデックスの構築
+function buildSearchIndex() {
+    searchIndex = {};
+    
+    contacts.forEach(contact => {
+        const searchText = [
+            contact.name,
+            contact.furigana,
+            contact.company,
+            ...(contact.types || []),
+            ...(contact.affiliations || []),
+            ...(contact.businesses || []),
+            contact.business,
+            contact.strengths,
+            contact.approach,
+            contact.history,
+            contact.priorInfo,
+            contact.activityArea,
+            contact.residence,
+            contact.hobbies
+        ].filter(text => text).join(' ').toLowerCase();
+        
+        searchIndex[contact.id] = searchText;
+    });
+}
+
+// 高速検索機能
+function fastSearch(query, options = {}) {
+    if (!query || query.trim() === '') return contacts;
+    
+    const lowerQuery = query.toLowerCase();
+    const words = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+    
+    // 検索インデックスが空の場合は構築
+    if (Object.keys(searchIndex).length === 0) {
+        buildSearchIndex();
+    }
+    
+    return contacts.filter(contact => {
+        const indexText = searchIndex[contact.id] || '';
+        
+        // 全ての単語が含まれているかチェック
+        return words.every(word => indexText.includes(word));
+    });
+}
+
+// 連絡先インデックスの更新
+function updateContactIndex(contact) {
+    if (!contact || !contact.id) return;
+    
+    contactsIndex[contact.id] = {
+        id: contact.id,
+        name: contact.name,
+        company: contact.company || '',
+        lastUpdated: new Date().toISOString(),
+        status: contact.status || '新規',
+        types: contact.types || [],
+        createdAt: contact.createdAt || new Date().toISOString()
+    };
+    
+    // 検索インデックスも更新
+    const searchText = [
+        contact.name,
+        contact.furigana,
+        contact.company,
+        ...(contact.types || []),
+        ...(contact.affiliations || []),
+        ...(contact.businesses || []),
+        contact.business,
+        contact.strengths,
+        contact.approach,
+        contact.history,
+        contact.priorInfo
+    ].filter(text => text).join(' ').toLowerCase();
+    
+    searchIndex[contact.id] = searchText;
+}
+
+// ミーティングインデックスの更新
+function updateMeetingIndex(contactId) {
+    if (!contactId) return;
+    
+    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+    
+    meetingsIndex[contactId] = {
+        contactId: contactId,
+        meetingCount: contactMeetings.length,
+        lastMeetingDate: contactMeetings.length > 0 ? 
+            Math.max(...contactMeetings.map(m => new Date(m.date || 0).getTime())) : null,
+        lastUpdated: new Date().toISOString(),
+        totalTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.length || 0), 0),
+        completedTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => t.completed).length || 0), 0)
+    };
+}
+
+// インデックスの再構築
+async function rebuildIndexes() {
+    console.log('インデックス再構築開始...');
+    
+    try {
+        // 連絡先インデックス
+        contactsIndex = {};
+        contacts.forEach(contact => {
+            updateContactIndex(contact);
+        });
+        
+        // ミーティングインデックス
+        meetingsIndex = {};
+        const contactIds = [...new Set(meetings.map(m => m.contactId))];
+        contactIds.forEach(contactId => {
+            updateMeetingIndex(contactId);
+        });
+        
+        // 検索インデックス
+        buildSearchIndex();
+        
+        // メタデータ更新
+        if (metadata) {
+            metadata.totalContacts = contacts.length;
+            metadata.totalMeetings = meetings.length;
+            metadata.lastUpdated = new Date().toISOString();
+        }
+        
+        console.log('インデックス再構築完了');
+        
+    } catch (error) {
+        console.error('インデックス再構築エラー:', error);
+        throw error;
+    }
+}
+
+// データマイグレーション（レガシー形式から分散構造へ）
+function migrateFromLegacyFormat(legacyContacts, legacyMeetings, legacyOptions) {
+    console.log('レガシーデータのマイグレーション開始...');
+    
+    // 連絡先データの変換
+    const migratedContacts = legacyContacts.map((contact, index) => {
+        // IDが存在しない場合は生成
+        if (!contact.id) {
+            contact.id = String(index + 1).padStart(6, '0');
+        }
+        
+        // データ形式の正規化
+        return normalizeContactData(contact);
+    });
+    
+    // ミーティングデータの変換
+    const migratedMeetings = legacyMeetings.map((meeting, index) => {
+        if (!meeting.id) {
+            meeting.id = String(index + 1).padStart(6, '0');
+        }
+        return meeting;
+    });
+    
+    // メタデータの設定
+    const migratedMetadata = {
+        version: '2.0',
+        migrationFrom: 'legacy',
+        migrationDate: new Date().toISOString(),
+        totalContacts: migratedContacts.length,
+        totalMeetings: migratedMeetings.length,
+        nextContactId: migratedContacts.length + 1,
+        nextMeetingId: migratedMeetings.length + 1
+    };
+    
+    console.log('マイグレーション完了');
+    
+    return {
+        contacts: migratedContacts,
+        meetings: migratedMeetings,
+        options: legacyOptions || options,
+        metadata: migratedMetadata
+    };
+}
+
+// 連絡先データの正規化
+function normalizeContactData(contact) {
+    // レガシー形式の変換
+    if (contact.referrer && !contact.contactMethod) {
+        contact.contactMethod = 'referral';
+    } else if (!contact.contactMethod) {
+        contact.contactMethod = 'direct';
+        contact.directContact = '所属が同じ';
+    }
+    
+    // 文字列から配列への変換
+    if (typeof contact.type === 'string') {
+        contact.types = contact.type ? [contact.type] : [];
+        delete contact.type;
+    }
+    if (typeof contact.affiliation === 'string') {
+        contact.affiliations = contact.affiliation ? [contact.affiliation] : [];
+        delete contact.affiliation;
+    }
+    
+    // 必須フィールドの確保
+    contact.types = contact.types || [];
+    contact.affiliations = contact.affiliations || [];
+    contact.industryInterests = contact.industryInterests || [];
+    contact.businesses = contact.businesses || [];
+    contact.emails = contact.emails || [];
+    contact.phones = contact.phones || [];
+    contact.priorInfo = contact.priorInfo || '';
+    contact.status = contact.status || '新規';
+    
+    // タイムスタンプの追加
+    if (!contact.createdAt) {
+        contact.createdAt = new Date().toISOString();
+    }
+    if (!contact.updatedAt) {
+        contact.updatedAt = new Date().toISOString();
+    }
+    
+    return contact;
+}
+
+// バッチ処理用のユーティリティ
+async function batchProcess(items, processor, batchSize = 50) {
+    const results = [];
+    
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(processor));
+        results.push(...batchResults);
+        
+        // UI の応答性を保つため、小さな遅延を入れる
+        if (i + batchSize < items.length) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+    }
+    
+    return results;
+}
+
+// ファイルサイズの計算
+function calculateDataSize(data) {
+    return new Blob([JSON.stringify(data)]).size;
+}
+
+// データの圧縮（シンプルな最適化）
+function compressData(data) {
+    // 不要なフィールドの削除
+    const compressed = JSON.parse(JSON.stringify(data));
+    
+    // 空の配列や文字列を削除
+    function removeEmpty(obj) {
+        if (Array.isArray(obj)) {
+            return obj.filter(item => item !== null && item !== undefined && item !== '');
+        } else if (obj && typeof obj === 'object') {
+            const cleaned = {};
+            for (const [key, value] of Object.entries(obj)) {
+                const cleanedValue = removeEmpty(value);
+                if (cleanedValue !== null && cleanedValue !== undefined && cleanedValue !== '' && 
+                    !(Array.isArray(cleanedValue) && cleanedValue.length === 0)) {
+                    cleaned[key] = cleanedValue;
+                }
+            }
+            return cleaned;
+        }
+        return obj;
+    }
+    
+    return removeEmpty(compressed);
+}
+
+// パフォーマンス測定
+function measurePerformance(name, func) {
+    const start = performance.now();
+    const result = func();
+    const end = performance.now();
+    console.log(`${name}: ${(end - start).toFixed(2)}ms`);
+    return result;
+}
+
+// 非同期パフォーマンス測定
+async function measureAsyncPerformance(name, func) {
+    const start = performance.now();
+    const result = await func();
+    const end = performance.now();
+    console.log(`${name}: ${(end - start).toFixed(2)}ms`);
+    return result;
+}
+
+// データ整合性チェック
+function validateDataIntegrity() {
+    const issues = [];
+    
+    // 連絡先の整合性チェック
+    contacts.forEach(contact => {
+        if (!contact.id) {
+            issues.push(`連絡先「${contact.name}」にIDがありません`);
+        }
+        if (!contact.name) {
+            issues.push(`ID「${contact.id}」の連絡先に名前がありません`);
+        }
+        if (contact.referrer) {
+            const referrerExists = contacts.some(c => c.name === contact.referrer);
+            if (!referrerExists) {
+                issues.push(`連絡先「${contact.name}」の紹介者「${contact.referrer}」が見つかりません`);
+            }
+        }
+    });
+    
+    // ミーティングの整合性チェック
+    meetings.forEach(meeting => {
+        if (!meeting.id) {
+            issues.push(`ミーティングにIDがありません`);
+        }
+        if (!meeting.contactId) {
+            issues.push(`ミーティング「${meeting.id}」に連絡先IDがありません`);
+        } else {
+            const contactExists = contacts.some(c => c.id === meeting.contactId);
+            if (!contactExists) {
+                issues.push(`ミーティング「${meeting.id}」の連絡先「${meeting.contactId}」が見つかりません`);
+            }
+        }
+    });
+    
+    // インデックスの整合性チェック
+    Object.keys(contactsIndex).forEach(contactId => {
+        const contactExists = contacts.some(c => c.id === contactId);
+        if (!contactExists) {
+            issues.push(`連絡先インデックスに存在しない連絡先ID「${contactId}」があります`);
+        }
+    });
+    
+    Object.keys(meetingsIndex).forEach(contactId => {
+        const contactExists = contacts.some(c => c.id === contactId);
+        if (!contactExists) {
+            issues.push(`ミーティングインデックスに存在しない連絡先ID「${contactId}」があります`);
+        }
+    });
+    
+    return issues;
+}
+
+// ======= 既存機能の拡張 =======
 
 // ドロップゾーンの設定
 function setupDropZone(dropZoneId, targetType, isImage = false) {
@@ -377,7 +715,6 @@ function updateMultiSelectOption(type, optionList) {
 
     container.innerHTML = '';
     
-    // ソート済みのオプションを追加
     const sortedOptions = [...optionList].sort();
     sortedOptions.forEach(option => {
         const optionDiv = document.createElement('div');
@@ -391,7 +728,6 @@ function updateMultiSelectOption(type, optionList) {
         container.appendChild(optionDiv);
     });
 
-    // 新規追加オプション
     const addNewDiv = document.createElement('div');
     addNewDiv.className = 'multi-select-option';
     addNewDiv.innerHTML = `
@@ -408,7 +744,6 @@ function toggleMultiSelectDropdown(type) {
     
     const isVisible = dropdown.classList.contains('show');
     
-    // 他のドロップダウンを閉じる
     document.querySelectorAll('.multi-select-dropdown').forEach(d => {
         d.classList.remove('show');
     });
@@ -739,9 +1074,9 @@ function handleCSVImport(event) {
                 return;
             }
 
-            const importedContacts = rows.slice(1).map(row => {
-                return {
-                    id: generateId(),
+            const importedContacts = rows.slice(1).map((row, index) => {
+                const contact = {
+                    id: generateContactId(),
                     name: row[0] || '',
                     furigana: row[1] || '',
                     company: row[2] || '',
@@ -767,6 +1102,8 @@ function handleCSVImport(event) {
                     createdAt: row[21] || new Date().toISOString(),
                     updatedAt: row[22] || new Date().toISOString()
                 };
+                
+                return normalizeContactData(contact);
             }).filter(contact => contact.name);
 
             if (importedContacts.length === 0) {
@@ -781,6 +1118,11 @@ function handleCSVImport(event) {
                 contact.types.forEach(type => updateOptionIfNew('types', type));
                 contact.affiliations.forEach(aff => updateOptionIfNew('affiliations', aff));
                 contact.industryInterests.forEach(ii => updateOptionIfNew('industryInterests', ii));
+            });
+
+            // インデックスを更新
+            importedContacts.forEach(contact => {
+                updateContactIndex(contact);
             });
 
             if (typeof calculateReferrerRevenues === 'function') {
@@ -800,6 +1142,7 @@ function handleCSVImport(event) {
             showNotification(`${importedContacts.length}件の連絡先をインポートしました`, 'success');
         } catch (error) {
             console.error('CSVインポートエラー:', error);
+            logError(error, 'CSVインポート');
             showNotification('CSVファイルの読み込みに失敗しました', 'error');
         }
     };

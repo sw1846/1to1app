@@ -1,4 +1,4 @@
-// data.js - Google Drive APIを使用したデータ管理（フォルダ選択機能付き）
+// data.js - Google Drive APIを使用した分散ファイル構造データ管理
 
 // Google OAuth 2.0設定
 const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
@@ -10,21 +10,40 @@ let gisInited = false;
 let currentFolderId = null;
 let accessToken = null;
 
+// フォルダ構造のID管理
+let folderStructure = {
+    root: null,
+    index: null,
+    contacts: null,
+    meetings: null,
+    attachments: null,
+    attachmentsContacts: null,
+    attachmentsMeetings: null
+};
+
+// インデックス管理
+let contactsIndex = {};
+let meetingsIndex = {};
+let searchIndex = {};
+let metadata = {
+    version: '2.0',
+    lastUpdated: null,
+    totalContacts: 0,
+    totalMeetings: 0,
+    nextContactId: 1,
+    nextMeetingId: 1
+};
+
 // Google API初期化（APIキーなし）
 async function initializeGoogleAPI() {
     try {
         console.log('Google API初期化開始（APIキーなし）...');
         
-        // GAPIのロードを待つ
         await new Promise((resolve) => {
             gapi.load('client', resolve);
         });
 
-        // クライアントの初期化（APIキーなし）
-        await gapi.client.init({
-            // apiKeyは指定しない
-            // discoveryDocsも指定しない（後でOAuth認証後に読み込む）
-        });
+        await gapi.client.init({});
 
         gapiInited = true;
         maybeEnableButtons();
@@ -43,7 +62,7 @@ function initializeGIS() {
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: SCOPES,
-            callback: '', // 後で設定
+            callback: '',
         });
         
         gisInited = true;
@@ -74,13 +93,9 @@ async function handleAuthClick() {
             throw resp;
         }
         
-        // アクセストークンを保存
         accessToken = resp.access_token;
-        
-        // トークンを設定
         gapi.client.setToken(resp);
         
-        // 認証後にDiscovery Documentを読み込む
         try {
             console.log('Drive API Discovery Document読み込み中...');
             await gapi.client.load('drive', 'v3');
@@ -90,7 +105,6 @@ async function handleAuthClick() {
             document.getElementById('signoutBtn').style.display = 'inline-block';
             document.getElementById('authMessage').style.display = 'none';
             
-            // データフォルダ選択モーダルを表示
             await showDataFolderSelector();
             
         } catch (error) {
@@ -114,7 +128,6 @@ async function showDataFolderSelector() {
     modal.className = 'modal active';
     modal.id = 'dataFolderModal';
 
-    // 既存のMeetingSystemDataフォルダを検索
     const existingFolders = await searchMeetingSystemFolders();
 
     modal.innerHTML = `
@@ -124,7 +137,7 @@ async function showDataFolderSelector() {
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <h3>既存のMeetingSystemDataフォルダ</h3>
+                    <h3>既存の1to1meetingフォルダ</h3>
                     ${existingFolders.length > 0 ? `
                         <div class="folder-list">
                             ${existingFolders.map(folder => `
@@ -135,14 +148,14 @@ async function showDataFolderSelector() {
                             `).join('')}
                         </div>
                     ` : `
-                        <p style="color: var(--text-secondary);">既存のMeetingSystemDataフォルダが見つかりません</p>
+                        <p style="color: var(--text-secondary);">既存の1to1meetingフォルダが見つかりません</p>
                     `}
                 </div>
 
                 <div class="form-group">
                     <h3>新しいフォルダを作成</h3>
                     <button class="btn btn-primary" onclick="createNewDataFolder()">
-                        ➕ 新しいMeetingSystemDataフォルダを作成
+                        ➕ 新しい1to1meetingフォルダを作成
                     </button>
                 </div>
 
@@ -155,10 +168,10 @@ async function showDataFolderSelector() {
                 </div>
 
                 <div class="form-group">
-                    <h3>データインポート</h3>
-                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;" multiple onchange="handleJsonImport(event)">
+                    <h3>レガシーデータインポート</h3>
+                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;" multiple onchange="handleLegacyJsonImport(event)">
                     <button class="btn" onclick="document.getElementById('jsonFileInput').click()">
-                        📥 JSONファイルからインポート
+                        📥 旧形式JSONからインポート
                     </button>
                     <small>contacts.json, meetings.json, options.jsonファイルを選択</small>
                 </div>
@@ -169,11 +182,11 @@ async function showDataFolderSelector() {
     document.body.appendChild(modal);
 }
 
-// 既存のMeetingSystemDataフォルダを検索
+// 既存フォルダを検索
 async function searchMeetingSystemFolders() {
     try {
         const response = await gapi.client.drive.files.list({
-            q: "name='MeetingSystemData' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            q: "name='1to1meeting' and mimeType='application/vnd.google-apps.folder' and trashed=false",
             fields: 'files(id, name, createdTime, parents)',
             spaces: 'drive'
         });
@@ -191,16 +204,18 @@ async function selectExistingFolder(folderId, folderName) {
     console.log(`既存フォルダ「${folderName}」を選択:`, folderId);
     
     closeDataFolderModal();
+    await initializeFolderStructure();
     await loadAllData();
     showNotification(`フォルダ「${folderName}」からデータを読み込みました`, 'success');
 }
 
-// 新しいフォルダを作成
+// 新しいフォルダ構造を作成
 async function createNewDataFolder() {
     try {
+        // ルートフォルダ作成
         const createResponse = await gapi.client.drive.files.create({
             resource: {
-                name: 'MeetingSystemData',
+                name: '1to1meeting',
                 mimeType: 'application/vnd.google-apps.folder'
             },
             fields: 'id'
@@ -209,12 +224,42 @@ async function createNewDataFolder() {
         currentFolderId = createResponse.result.id;
         console.log('新しいデータフォルダを作成:', currentFolderId);
         
+        // フォルダ構造を初期化
+        await initializeFolderStructure();
+        
+        // 初期メタデータを保存
+        await saveMetadata();
+        
         closeDataFolderModal();
         await loadAllData();
         showNotification('新しいデータフォルダを作成しました', 'success');
     } catch (error) {
         console.error('フォルダ作成エラー:', error);
         showNotification('フォルダの作成に失敗しました', 'error');
+    }
+}
+
+// フォルダ構造の初期化
+async function initializeFolderStructure() {
+    if (!currentFolderId) return;
+
+    try {
+        folderStructure.root = currentFolderId;
+        
+        // 必要なフォルダを作成または取得
+        folderStructure.index = await getOrCreateFolder('index', currentFolderId);
+        folderStructure.contacts = await getOrCreateFolder('contacts', currentFolderId);
+        folderStructure.meetings = await getOrCreateFolder('meetings', currentFolderId);
+        folderStructure.attachments = await getOrCreateFolder('attachments', currentFolderId);
+        
+        // attachmentsのサブフォルダ
+        folderStructure.attachmentsContacts = await getOrCreateFolder('contacts', folderStructure.attachments);
+        folderStructure.attachmentsMeetings = await getOrCreateFolder('meetings', folderStructure.attachments);
+        
+        console.log('フォルダ構造初期化完了:', folderStructure);
+    } catch (error) {
+        console.error('フォルダ構造初期化エラー:', error);
+        throw error;
     }
 }
 
@@ -257,13 +302,15 @@ async function selectCustomFolder(folderId, folderName) {
     console.log(`カスタムフォルダ「${folderName}」を選択:`, folderId);
     
     closeDataFolderModal();
+    await initializeFolderStructure();
     await loadAllData();
     showNotification(`フォルダ「${folderName}」を使用します`, 'success');
 }
 
-// JSONファイルインポート
-function handleJsonImport(event) {
+// レガシーJSONファイルインポート
+function handleLegacyJsonImport(event) {
     const files = Array.from(event.target.files);
+    let importData = {};
     
     files.forEach(file => {
         const reader = new FileReader();
@@ -272,18 +319,17 @@ function handleJsonImport(event) {
                 const data = JSON.parse(e.target.result);
                 
                 if (file.name === 'contacts.json') {
-                    contacts = Array.isArray(data) ? data : [];
-                    console.log(`${contacts.length}件の連絡先をインポート`);
+                    importData.contacts = Array.isArray(data) ? data : [];
+                    console.log(`${importData.contacts.length}件の連絡先をインポート`);
                 } else if (file.name === 'meetings.json') {
-                    meetings = Array.isArray(data) ? data : [];
-                    console.log(`${meetings.length}件のミーティングをインポート`);
+                    importData.meetings = Array.isArray(data) ? data : [];
+                    console.log(`${importData.meetings.length}件のミーティングをインポート`);
                 } else if (file.name === 'options.json') {
-                    options = {...options, ...data};
+                    importData.options = {...options, ...data};
                     console.log('オプションをインポート');
                 }
                 
-                // すべてのファイルが読み込まれたかチェック
-                checkImportComplete(files.length);
+                checkLegacyImportComplete(files.length, importData);
                 
             } catch (error) {
                 console.error(`${file.name}のインポートエラー:`, error);
@@ -294,36 +340,54 @@ function handleJsonImport(event) {
     });
 }
 
-let importedFileCount = 0;
-function checkImportComplete(totalFiles) {
-    importedFileCount++;
-    if (importedFileCount >= totalFiles) {
+let legacyImportedFileCount = 0;
+async function checkLegacyImportComplete(totalFiles, importData) {
+    legacyImportedFileCount++;
+    if (legacyImportedFileCount >= totalFiles) {
         closeDataFolderModal();
         
-        // 新しいフォルダを作成してデータを保存
-        createNewDataFolder().then(() => {
-            if (typeof calculateReferrerRevenues === 'function') {
-                calculateReferrerRevenues();
-            }
-            if (typeof renderContacts === 'function') {
-                renderContacts();
-            }
-            if (typeof renderTodos === 'function') {
-                renderTodos();
-            }
-            if (typeof updateFilters === 'function') {
-                updateFilters();
-            }
-            if (typeof updateMultiSelectOptions === 'function') {
-                updateMultiSelectOptions();
-            }
-            if (typeof updateTodoTabBadge === 'function') {
-                updateTodoTabBadge();
-            }
-            showNotification('データのインポートが完了しました', 'success');
-        });
+        // 新しいフォルダを作成
+        await createNewDataFolder();
         
-        importedFileCount = 0;
+        // レガシーデータを分散形式で保存
+        if (importData.contacts) {
+            contacts = importData.contacts;
+            await convertAndSaveContacts();
+        }
+        if (importData.meetings) {
+            meetings = importData.meetings;
+            await convertAndSaveMeetings();
+        }
+        if (importData.options) {
+            options = importData.options;
+            await saveOptions();
+        }
+        
+        // インデックスを再構築
+        await rebuildIndexes();
+        
+        // UI更新
+        if (typeof calculateReferrerRevenues === 'function') {
+            calculateReferrerRevenues();
+        }
+        if (typeof renderContacts === 'function') {
+            renderContacts();
+        }
+        if (typeof renderTodos === 'function') {
+            renderTodos();
+        }
+        if (typeof updateFilters === 'function') {
+            updateFilters();
+        }
+        if (typeof updateMultiSelectOptions === 'function') {
+            updateMultiSelectOptions();
+        }
+        if (typeof updateTodoTabBadge === 'function') {
+            updateTodoTabBadge();
+        }
+        
+        showNotification('レガシーデータのインポートが完了しました', 'success');
+        legacyImportedFileCount = 0;
     }
 }
 
@@ -343,6 +407,11 @@ function handleSignoutClick() {
         gapi.client.setToken('');
         accessToken = null;
         currentFolderId = null;
+        
+        // インデックスをクリア
+        contactsIndex = {};
+        meetingsIndex = {};
+        searchIndex = {};
         
         document.getElementById('authorizeBtn').style.display = 'inline-block';
         document.getElementById('signoutBtn').style.display = 'none';
@@ -364,8 +433,10 @@ async function loadAllData() {
 
     showLoading(true);
     try {
-        await loadContacts();
-        await loadMeetings();
+        await loadMetadata();
+        await loadIndexes();
+        await loadContactsFromIndex();
+        await loadMeetingsFromIndex();
         await loadOptions();
         
         // 紹介売上を計算
@@ -373,7 +444,7 @@ async function loadAllData() {
             calculateReferrerRevenues();
         }
         
-        // UI更新 - 関数の存在チェックを追加
+        // UI更新
         if (typeof renderContacts === 'function') {
             renderContacts();
         }
@@ -399,12 +470,19 @@ async function loadAllData() {
     }
 }
 
-// 連絡先データ読み込み
-async function loadContacts() {
+// メタデータ読み込み
+async function loadMetadata() {
     try {
-        const fileId = await getFileId('contacts.json');
+        const fileId = await getFileIdInFolder('metadata.json', folderStructure.index);
         if (!fileId) {
-            contacts = [];
+            metadata = {
+                version: '2.0',
+                lastUpdated: new Date().toISOString(),
+                totalContacts: 0,
+                totalMeetings: 0,
+                nextContactId: 1,
+                nextMeetingId: 1
+            };
             return;
         }
 
@@ -413,77 +491,165 @@ async function loadContacts() {
             alt: 'media'
         });
 
-        contacts = JSON.parse(response.body);
-        
-        // データ変換
-        contacts = contacts.map(contact => {
-            if (contact.referrer && !contact.contactMethod) {
-                contact.contactMethod = 'referral';
-            } else if (!contact.contactMethod) {
-                contact.contactMethod = 'direct';
-                contact.directContact = '所属が同じ';
-            }
-            
-            if (typeof contact.type === 'string') {
-                contact.types = contact.type ? [contact.type] : [];
-                delete contact.type;
-            }
-            if (typeof contact.affiliation === 'string') {
-                contact.affiliations = contact.affiliation ? [contact.affiliation] : [];
-                delete contact.affiliation;
-            }
-            
-            if (!Array.isArray(contact.industryInterests)) {
-                contact.industryInterests = [];
-            }
-            if (!Array.isArray(contact.businesses)) {
-                contact.businesses = [];
-            }
-            
-            contact.types = contact.types || [];
-            contact.affiliations = contact.affiliations || [];
-            contact.priorInfo = contact.priorInfo || '';
-            
-            if (!contact.status) {
-                contact.status = '新規';
-            }
-            
-            return contact;
-        });
-        
-        console.log(`${contacts.length}件の連絡先を読み込みました`);
+        metadata = JSON.parse(response.body);
+        console.log('メタデータを読み込みました:', metadata);
     } catch (err) {
-        console.error('連絡先読み込みエラー:', err);
-        contacts = [];
+        console.error('メタデータ読み込みエラー:', err);
     }
 }
 
-// ミーティングデータ読み込み
-async function loadMeetings() {
+// インデックス読み込み
+async function loadIndexes() {
     try {
-        const fileId = await getFileId('meetings.json');
-        if (!fileId) {
-            meetings = [];
-            return;
+        // 連絡先インデックス
+        const contactsIndexId = await getFileIdInFolder('contacts-index.json', folderStructure.index);
+        if (contactsIndexId) {
+            const response = await gapi.client.drive.files.get({
+                fileId: contactsIndexId,
+                alt: 'media'
+            });
+            contactsIndex = JSON.parse(response.body);
         }
+
+        // ミーティングインデックス
+        const meetingsIndexId = await getFileIdInFolder('meetings-index.json', folderStructure.index);
+        if (meetingsIndexId) {
+            const response = await gapi.client.drive.files.get({
+                fileId: meetingsIndexId,
+                alt: 'media'
+            });
+            meetingsIndex = JSON.parse(response.body);
+        }
+
+        // 検索インデックス
+        const searchIndexId = await getFileIdInFolder('search-index.json', folderStructure.index);
+        if (searchIndexId) {
+            const response = await gapi.client.drive.files.get({
+                fileId: searchIndexId,
+                alt: 'media'
+            });
+            searchIndex = JSON.parse(response.body);
+        }
+
+        console.log('インデックスを読み込みました');
+    } catch (err) {
+        console.error('インデックス読み込みエラー:', err);
+        contactsIndex = {};
+        meetingsIndex = {};
+        searchIndex = {};
+    }
+}
+
+// 連絡先データをインデックスから読み込み
+async function loadContactsFromIndex() {
+    contacts = [];
+    
+    for (const contactId in contactsIndex) {
+        try {
+            const contact = await loadSingleContact(contactId);
+            if (contact) {
+                contacts.push(contact);
+            }
+        } catch (err) {
+            console.error(`連絡先${contactId}の読み込みエラー:`, err);
+        }
+    }
+    
+    console.log(`${contacts.length}件の連絡先を読み込みました`);
+}
+
+// 単一連絡先の読み込み
+async function loadSingleContact(contactId) {
+    const indexEntry = contactsIndex[contactId];
+    if (!indexEntry) return null;
+
+    try {
+        const fileId = await getFileIdInFolder(`contact-${String(contactId).padStart(6, '0')}.json`, folderStructure.contacts);
+        if (!fileId) return null;
 
         const response = await gapi.client.drive.files.get({
             fileId: fileId,
             alt: 'media'
         });
 
-        meetings = JSON.parse(response.body);
-        console.log(`${meetings.length}件のミーティングを読み込みました`);
+        const contact = JSON.parse(response.body);
+        
+        // データ変換（レガシー対応）
+        return normalizeContactData(contact);
     } catch (err) {
-        console.error('ミーティング読み込みエラー:', err);
-        meetings = [];
+        console.error(`連絡先ファイル読み込みエラー:`, err);
+        return null;
+    }
+}
+
+// 連絡先データの正規化
+function normalizeContactData(contact) {
+    if (contact.referrer && !contact.contactMethod) {
+        contact.contactMethod = 'referral';
+    } else if (!contact.contactMethod) {
+        contact.contactMethod = 'direct';
+        contact.directContact = '所属が同じ';
+    }
+    
+    if (typeof contact.type === 'string') {
+        contact.types = contact.type ? [contact.type] : [];
+        delete contact.type;
+    }
+    if (typeof contact.affiliation === 'string') {
+        contact.affiliations = contact.affiliation ? [contact.affiliation] : [];
+        delete contact.affiliation;
+    }
+    
+    contact.types = contact.types || [];
+    contact.affiliations = contact.affiliations || [];
+    contact.industryInterests = contact.industryInterests || [];
+    contact.businesses = contact.businesses || [];
+    contact.priorInfo = contact.priorInfo || '';
+    contact.status = contact.status || '新規';
+    
+    return contact;
+}
+
+// ミーティングデータをインデックスから読み込み
+async function loadMeetingsFromIndex() {
+    meetings = [];
+    
+    for (const contactId in meetingsIndex) {
+        try {
+            const contactMeetings = await loadContactMeetings(contactId);
+            if (contactMeetings && contactMeetings.length > 0) {
+                meetings.push(...contactMeetings);
+            }
+        } catch (err) {
+            console.error(`連絡先${contactId}のミーティング読み込みエラー:`, err);
+        }
+    }
+    
+    console.log(`${meetings.length}件のミーティングを読み込みました`);
+}
+
+// 特定連絡先のミーティング読み込み
+async function loadContactMeetings(contactId) {
+    try {
+        const fileId = await getFileIdInFolder(`contact-${String(contactId).padStart(6, '0')}-meetings.json`, folderStructure.meetings);
+        if (!fileId) return [];
+
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
+
+        return JSON.parse(response.body);
+    } catch (err) {
+        console.error(`ミーティングファイル読み込みエラー:`, err);
+        return [];
     }
 }
 
 // オプションデータ読み込み
 async function loadOptions() {
     try {
-        const fileId = await getFileId('options.json');
+        const fileId = await getFileIdInFolder('options.json', folderStructure.root);
         if (!fileId) {
             // デフォルト値を使用
             return;
@@ -508,7 +674,6 @@ async function loadOptions() {
         console.log('オプションデータを読み込みました');
     } catch (err) {
         console.error('オプション読み込みエラー:', err);
-        // デフォルト値を使用
     }
 }
 
@@ -521,9 +686,12 @@ async function saveAllData() {
 
     showLoading(true);
     try {
-        await saveContacts();
-        await saveMeetings();
+        await saveContactsDistributed();
+        await saveMeetingsDistributed();
         await saveOptions();
+        await rebuildIndexes();
+        await saveMetadata();
+        
         showNotification('データを保存しました', 'success');
     } catch (err) {
         console.error('保存エラー:', err);
@@ -533,37 +701,136 @@ async function saveAllData() {
     }
 }
 
-// 連絡先データ保存
-async function saveContacts() {
-    await saveJsonFile('contacts.json', contacts);
+// 連絡先を分散形式で保存
+async function saveContactsDistributed() {
+    for (const contact of contacts) {
+        await saveSingleContact(contact);
+    }
 }
 
-// ミーティングデータ保存
-async function saveMeetings() {
-    await saveJsonFile('meetings.json', meetings);
+// レガシーデータを分散形式に変換して保存
+async function convertAndSaveContacts() {
+    for (const contact of contacts) {
+        // IDが存在しない場合は新しいIDを生成
+        if (!contact.id) {
+            contact.id = String(metadata.nextContactId++).padStart(6, '0');
+        }
+        await saveSingleContact(contact);
+    }
+}
+
+// 単一連絡先の保存
+async function saveSingleContact(contact) {
+    const contactId = contact.id;
+    const fileName = `contact-${String(contactId).padStart(6, '0')}.json`;
+    
+    await saveJsonFileToFolder(fileName, contact, folderStructure.contacts);
+    
+    // インデックスを更新
+    contactsIndex[contactId] = {
+        id: contactId,
+        name: contact.name,
+        company: contact.company || '',
+        lastUpdated: new Date().toISOString(),
+        status: contact.status || '新規'
+    };
+}
+
+// ミーティングを分散形式で保存
+async function saveMeetingsDistributed() {
+    // 連絡先別にミーティングをグループ化
+    const meetingsByContact = {};
+    meetings.forEach(meeting => {
+        const contactId = meeting.contactId;
+        if (!meetingsByContact[contactId]) {
+            meetingsByContact[contactId] = [];
+        }
+        meetingsByContact[contactId].push(meeting);
+    });
+    
+    // 各連絡先のミーティングファイルを保存
+    for (const contactId in meetingsByContact) {
+        await saveContactMeetings(contactId, meetingsByContact[contactId]);
+    }
+}
+
+// レガシーミーティングデータを分散形式に変換して保存
+async function convertAndSaveMeetings() {
+    await saveMeetingsDistributed();
+}
+
+// 特定連絡先のミーティング保存
+async function saveContactMeetings(contactId, contactMeetings) {
+    const fileName = `contact-${String(contactId).padStart(6, '0')}-meetings.json`;
+    
+    await saveJsonFileToFolder(fileName, contactMeetings, folderStructure.meetings);
+    
+    // インデックスを更新
+    meetingsIndex[contactId] = {
+        contactId: contactId,
+        meetingCount: contactMeetings.length,
+        lastMeetingDate: contactMeetings.length > 0 ? 
+            Math.max(...contactMeetings.map(m => new Date(m.date || 0).getTime())) : null,
+        lastUpdated: new Date().toISOString()
+    };
 }
 
 // オプションデータ保存
 async function saveOptions() {
-    await saveJsonFile('options.json', options);
+    await saveJsonFileToFolder('options.json', options, folderStructure.root);
 }
 
-// JSONファイル保存のヘルパー関数
-async function saveJsonFile(filename, data) {
+// インデックスの再構築
+async function rebuildIndexes() {
+    // 検索インデックスの構築
+    searchIndex = {};
+    contacts.forEach(contact => {
+        const searchText = [
+            contact.name,
+            contact.furigana,
+            contact.company,
+            ...(contact.types || []),
+            ...(contact.affiliations || []),
+            ...(contact.businesses || []),
+            contact.business,
+            contact.history,
+            contact.priorInfo
+        ].filter(text => text).join(' ').toLowerCase();
+        
+        searchIndex[contact.id] = searchText;
+    });
+    
+    // メタデータの更新
+    metadata.totalContacts = contacts.length;
+    metadata.totalMeetings = meetings.length;
+    metadata.lastUpdated = new Date().toISOString();
+    
+    // インデックスファイルを保存
+    await saveJsonFileToFolder('contacts-index.json', contactsIndex, folderStructure.index);
+    await saveJsonFileToFolder('meetings-index.json', meetingsIndex, folderStructure.index);
+    await saveJsonFileToFolder('search-index.json', searchIndex, folderStructure.index);
+}
+
+// メタデータ保存
+async function saveMetadata() {
+    await saveJsonFileToFolder('metadata.json', metadata, folderStructure.index);
+}
+
+// フォルダ内のJSONファイル保存
+async function saveJsonFileToFolder(filename, data, folderId) {
     const boundary = '-------314159265358979323846';
     const delimiter = "\r\n--" + boundary + "\r\n";
     const close_delim = "\r\n--" + boundary + "--";
 
-    const fileId = await getFileId(filename);
+    const fileId = await getFileIdInFolder(filename, folderId);
     
     const metadata = {
         'name': filename,
         'mimeType': 'application/json'
     };
     
-    // 新規作成の場合のみparentsを指定
     if (!fileId) {
-        metadata.parents = [currentFolderId];
+        metadata.parents = [folderId];
     }
 
     const multipartRequestBody =
@@ -588,13 +855,13 @@ async function saveJsonFile(filename, data) {
     await request.execute();
 }
 
-// ファイルIDを取得
-async function getFileId(filename) {
-    if (!currentFolderId) return null;
+// 特定フォルダ内のファイルIDを取得
+async function getFileIdInFolder(filename, folderId) {
+    if (!folderId) return null;
 
     try {
         const response = await gapi.client.drive.files.list({
-            q: `name='${filename}' and '${currentFolderId}' in parents and trashed=false`,
+            q: `name='${filename}' and '${folderId}' in parents and trashed=false`,
             fields: 'files(id)',
             spaces: 'drive'
         });
@@ -609,20 +876,41 @@ async function getFileId(filename) {
     }
 }
 
-// 画像ファイルのアップロード
-async function uploadImageToGoogleDrive(fileName, base64Data, contactName) {
-    if (!currentFolderId || !gapi.client.getToken()) return base64Data;
+// フォルダを作成または取得
+async function getOrCreateFolder(folderName, parentId) {
+    const response = await gapi.client.drive.files.list({
+        q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+    });
+
+    if (response.result.files && response.result.files.length > 0) {
+        return response.result.files[0].id;
+    }
+
+    const createResponse = await gapi.client.drive.files.create({
+        resource: {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentId]
+        },
+        fields: 'id'
+    });
+
+    return createResponse.result.id;
+}
+
+// 添付ファイル管理
+async function saveAttachmentToFileSystem(fileName, dataUrl, contactName) {
+    if (!folderStructure.attachmentsContacts || !gapi.client.getToken()) return dataUrl;
 
     try {
-        // attachmentsフォルダを作成または取得
-        let attachmentsFolderId = await getOrCreateFolder('attachments', currentFolderId);
-        
         // 連絡先名のフォルダを作成または取得
         const safeName = contactName.replace(/[<>:"/\\|?*]/g, '_');
-        let contactFolderId = await getOrCreateFolder(safeName, attachmentsFolderId);
+        let contactFolderId = await getOrCreateFolder(safeName, folderStructure.attachmentsContacts);
 
         // Base64をBlobに変換
-        const byteCharacters = atob(base64Data.split(',')[1]);
+        const byteCharacters = atob(dataUrl.split(',')[1]);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
             byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -652,65 +940,29 @@ async function uploadImageToGoogleDrive(fileName, base64Data, contactName) {
         const file = await response.json();
         return `drive:${file.id}`;
     } catch (error) {
-        console.error('画像アップロードエラー:', error);
-        return base64Data;
+        console.error('添付ファイル保存エラー:', error);
+        return dataUrl;
     }
 }
 
-// フォルダを作成または取得
-async function getOrCreateFolder(folderName, parentId) {
-    const response = await gapi.client.drive.files.list({
-        q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-        fields: 'files(id)',
-        spaces: 'drive'
-    });
-
-    if (response.result.files && response.result.files.length > 0) {
-        return response.result.files[0].id;
-    }
-
-    const createResponse = await gapi.client.drive.files.create({
-        resource: {
-            name: folderName,
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [parentId]
-        },
-        fields: 'id'
-    });
-
-    return createResponse.result.id;
-}
-
-// Googleドライブから画像を読み込み
-async function loadImageFromGoogleDrive(driveId) {
-    if (!driveId || !driveId.startsWith('drive:')) return driveId;
+async function loadAttachmentFromFileSystem(filePath) {
+    if (!filePath || !filePath.startsWith('drive:')) return filePath;
 
     try {
-        const fileId = driveId.replace('drive:', '');
+        const fileId = filePath.replace('drive:', '');
         const response = await gapi.client.drive.files.get({
             fileId: fileId,
             alt: 'media'
         });
 
-        // バイナリデータをBase64に変換
         return 'data:image/jpeg;base64,' + btoa(response.body);
     } catch (error) {
-        console.error('画像読み込みエラー:', error);
+        console.error('添付ファイル読み込みエラー:', error);
         return '';
     }
 }
 
-// 添付ファイル管理
-async function saveAttachmentToFileSystem(fileName, dataUrl, contactName) {
-    return await uploadImageToGoogleDrive(fileName, dataUrl, contactName);
-}
-
-async function loadAttachmentFromFileSystem(filePath) {
-    return await loadImageFromGoogleDrive(filePath);
-}
-
 // 旧データのチェック（オプション）
 function checkForOldData() {
-    // 必要に応じて旧データの存在チェック
-    console.log('データチェック完了');
+    console.log('分散ファイル構造でのデータチェック完了');
 }
