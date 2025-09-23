@@ -1,4 +1,4 @@
-// ui.js - UI操作・表示機能（改修版）
+// ui.js - UI操作・表示機能（完全版）
 
 // タブ切替
 function switchTab(tab) {
@@ -7,11 +7,15 @@ function switchTab(tab) {
         btn.classList.toggle('active', btn.dataset.tab === tab);
     });
     
-    document.getElementById('contactsTabHeader').style.display = tab === 'contacts' ? 'block' : 'none';
-    document.getElementById('contactsTab').style.display = tab === 'contacts' ? 'block' : 'none';
-    document.getElementById('todosTab').style.display = tab === 'todos' ? 'block' : 'none';
+    const contactsTabHeader = document.getElementById('contactsTabHeader');
+    const contactsTab = document.getElementById('contactsTab');
+    const todosTab = document.getElementById('todosTab');
     
-    if (tab === 'todos') {
+    if (contactsTabHeader) contactsTabHeader.style.display = tab === 'contacts' ? 'block' : 'none';
+    if (contactsTab) contactsTab.style.display = tab === 'contacts' ? 'block' : 'none';
+    if (todosTab) todosTab.style.display = tab === 'todos' ? 'block' : 'none';
+    
+    if (tab === 'todos' && typeof renderTodos === 'function') {
         renderTodos();
     }
 }
@@ -22,19 +26,25 @@ function switchView(view) {
     document.querySelectorAll('.view-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === view);
     });
-    renderContacts();
+    if (typeof renderContacts === 'function') {
+        renderContacts();
+    }
 }
 
 // モーダル閉じる
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 // 連絡先表示
 function renderContacts() {
     const container = document.getElementById('contactsList');
+    if (!container) return;
+    
     let filteredContacts = getFilteredContacts();
-
     filteredContacts = sortContacts(filteredContacts);
 
     container.innerHTML = '';
@@ -66,8 +76,11 @@ function renderContacts() {
 
 // フィルタリング
 function getFilteredContacts() {
-    const searchQuery = document.getElementById('searchInput').value.toLowerCase();
-    const typeFilter = document.getElementById('typeFilter').value;
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    const typeFilterValue = typeFilter ? typeFilter.value : '';
 
     return contacts.filter(contact => {
         const matchesSearch = !searchQuery || 
@@ -78,7 +91,7 @@ function getFilteredContacts() {
             (contact.history && contact.history.toLowerCase().includes(searchQuery)) ||
             (contact.priorInfo && contact.priorInfo.toLowerCase().includes(searchQuery));
 
-        const matchesType = !typeFilter || (Array.isArray(contact.types) && contact.types.includes(typeFilter));
+        const matchesType = !typeFilterValue || (Array.isArray(contact.types) && contact.types.includes(typeFilterValue));
         
         const matchesAffiliation = !filterValues.affiliation || 
             (Array.isArray(contact.affiliations) && contact.affiliations.some(a => a.toLowerCase().includes(filterValues.affiliation.toLowerCase())));
@@ -106,10 +119,12 @@ function filterContacts() {
 // 検索とフィルターをクリアする新機能
 function clearSearchAndFilters() {
     // 検索入力をクリア
-    document.getElementById('searchInput').value = '';
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
     
     // 種別フィルターをクリア
-    document.getElementById('typeFilter').value = '';
+    const typeFilter = document.getElementById('typeFilter');
+    if (typeFilter) typeFilter.value = '';
     
     // 各フィルター値をクリア
     filterValues.affiliation = '';
@@ -135,7 +150,9 @@ function clearSearchAndFilters() {
     renderContacts();
     
     // 通知表示
-    showNotification('検索とフィルターをクリアしました', 'success');
+    if (typeof showNotification === 'function') {
+        showNotification('検索とフィルターをクリアしました', 'success');
+    }
 }
 
 // ソート
@@ -143,15 +160,15 @@ function sortContacts(contactList) {
     return contactList.sort((a, b) => {
         switch (currentSort) {
             case 'meeting-desc':
-                const dateA = getLatestMeetingDate(a.id);
-                const dateB = getLatestMeetingDate(b.id);
+                const dateA = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(a.id) : null;
+                const dateB = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(b.id) : null;
                 if (!dateA && !dateB) return 0;
                 if (!dateA) return 1;
                 if (!dateB) return -1;
                 return dateB - dateA;
             case 'meeting-asc':
-                const dateAsc = getLatestMeetingDate(a.id);
-                const dateBsc = getLatestMeetingDate(b.id);
+                const dateAsc = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(a.id) : null;
+                const dateBsc = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(b.id) : null;
                 if (!dateAsc && !dateBsc) return 0;
                 if (!dateAsc) return 1;
                 if (!dateBsc) return -1;
@@ -189,11 +206,15 @@ function getTypeColorClass(contact) {
 function createContactCard(contact) {
     const card = document.createElement('div');
     card.className = 'contact-card' + getTypeColorClass(contact);
-    card.onclick = () => showContactDetail(contact.id);
+    card.onclick = () => {
+        if (typeof showContactDetail === 'function') {
+            showContactDetail(contact.id);
+        }
+    };
 
     const contactMeetings = meetings.filter(m => m.contactId === contact.id);
     const todoCount = contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => !t.completed).length || 0), 0);
-    const latestMeetingDate = getLatestMeetingDate(contact.id);
+    const latestMeetingDate = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(contact.id) : null;
 
     const businessesDisplay = contact.businesses && contact.businesses.length > 0 ? 
         contact.businesses.slice(0, 2).join(', ') + (contact.businesses.length > 2 ? '...' : '') : '';
@@ -222,7 +243,11 @@ function createContactCard(contact) {
 function createContactListItem(contact) {
     const item = document.createElement('div');
     item.className = 'list-item' + getTypeColorClass(contact);
-    item.onclick = () => showContactDetail(contact.id);
+    item.onclick = () => {
+        if (typeof showContactDetail === 'function') {
+            showContactDetail(contact.id);
+        }
+    };
 
     const contactMeetings = meetings.filter(m => m.contactId === contact.id);
     const todoCount = contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => !t.completed).length || 0), 0);
@@ -264,7 +289,11 @@ function createTreeNode(contact, allContacts, level = 0) {
 
     const item = document.createElement('div');
     item.className = 'tree-item' + getTypeColorClass(contact);
-    item.onclick = () => showContactDetail(contact.id);
+    item.onclick = () => {
+        if (typeof showContactDetail === 'function') {
+            showContactDetail(contact.id);
+        }
+    };
 
     const referrals = allContacts.filter(c => c.referrer === contact.name && c.contactMethod === 'referral');
     const hasChildren = referrals.length > 0;
@@ -299,23 +328,38 @@ function createTreeNode(contact, allContacts, level = 0) {
 // 紹介者フィルター
 function filterByReferrer(referrerName) {
     referrerFilter = referrerName;
-    document.getElementById('referrerFilterText').textContent = `「${referrerName}」が紹介した人のみ表示中`;
-    document.getElementById('referrerFilterMessage').style.display = 'block';
+    const referrerFilterText = document.getElementById('referrerFilterText');
+    const referrerFilterMessage = document.getElementById('referrerFilterMessage');
+    
+    if (referrerFilterText) {
+        referrerFilterText.textContent = `「${referrerName}」が紹介した人のみ表示中`;
+    }
+    if (referrerFilterMessage) {
+        referrerFilterMessage.style.display = 'block';
+    }
     renderContacts();
 }
 
 function clearReferrerFilter() {
     referrerFilter = null;
-    document.getElementById('referrerFilterMessage').style.display = 'none';
+    const referrerFilterMessage = document.getElementById('referrerFilterMessage');
+    if (referrerFilterMessage) {
+        referrerFilterMessage.style.display = 'none';
+    }
     renderContacts();
 }
 
 // フィルター更新
 function updateFilters() {
     const typeSelect = document.getElementById('typeFilter');
+    if (!typeSelect) return;
+    
     const currentTypeValue = typeSelect.value;
     typeSelect.innerHTML = '<option value="">種別: すべて</option>';
-    options.types.forEach(type => {
+    
+    // ソート済みのオプションを追加
+    const sortedTypes = [...options.types].sort();
+    sortedTypes.forEach(type => {
         const option = document.createElement('option');
         option.value = type;
         option.textContent = type;
@@ -324,268 +368,39 @@ function updateFilters() {
     typeSelect.value = currentTypeValue;
 }
 
-// 連絡先詳細表示
-function showContactDetail(contactId) {
-    const contact = contacts.find(c => c.id === contactId);
-    if (!contact) return;
-
-    currentContactId = contactId;
-    const modal = document.getElementById('contactDetailModal');
-    const title = document.getElementById('detailModalTitle');
-    const content = document.getElementById('contactDetailContent');
-
-    title.textContent = contact.name;
-
-    const contactMeetings = meetings.filter(m => m.contactId === contactId)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    let headerHtml = `
-        <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
-            ${contact.photo ? `<img src="${contact.photo}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${contact.photo}', '顔写真')" title="クリックで拡大">` : ''}
-            <div style="flex: 1;">
-                <h3>${escapeHtml(contact.name)}${contact.furigana ? ` (${escapeHtml(contact.furigana)})` : ''}</h3>
-                ${contact.company ? `<p><strong>会社:</strong> ${escapeHtml(contact.company)}</p>` : ''}
-                ${contact.types && Array.isArray(contact.types) && contact.types.length > 0 ? `<p><strong>種別:</strong> ${contact.types.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
-                ${contact.affiliations && Array.isArray(contact.affiliations) && contact.affiliations.length > 0 ? `<p><strong>所属:</strong> ${contact.affiliations.map(a => escapeHtml(a)).join(', ')}</p>` : ''}
-                ${contact.industryInterests && Array.isArray(contact.industryInterests) && contact.industryInterests.length > 0 ? `<p><strong>会いたい業種等:</strong> ${contact.industryInterests.map(i => escapeHtml(i)).join(', ')}</p>` : ''}
-                ${contact.revenue ? `<p><strong>売上:</strong> ¥${contact.revenue.toLocaleString()}</p>` : ''}
-                ${contact.referrerRevenue ? `<p><strong>紹介売上:</strong> ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
-            </div>
-            ${contact.businessCard && contact.businessCard !== 'data:' ? `<img src="${contact.businessCard}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${contact.businessCard}', '名刺画像')" title="クリックで拡大">` : ''}
-        </div>
-    `;
-
-    let contactInfoHtml = '<div class="contact-detail-grid">';
-    
-    contactInfoHtml += '<div>';
-    if (contact.emails && contact.emails.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>メールアドレス</h4>
-                ${contact.emails.map(email => `<p>📧 <a href="mailto:${email}">${escapeHtml(email)}</a></p>`).join('')}
-            </div>
-        `;
-    }
-    if (contact.phones && contact.phones.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>電話番号</h4>
-                ${contact.phones.map(phone => `<p>📞 <a href="tel:${phone}">${escapeHtml(phone)}</a></p>`).join('')}
-            </div>
-        `;
-    }
-    if (contact.businesses && contact.businesses.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>事業内容</h4>
-                ${contact.businesses.map(business => `<p>📋 ${escapeHtml(business)}</p>`).join('')}
-            </div>
-        `;
-    }
-    contactInfoHtml += '</div>';
-    
-    contactInfoHtml += '<div>';
-    if (contact.website) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>ホームページ</h4>
-                <p>🌐 <a href="${contact.website}" target="_blank">${escapeHtml(contact.website)}</a></p>
-            </div>
-        `;
-    }
-    
-    if (contact.contactMethod === 'referral' && contact.referrer) {
-        const referrerContact = contacts.find(c => c.name === contact.referrer);
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(紹介)</h4>
-                <p>👤 ${referrerContact ? `<span class="clickable-link" onclick="closeModal('contactDetailModal'); showContactDetail('${referrerContact.id}')">${escapeHtml(contact.referrer)}</span>` : escapeHtml(contact.referrer)}</p>
-            </div>
-        `;
-    } else if (contact.contactMethod === 'direct' || contact.directContact) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(直接)</h4>
-                <p>🤝 ${escapeHtml(contact.directContact || '所属が同じ')}</p>
-            </div>
-        `;
-    } else if (contact.referrer) {
-        const referrerContact = contacts.find(c => c.name === contact.referrer);
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(紹介)</h4>
-                <p>👤 ${referrerContact ? `<span class="clickable-link" onclick="closeModal('contactDetailModal'); showContactDetail('${referrerContact.id}')">${escapeHtml(contact.referrer)}</span>` : escapeHtml(contact.referrer)}</p>
-            </div>
-        `;
-    }
-    
-    if (contact.residence) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>居住地</h4>
-                <p>🏠 ${escapeHtml(contact.residence)}</p>
-            </div>
-        `;
-    }
-    
-    contactInfoHtml += '</div>';
-    contactInfoHtml += '</div>';
-
-    let detailsHtml = '';
-    if (contact.business) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>事業内容詳細</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="businessContent">
-                        ${renderMarkdown(contact.business)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.strengths) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>強み</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="strengthsContent">
-                        ${renderMarkdown(contact.strengths)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.approach) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>切り出し方</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="approachContent">
-                        ${renderMarkdown(contact.approach)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.history) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>過去の経歴</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="historyContent">
-                        ${renderMarkdown(contact.history)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.priorInfo) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>事前情報</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="priorInfoContent">
-                        ${renderMarkdown(contact.priorInfo)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.attachments && contact.attachments.length > 0) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>添付ファイル</h4>
-                <div class="file-list">
-                    ${contact.attachments.map(file => `
-                        <div class="file-item">
-                            📎 <a href="javascript:void(0)" onclick="openFile('${file.data}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    let meetingsHtml = `
-        <div class="meeting-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3>ミーティング履歴</h3>
-                <button class="btn btn-primary" onclick="openMeetingModal('${contactId}')">➕ ミーティング追加</button>
-            </div>
-            <div class="meeting-list">
-                ${contactMeetings.length > 0 ? contactMeetings.map(meeting => `
-                    <div class="meeting-item">
-                        <div class="meeting-header">
-                            <div class="meeting-date">${formatDate(meeting.date)}</div>
-                            <div class="meeting-actions">
-                                <button class="btn btn-sm" onclick="editMeeting('${meeting.id}')">編集</button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteMeeting('${meeting.id}')">削除</button>
-                            </div>
-                        </div>
-                        <div class="meeting-content">${renderMarkdown(meeting.content || '')}</div>
-                        ${meeting.todos && meeting.todos.length > 0 ? `
-                            <div class="todo-section">
-                                <div class="todo-section-header">
-                                    📋 ToDo
-                                    <span class="todo-badge">${meeting.todos.filter(t => !t.completed).length}/${meeting.todos.length}</span>
-                                </div>
-                                <div class="todo-list">
-                                    ${meeting.todos.map((todo, todoIndex) => `
-                                        <div class="todo-item">
-                                            <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} 
-                                                   onchange="toggleTodoComplete('${meeting.id}', ${todoIndex})">
-                                            <span class="todo-text ${todo.completed ? 'completed' : ''}">${escapeHtml(todo.text)}</span>
-                                            ${todo.dueDate ? `<span class="todo-date">期限: ${formatDate(todo.dueDate)}</span>` : ''}
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        ${meeting.attachments && meeting.attachments.length > 0 ? `
-                            <div class="file-list">
-                                ${meeting.attachments.map(file => `
-                                    <div class="file-item">
-                                        📎 <a href="javascript:void(0)" onclick="openFile('${file.data}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                    </div>
-                `).join('') : '<p>ミーティング履歴がありません</p>'}
-            </div>
-        </div>
-    `;
-
-    content.innerHTML = headerHtml + contactInfoHtml + detailsHtml + meetingsHtml;
-
-    setTimeout(() => {
-        initializeCollapsibles();
-    }, 100);
-
-    modal.classList.add('active');
-    modal.querySelector('.modal-content').scrollTop = 0;
-}
-
 // 画像拡大表示
 function showImageModal(imageSrc, title) {
     const modal = document.getElementById('imageModal');
     const modalImage = document.getElementById('modalImage');
-    modalImage.src = imageSrc;
-    modalImage.alt = title;
-    modal.classList.add('active');
+    if (modal && modalImage) {
+        modalImage.src = imageSrc;
+        modalImage.alt = title;
+        modal.classList.add('active');
+    }
 }
 
 // 画像削除
 function deleteImage(type) {
     if (type === 'photo') {
-        document.getElementById('photoPreview').src = '';
-        document.getElementById('photoPreview').removeAttribute('src');
-        document.getElementById('photoPreviewContainer').style.display = 'none';
+        const preview = document.getElementById('photoPreview');
+        const container = document.getElementById('photoPreviewContainer');
+        if (preview) {
+            preview.src = '';
+            preview.removeAttribute('src');
+        }
+        if (container) {
+            container.style.display = 'none';
+        }
     } else if (type === 'businessCard') {
-        document.getElementById('businessCardPreview').src = '';
-        document.getElementById('businessCardPreview').removeAttribute('src');
-        document.getElementById('businessCardPreviewContainer').style.display = 'none';
+        const preview = document.getElementById('businessCardPreview');
+        const container = document.getElementById('businessCardPreviewContainer');
+        if (preview) {
+            preview.src = '';
+            preview.removeAttribute('src');
+        }
+        if (container) {
+            container.style.display = 'none';
+        }
     }
 }
 
@@ -593,7 +408,7 @@ function deleteImage(type) {
 async function openFile(dataUrlOrPath, fileName, fileType) {
     let dataUrl = dataUrlOrPath;
     
-    if (!dataUrl.startsWith('data:')) {
+    if (!dataUrl.startsWith('data:') && typeof loadAttachmentFromFileSystem === 'function') {
         dataUrl = await loadAttachmentFromFileSystem(dataUrl);
     }
     
@@ -680,6 +495,8 @@ function toggleCollapsible(content, button) {
 // 添付ファイル取得
 function getAttachments(listId) {
     const fileList = document.getElementById(listId);
+    if (!fileList) return [];
+    
     const fileItems = fileList.querySelectorAll('.file-item');
     return Array.from(fileItems).map(item => ({
         name: item.dataset.fileName,
@@ -692,6 +509,8 @@ function getAttachments(listId) {
 // 添付ファイル表示
 function displayAttachments(attachments, listId) {
     const fileList = document.getElementById(listId);
+    if (!fileList) return;
+    
     fileList.innerHTML = '';
     attachments.forEach(file => {
         const fileItem = document.createElement('div');
@@ -842,9 +661,13 @@ async function handleDrop(e) {
         const contact = contacts.find(c => c.id === contactId);
         if (contact) {
             contact.status = newStatus;
-            await saveAllData();
+            if (typeof saveAllData === 'function') {
+                await saveAllData();
+            }
             renderContacts();
-            showNotification(`ステータスを「${newStatus}」に変更しました`, 'success');
+            if (typeof showNotification === 'function') {
+                showNotification(`ステータスを「${newStatus}」に変更しました`, 'success');
+            }
         }
     }
 
@@ -901,7 +724,9 @@ function initializeStatusDragAndDrop() {
         item.addEventListener('dragend', handleStatusDragEnd);
     });
     
-    statusList.addEventListener('dragover', handleStatusDragOver);
+    if (statusList) {
+        statusList.addEventListener('dragover', handleStatusDragOver);
+    }
 }
 
 function handleStatusDragStart(e) {
@@ -970,6 +795,8 @@ function closeStatusManagementModal() {
 
 function addNewStatus() {
     const statusList = document.getElementById('statusList');
+    if (!statusList) return;
+    
     const newIndex = statusList.children.length;
     const newItem = document.createElement('div');
     newItem.className = 'status-item';
@@ -992,6 +819,8 @@ function addNewStatus() {
 
 function deleteStatus(index) {
     const statusList = document.getElementById('statusList');
+    if (!statusList) return;
+    
     const items = Array.from(statusList.children);
     if (items.length > 1) {
         items[index].remove();
@@ -1000,17 +829,23 @@ function deleteStatus(index) {
             item.dataset.index = idx;
         });
     } else {
-        showNotification('最低1つのステータスが必要です', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('最低1つのステータスが必要です', 'error');
+        }
     }
 }
 
 async function saveStatuses() {
     const statusList = document.getElementById('statusList');
+    if (!statusList) return;
+    
     const statusInputs = Array.from(statusList.querySelectorAll('input'));
     const newStatuses = statusInputs.map(input => input.value.trim()).filter(status => status !== '');
 
     if (newStatuses.length === 0) {
-        showNotification('最低1つのステータスが必要です', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('最低1つのステータスが必要です', 'error');
+        }
         return;
     }
 
@@ -1040,8 +875,12 @@ async function saveStatuses() {
     }
 
     options.statuses = newStatuses;
-    await saveAllData();
+    if (typeof saveAllData === 'function') {
+        await saveAllData();
+    }
     closeStatusManagementModal();
     renderContacts();
-    showNotification('ステータスを保存しました', 'success');
+    if (typeof showNotification === 'function') {
+        showNotification('ステータスを保存しました', 'success');
+    }
 }

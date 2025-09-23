@@ -171,12 +171,27 @@ async function loadAllData() {
         await loadMeetings();
         await loadOptions();
         
-        calculateReferrerRevenues();
-        renderContacts();
-        renderTodos();
-        updateFilters();
-        updateMultiSelectOptions();
-        updateTodoTabBadge();
+        // 紹介売上を計算
+        if (typeof calculateReferrerRevenues === 'function') {
+            calculateReferrerRevenues();
+        }
+        
+        // UI更新 - 関数の存在チェックを追加
+        if (typeof renderContacts === 'function') {
+            renderContacts();
+        }
+        if (typeof renderTodos === 'function') {
+            renderTodos();
+        }
+        if (typeof updateFilters === 'function') {
+            updateFilters();
+        }
+        if (typeof updateMultiSelectOptions === 'function') {
+            updateMultiSelectOptions();
+        }
+        if (typeof updateTodoTabBadge === 'function') {
+            updateTodoTabBadge();
+        }
         
         // 旧データのチェック（必要に応じて）
         if (typeof checkForOldData === 'function') {

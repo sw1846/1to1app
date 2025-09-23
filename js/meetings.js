@@ -1,28 +1,53 @@
-// meetings.js - ミーティング・ToDo管理機能
+// meetings.js - ミーティング・ToDo管理機能（完全版）
 
 // ミーティングモーダルを開く
 function openMeetingModal(contactId, meetingId = null) {
     currentContactId = contactId;
     currentMeetingId = meetingId;
     
-    closeModal('contactDetailModal');
+    if (typeof closeModal === 'function') {
+        closeModal('contactDetailModal');
+    }
     
     const modal = document.getElementById('meetingModal');
     const title = document.getElementById('meetingModalTitle');
+    
+    if (!modal || !title) {
+        console.error('Meeting modal elements not found');
+        return;
+    }
     
     if (meetingId) {
         title.textContent = 'ミーティング編集';
         loadMeetingData(meetingId);
     } else {
         title.textContent = 'ミーティング追加';
-        document.getElementById('newMeetingDateInput').value = new Date().toISOString().slice(0, 16);
-        document.getElementById('newMeetingContentInput').value = '';
-        document.getElementById('newTodoList').innerHTML = '<button type="button" class="btn btn-primary" onclick="addNewTodoItem()">➕ ToDo追加</button>';
-        document.getElementById('meetingAttachmentList').innerHTML = '';
+        resetMeetingForm();
     }
     
     modal.classList.add('active');
     modal.querySelector('.modal-content').scrollTop = 0;
+}
+
+// ミーティングフォームリセット
+function resetMeetingForm() {
+    const dateInput = document.getElementById('newMeetingDateInput');
+    const contentInput = document.getElementById('newMeetingContentInput');
+    const todoList = document.getElementById('newTodoList');
+    const attachmentList = document.getElementById('meetingAttachmentList');
+    
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().slice(0, 16);
+    }
+    if (contentInput) {
+        contentInput.value = '';
+    }
+    if (todoList) {
+        todoList.innerHTML = '<button type="button" class="btn btn-primary" onclick="addNewTodoItem()">➕ ToDo追加</button>';
+    }
+    if (attachmentList) {
+        attachmentList.innerHTML = '';
+    }
 }
 
 // ミーティングデータ読み込み
@@ -30,93 +55,140 @@ function loadMeetingData(meetingId) {
     const meeting = meetings.find(m => m.id === meetingId);
     if (!meeting) return;
 
-    document.getElementById('newMeetingDateInput').value = meeting.date || '';
-    document.getElementById('newMeetingContentInput').value = meeting.content || '';
-    
+    const dateInput = document.getElementById('newMeetingDateInput');
+    const contentInput = document.getElementById('newMeetingContentInput');
     const todoList = document.getElementById('newTodoList');
-    todoList.innerHTML = '';
     
-    if (meeting.todos && meeting.todos.length > 0) {
-        meeting.todos.forEach(todo => {
-            const todoItem = document.createElement('div');
-            todoItem.className = 'todo-item';
-            todoItem.innerHTML = `
-                <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
-                <input type="text" class="form-input todo-text" placeholder="ToDo内容" value="${escapeHtml(todo.text)}">
-                <input type="date" class="form-input" style="width: auto;" value="${todo.dueDate || ''}">
-                <button class="btn btn-danger" onclick="this.parentElement.remove()">✕</button>
-            `;
-            todoList.appendChild(todoItem);
-        });
+    if (dateInput) {
+        dateInput.value = meeting.date || '';
+    }
+    if (contentInput) {
+        contentInput.value = meeting.content || '';
     }
     
-    const addButton = document.createElement('button');
-    addButton.type = 'button';
-    addButton.className = 'btn btn-primary';
-    addButton.onclick = addNewTodoItem;
-    addButton.innerHTML = '➕ ToDo追加';
-    todoList.appendChild(addButton);
+    // ToDoリスト読み込み
+    if (todoList) {
+        todoList.innerHTML = '';
+        
+        if (meeting.todos && meeting.todos.length > 0) {
+            meeting.todos.forEach(todo => {
+                const todoItem = document.createElement('div');
+                todoItem.className = 'todo-item';
+                todoItem.innerHTML = `
+                    <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
+                    <input type="text" class="form-input todo-text" placeholder="ToDo内容" value="${escapeHtml(todo.text)}">
+                    <input type="date" class="form-input" style="width: auto;" value="${todo.dueDate || ''}">
+                    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
+                `;
+                todoList.appendChild(todoItem);
+            });
+        }
+        
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.className = 'btn btn-primary';
+        addButton.onclick = addNewTodoItem;
+        addButton.innerHTML = '➕ ToDo追加';
+        todoList.appendChild(addButton);
+    }
     
-    if (meeting.attachments) {
+    // 添付ファイル読み込み
+    if (meeting.attachments && typeof displayAttachments === 'function') {
         displayAttachments(meeting.attachments, 'meetingAttachmentList');
     }
 }
 
 // ミーティング保存
 async function saveMeeting() {
-    showLoading(true);
+    if (typeof showLoading === 'function') {
+        showLoading(true);
+    }
+    
     try {
         const contact = contacts.find(c => c.id === currentContactId);
         const contactName = contact ? contact.name : '未設定';
         
-        const attachments = getAttachments('meetingAttachmentList');
+        // 添付ファイルの処理
+        const attachments = typeof getAttachments === 'function' ? getAttachments('meetingAttachmentList') : [];
         for (let i = 0; i < attachments.length; i++) {
             if (attachments[i].data && !attachments[i].path.includes('attachments/')) {
-                const filePath = await saveAttachmentToFileSystem(
-                    attachments[i].name,
-                    attachments[i].data,
-                    contactName
-                );
-                attachments[i].path = filePath;
+                if (typeof saveAttachmentToFileSystem === 'function') {
+                    const filePath = await saveAttachmentToFileSystem(
+                        attachments[i].name,
+                        attachments[i].data,
+                        contactName
+                    );
+                    attachments[i].path = filePath;
+                }
             }
         }
         
+        const dateInput = document.getElementById('newMeetingDateInput');
+        const contentInput = document.getElementById('newMeetingContentInput');
+        
         const meetingData = {
             contactId: currentContactId,
-            date: document.getElementById('newMeetingDateInput').value,
-            content: document.getElementById('newMeetingContentInput').value,
-            todos: getTodos('newTodoList'),
+            date: dateInput ? dateInput.value : '',
+            content: contentInput ? contentInput.value : '',
+            todos: typeof getTodos === 'function' ? getTodos('newTodoList') : [],
             attachments: attachments
         };
 
         if (currentMeetingId) {
+            // 編集の場合
             const index = meetings.findIndex(m => m.id === currentMeetingId);
-            meetings[index] = {
-                ...meetings[index],
-                ...meetingData,
-                updatedAt: new Date().toISOString()
-            };
+            if (index !== -1) {
+                meetings[index] = {
+                    ...meetings[index],
+                    ...meetingData,
+                    updatedAt: new Date().toISOString()
+                };
+            }
         } else {
+            // 新規追加の場合
             const meeting = {
-                id: generateId(),
+                id: typeof generateId === 'function' ? generateId() : Date.now().toString(),
                 ...meetingData,
                 createdAt: new Date().toISOString()
             };
             meetings.push(meeting);
         }
 
-        await saveAllData();
-        closeModal('meetingModal');
-        showContactDetail(currentContactId);
-        renderContacts();
-        renderTodos();
-        updateTodoTabBadge();
-        showNotification(currentMeetingId ? 'ミーティングを更新しました' : 'ミーティングを保存しました', 'success');
+        if (typeof saveAllData === 'function') {
+            await saveAllData();
+        }
+        
+        if (typeof closeModal === 'function') {
+            closeModal('meetingModal');
+        }
+        
+        if (typeof showContactDetail === 'function') {
+            showContactDetail(currentContactId);
+        }
+        
+        // UI更新
+        if (typeof renderContacts === 'function') {
+            renderContacts();
+        }
+        if (typeof renderTodos === 'function') {
+            renderTodos();
+        }
+        if (typeof updateTodoTabBadge === 'function') {
+            updateTodoTabBadge();
+        }
+        
+        if (typeof showNotification === 'function') {
+            showNotification(currentMeetingId ? 'ミーティングを更新しました' : 'ミーティングを保存しました', 'success');
+        }
     } catch (err) {
         console.error('保存エラー:', err);
-        showNotification('保存に失敗しました', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('保存に失敗しました', 'error');
+        }
     } finally {
-        showLoading(false);
+        if (typeof showLoading === 'function') {
+            showLoading(false);
+        }
     }
 }
 
@@ -136,17 +208,35 @@ async function deleteMeeting(meetingId) {
 
     meetings = meetings.filter(m => m.id !== meetingId);
     
-    await saveAllData();
-    showContactDetail(currentContactId);
-    renderContacts();
-    renderTodos();
-    updateTodoTabBadge();
-    showNotification('ミーティングを削除しました', 'success');
+    if (typeof saveAllData === 'function') {
+        await saveAllData();
+    }
+    
+    if (typeof showContactDetail === 'function') {
+        showContactDetail(currentContactId);
+    }
+    
+    // UI更新
+    if (typeof renderContacts === 'function') {
+        renderContacts();
+    }
+    if (typeof renderTodos === 'function') {
+        renderTodos();
+    }
+    if (typeof updateTodoTabBadge === 'function') {
+        updateTodoTabBadge();
+    }
+    
+    if (typeof showNotification === 'function') {
+        showNotification('ミーティングを削除しました', 'success');
+    }
 }
 
 // ToDo一覧表示
 function renderTodos() {
     const container = document.getElementById('todoSummaryList');
+    if (!container) return;
+    
     const todos = [];
     
     meetings.forEach(meeting => {
@@ -167,13 +257,17 @@ function renderTodos() {
         }
     });
 
+    // 期限順でソート
     todos.sort((a, b) => {
         if (!a.dueDate) return 1;
         if (!b.dueDate) return -1;
         return new Date(a.dueDate) - new Date(b.dueDate);
     });
 
-    document.getElementById('todoCount').textContent = `${todos.length}件`;
+    const todoCountElement = document.getElementById('todoCount');
+    if (todoCountElement) {
+        todoCountElement.textContent = `${todos.length}件`;
+    }
 
     container.innerHTML = todos.map(todo => `
         <div class="todo-summary-item">
@@ -184,7 +278,7 @@ function renderTodos() {
                 <span class="${todo.completed ? 'completed' : ''}">${escapeHtml(todo.text)}</span>
             </div>
             <div>
-                ${todo.dueDate ? `<span class="todo-date">期限: ${formatDate(todo.dueDate)}</span>` : ''}
+                ${todo.dueDate ? `<span class="todo-date">期限: ${typeof formatDate === 'function' ? formatDate(todo.dueDate) : todo.dueDate}</span>` : ''}
                 <button class="btn btn-sm" onclick="showContactDetail('${todo.contactId}')">詳細</button>
             </div>
         </div>
@@ -197,21 +291,40 @@ async function toggleTodoComplete(meetingId, todoIndex) {
     if (!meeting || !meeting.todos || !meeting.todos[todoIndex]) return;
     
     meeting.todos[todoIndex].completed = !meeting.todos[todoIndex].completed;
-    await saveAllData();
     
-    if (currentContactId && document.getElementById('contactDetailModal').classList.contains('active')) {
-        showContactDetail(currentContactId);
+    if (typeof saveAllData === 'function') {
+        await saveAllData();
     }
     
-    renderContacts();
-    renderTodos();
-    updateTodoTabBadge();
-    showNotification('ToDoを更新しました', 'success');
+    // 現在連絡先詳細が表示されている場合は更新
+    const contactDetailModal = document.getElementById('contactDetailModal');
+    if (currentContactId && contactDetailModal && contactDetailModal.classList.contains('active')) {
+        if (typeof showContactDetail === 'function') {
+            showContactDetail(currentContactId);
+        }
+    }
+    
+    // UI更新
+    if (typeof renderContacts === 'function') {
+        renderContacts();
+    }
+    if (typeof renderTodos === 'function') {
+        renderTodos();
+    }
+    if (typeof updateTodoTabBadge === 'function') {
+        updateTodoTabBadge();
+    }
+    
+    if (typeof showNotification === 'function') {
+        showNotification('ToDoを更新しました', 'success');
+    }
 }
 
 // ToDoタブバッジの更新
 function updateTodoTabBadge() {
     const badge = document.getElementById('todoTabBadge');
+    if (!badge) return;
+    
     let totalUncompletedTodos = 0;
     
     meetings.forEach(meeting => {
@@ -228,29 +341,34 @@ function updateTodoTabBadge() {
     }
 }
 
-// ToDo項目追加
+// ToDo項目追加（初回ミーティング用）
 function addTodoItem() {
     const todoList = document.getElementById('todoList');
+    if (!todoList) return;
+    
     const todoItem = document.createElement('div');
     todoItem.className = 'todo-item';
     todoItem.innerHTML = `
         <input type="checkbox" class="todo-checkbox">
         <input type="text" class="form-input todo-text" placeholder="ToDo内容">
         <input type="date" class="form-input" style="width: auto;">
-        <button class="btn btn-danger" onclick="this.parentElement.remove()">✕</button>
+        <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
     `;
     todoList.insertBefore(todoItem, todoList.lastElementChild);
 }
 
+// ToDo項目追加（新規ミーティング用）
 function addNewTodoItem() {
     const todoList = document.getElementById('newTodoList');
+    if (!todoList) return;
+    
     const todoItem = document.createElement('div');
     todoItem.className = 'todo-item';
     todoItem.innerHTML = `
         <input type="checkbox" class="todo-checkbox">
         <input type="text" class="form-input todo-text" placeholder="ToDo内容">
         <input type="date" class="form-input" style="width: auto;">
-        <button class="btn btn-danger" onclick="this.parentElement.remove()">✕</button>
+        <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
     `;
     todoList.insertBefore(todoItem, todoList.lastElementChild);
 }
@@ -258,6 +376,8 @@ function addNewTodoItem() {
 // ToDoリストを取得
 function getTodos(listId) {
     const todoList = document.getElementById(listId);
+    if (!todoList) return [];
+    
     const todoItems = todoList.querySelectorAll('.todo-item');
     return Array.from(todoItems).map(item => {
         const checkbox = item.querySelector('.todo-checkbox');
@@ -280,6 +400,7 @@ function getLatestMeetingDate(contactId) {
     if (contactMeetings.length === 0) return null;
     
     return contactMeetings.reduce((latest, meeting) => {
+        if (!meeting.date) return latest;
         const meetingDate = new Date(meeting.date);
         return meetingDate > latest ? meetingDate : latest;
     }, new Date(0));
@@ -288,4 +409,134 @@ function getLatestMeetingDate(contactId) {
 // ミーティング数を取得
 function getMeetingCount(contactId) {
     return meetings.filter(m => m.contactId === contactId).length;
+}
+
+// 特定の連絡先のミーティング一覧を取得
+function getContactMeetings(contactId) {
+    return meetings.filter(m => m.contactId === contactId)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+// 特定の連絡先の未完了ToDo数を取得
+function getContactTodoCount(contactId) {
+    const contactMeetings = meetings.filter(m => m.contactId === contactId);
+    return contactMeetings.reduce((sum, meeting) => {
+        return sum + (meeting.todos?.filter(todo => !todo.completed).length || 0);
+    }, 0);
+}
+
+// ミーティング内容の検索
+function searchMeetings(query) {
+    if (!query || query.trim() === '') return meetings;
+    
+    const lowerQuery = query.toLowerCase();
+    return meetings.filter(meeting => {
+        const contact = contacts.find(c => c.id === meeting.contactId);
+        const contactName = contact ? contact.name.toLowerCase() : '';
+        const meetingContent = meeting.content ? meeting.content.toLowerCase() : '';
+        const todoTexts = meeting.todos ? meeting.todos.map(t => t.text.toLowerCase()).join(' ') : '';
+        
+        return contactName.includes(lowerQuery) ||
+               meetingContent.includes(lowerQuery) ||
+               todoTexts.includes(lowerQuery);
+    });
+}
+
+// 期限が近いToDoを取得
+function getUpcomingTodos(days = 7) {
+    const todos = [];
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+    
+    meetings.forEach(meeting => {
+        const contact = contacts.find(c => c.id === meeting.contactId);
+        if (meeting.todos) {
+            meeting.todos.forEach((todo, todoIndex) => {
+                if (!todo.completed && todo.dueDate) {
+                    const dueDate = new Date(todo.dueDate);
+                    if (dueDate <= targetDate) {
+                        todos.push({
+                            ...todo,
+                            contactName: contact ? contact.name : '不明',
+                            contactId: meeting.contactId,
+                            meetingId: meeting.id,
+                            todoIndex: todoIndex,
+                            daysUntilDue: Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24))
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    return todos.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
+}
+
+// 完了したToDoの統計を取得
+function getTodoStatistics() {
+    let totalTodos = 0;
+    let completedTodos = 0;
+    const contactStats = {};
+    
+    meetings.forEach(meeting => {
+        const contact = contacts.find(c => c.id === meeting.contactId);
+        const contactName = contact ? contact.name : '不明';
+        
+        if (!contactStats[contactName]) {
+            contactStats[contactName] = { total: 0, completed: 0 };
+        }
+        
+        if (meeting.todos) {
+            meeting.todos.forEach(todo => {
+                totalTodos++;
+                contactStats[contactName].total++;
+                
+                if (todo.completed) {
+                    completedTodos++;
+                    contactStats[contactName].completed++;
+                }
+            });
+        }
+    });
+    
+    return {
+        totalTodos,
+        completedTodos,
+        completionRate: totalTodos > 0 ? (completedTodos / totalTodos * 100).toFixed(1) : 0,
+        contactStats
+    };
+}
+
+// ミーティング頻度の分析
+function getMeetingFrequencyAnalysis() {
+    const contactFrequency = {};
+    const monthlyMeetings = {};
+    
+    meetings.forEach(meeting => {
+        const contact = contacts.find(c => c.id === meeting.contactId);
+        const contactName = contact ? contact.name : '不明';
+        
+        // 連絡先別の頻度
+        if (!contactFrequency[contactName]) {
+            contactFrequency[contactName] = 0;
+        }
+        contactFrequency[contactName]++;
+        
+        // 月別の頻度
+        if (meeting.date) {
+            const monthKey = meeting.date.slice(0, 7); // YYYY-MM形式
+            if (!monthlyMeetings[monthKey]) {
+                monthlyMeetings[monthKey] = 0;
+            }
+            monthlyMeetings[monthKey]++;
+        }
+    });
+    
+    return {
+        contactFrequency,
+        monthlyMeetings,
+        totalMeetings: meetings.length,
+        averageMeetingsPerContact: Object.keys(contactFrequency).length > 0 ? 
+            (meetings.length / Object.keys(contactFrequency).length).toFixed(1) : 0
+    };
 }
