@@ -736,3 +736,26 @@ if (typeof window !== 'undefined') {
         forceSave: () => typeof saveAllData === 'function' ? saveAllData() : 'not available'
     };
 }
+
+// === Auth Init Fallback ===
+window.addEventListener('load', () => {
+    // 呼び出し漏れ対策：Google API / GIS の初期化を明示的に呼ぶ
+    setTimeout(async () => {
+        try { if (typeof initializeGoogleAPI === 'function') await initializeGoogleAPI(); } catch (e) { console.warn('initializeGoogleAPI fallback error', e); }
+        try { if (typeof initializeGIS === 'function') await initializeGIS(); } catch (e) { console.warn('initializeGIS fallback error', e); }
+        try { if (typeof maybeEnableButtons === 'function') maybeEnableButtons(); } catch (e) {}
+        
+        // 2秒経ってもボタンが非表示なら強制表示（UX救済＆デバッグ用）
+        setTimeout(() => {
+            const btn = document.getElementById('authorizeBtn');
+            const so = document.getElementById('signoutBtn');
+            const token = (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken) ? gapi.client.getToken() : null;
+            if (btn && (!btn.style || btn.style.display === 'none') && !token) {
+                btn.style.display = 'inline-block';
+            }
+            if (so && token) {
+                so.style.display = 'inline-block';
+            }
+        }, 2000);
+    }, 300);
+});
