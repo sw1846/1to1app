@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1対1ミーティング管理システム - データ移行ツール</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #dddddd;
+            --accent-color: #007bff;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: var(--accent-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        .step {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background: var(--bg-primary);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .step-number {
+            background: var(--accent-color);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .step-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-drop-zone:hover,
+        .file-drop-zone.dragover {
+            border-color: var(--accent-color);
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .progress-container {
+            margin: 1rem 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: var(--bg-tertiary);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--success-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+            padding: 0.125rem 0;
+        }
+
+        .log-success {
+            color: var(--success-color);
+        }
+
+        .log-error {
+            color: var(--danger-color);
+        }
+
+        .log-warning {
+            color: #f57c00;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-pending {
+            background-color: var(--text-secondary);
+        }
+
+        .status-progress {
+            background-color: var(--warning-color);
+        }
+
+        .status-success {
+            background-color: var(--success-color);
+        }
+
+        .status-error {
+            background-color: var(--danger-color);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .data-summary {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .warning-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            margin: 1rem 0;
+        }
+
+        .success-box {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            margin: 1rem 0;
+        }
+
+        .error-box {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>データ移行ツール</h1>
+            <p>ローカル版からGoogleドライブ版への1対1ミーティング管理システム移行</p>
+        </div>
+
+        <!-- Google認証ステップ -->
+        <div class="step" id="authStep">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Google認証</div>
+                <div class="status-indicator status-pending" id="authStatus"></div>
+            </div>
+            <p>まず、Googleドライブにアクセスするための認証を行います。</p>
+            <button class="btn btn-primary" id="authBtn" onclick="authenticateGoogle()">
+                Googleでログイン
+            </button>
+            <div id="authSuccess" class="success-box hidden">
+                認証が完了しました。次のステップに進んでください。
+            </div>
+        </div>
+
+        <!-- データ選択ステップ -->
+        <div class="step" id="dataStep">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">ローカルデータの選択</div>
+                <div class="status-indicator status-pending" id="dataStatus"></div>
+            </div>
+            <p>移行するローカルデータを選択してください。1to1meetingフォルダ内のファイルを選択するか、フォルダをドロップしてください。</p>
+            
+            <div class="file-drop-zone" id="fileDropZone" onclick="document.getElementById('fileInput').click()">
+                <p>📁 1to1meetingフォルダをドロップ、またはクリックして選択</p>
+                <p style="font-size: 0.9rem; color: var(--text-secondary);">複数のJSONファイルと添付ファイルを選択できます</p>
+            </div>
+            <input type="file" id="fileInput" class="file-input" webkitdirectory multiple>
+
+            <div id="dataPreview" class="data-summary hidden">
+                <h4>検出されたデータ</h4>
+                <div id="dataSummary"></div>
+                <button class="btn btn-primary" id="validateBtn" onclick="validateData()">データを検証</button>
+            </div>
+
+            <div id="validationResults" class="hidden">
+                <h4>検証結果</h4>
+                <div id="validationSummary"></div>
+            </div>
+        </div>
+
+        <!-- 移行先設定ステップ -->
+        <div class="step" id="destinationStep">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">移行先の設定</div>
+                <div class="status-indicator status-pending" id="destinationStatus"></div>
+            </div>
+            <p>データを移行するGoogleドライブの場所を選択してください。</p>
+            
+            <div>
+                <button class="btn btn-primary" id="createNewFolderBtn" onclick="createMigrationFolder()">
+                    新しい1to1meetingフォルダを作成
+                </button>
+                <button class="btn" id="selectExistingBtn" onclick="selectExistingFolder()">
+                    既存フォルダを選択
+                </button>
+            </div>
+
+            <div id="folderSelected" class="success-box hidden">
+                <div id="selectedFolderInfo"></div>
+            </div>
+        </div>
+
+        <!-- 移行実行ステップ -->
+        <div class="step" id="migrationStep">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <div class="step-title">データ移行の実行</div>
+                <div class="status-indicator status-pending" id="migrationStatus"></div>
+            </div>
+            
+            <div class="warning-box">
+                <strong>注意:</strong> 移行処理を開始すると、データがGoogleドライブにアップロードされます。
+                処理中はブラウザを閉じないでください。
+            </div>
+
+            <button class="btn btn-success" id="startMigrationBtn" onclick="startMigration()" disabled>
+                移行を開始
+            </button>
+
+            <div id="migrationProgress" class="progress-container hidden">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">準備中...</div>
+            </div>
+
+            <div id="migrationLog" class="log-container hidden">
+                <div id="logEntries"></div>
+            </div>
+        </div>
+
+        <!-- 完了ステップ -->
+        <div class="step" id="completionStep">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <div class="step-title">移行完了</div>
+                <div class="status-indicator status-pending" id="completionStatus"></div>
+            </div>
+            
+            <div id="completionResults" class="hidden">
+                <div id="migrationSummary"></div>
+                <button class="btn btn-success" onclick="openMigrationSystem()">
+                    移行されたシステムを開く
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let isAuthenticated = false;
+        let selectedFiles = [];
+        let parsedData = {
+            contacts: [],
+            meetings: [],
+            options: null,
+            metadata: null,
+            indexes: {},
+            attachments: []
+        };
+        let targetFolderId = null;
+        let migrationResults = {
+            contactsCreated: 0,
+            meetingsCreated: 0,
+            attachmentsUploaded: 0,
+            errors: []
+        };
+
+        // Google API設定
+        const CLIENT_ID = '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            setupFileDropZone();
+            loadGoogleAPI();
+        });
+
+        // Google API読み込み
+        function loadGoogleAPI() {
+            const script1 = document.createElement('script');
+            script1.src = 'https://apis.google.com/js/api.js';
+            script1.onload = initializeGAPI;
+            document.head.appendChild(script1);
+
+            const script2 = document.createElement('script');
+            script2.src = 'https://accounts.google.com/gsi/client';
+            script2.onload = initializeGIS;
+            document.head.appendChild(script2);
+        }
+
+        let gapiInited = false;
+        let gisInited = false;
+        let tokenClient = null;
+
+        function initializeGAPI() {
+            gapi.load('client', async () => {
+                await gapi.client.init({});
+                gapiInited = true;
+                maybeEnableAuth();
+            });
+        }
+
+        function initializeGIS() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: handleAuthResult
+            });
+            gisInited = true;
+            maybeEnableAuth();
+        }
+
+        function maybeEnableAuth() {
+            if (gapiInited && gisInited) {
+                document.getElementById('authBtn').disabled = false;
+            }
+        }
+
+        // Google認証
+        function authenticateGoogle() {
+            if (!tokenClient) return;
+
+            tokenClient.requestAccessToken({prompt: 'consent'});
+        }
+
+        async function handleAuthResult(response) {
+            if (response.error) {
+                addLog('認証エラー: ' + response.error, 'error');
+                return;
+            }
+
+            gapi.client.setToken(response);
+            await gapi.client.load('drive', 'v3');
+            
+            isAuthenticated = true;
+            updateStepStatus('authStatus', 'success');
+            document.getElementById('authSuccess').classList.remove('hidden');
+            document.getElementById('authBtn').disabled = true;
+            
+            addLog('Google認証が完了しました', 'success');
+            enableNextStep();
+        }
+
+        // ファイルドロップゾーン設定
+        function setupFileDropZone() {
+            const dropZone = document.getElementById('fileDropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleFileSelection(e.dataTransfer.files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFileSelection(e.target.files);
+            });
+        }
+
+        // ファイル選択処理
+        function handleFileSelection(files) {
+            selectedFiles = Array.from(files);
+            
+            if (selectedFiles.length === 0) {
+                addLog('ファイルが選択されていません', 'warning');
+                return;
+            }
+
+            addLog(`${selectedFiles.length}個のファイルが選択されました`, 'success');
+            
+            // データを解析
+            parseSelectedFiles();
+        }
+
+        // ファイル解析
+        async function parseSelectedFiles() {
+            parsedData = {
+                contacts: [],
+                meetings: [],
+                options: null,
+                metadata: null,
+                indexes: {},
+                attachments: []
+            };
+
+            let jsonFileCount = 0;
+            let attachmentCount = 0;
+
+            for (const file of selectedFiles) {
+                if (file.name.endsWith('.json')) {
+                    jsonFileCount++;
+                    try {
+                        const content = await readFileContent(file);
+                        const data = JSON.parse(content);
+                        
+                        // ファイル名に基づいてデータを分類
+                        if (file.name.startsWith('contact-') && file.name.endsWith('.json') && !file.name.includes('meetings')) {
+                            parsedData.contacts.push(data);
+                        } else if (file.name.includes('meetings.json')) {
+                            if (Array.isArray(data)) {
+                                parsedData.meetings.push(...data);
+                            }
+                        } else if (file.name === 'options.json') {
+                            parsedData.options = data;
+                        } else if (file.name === 'metadata.json') {
+                            parsedData.metadata = data;
+                        } else if (file.name.includes('index.json')) {
+                            const indexType = file.name.replace('-index.json', '').replace('.json', '');
+                            parsedData.indexes[indexType] = data;
+                        }
+                        
+                    } catch (error) {
+                        addLog(`${file.name}の解析に失敗: ${error.message}`, 'error');
+                    }
+                } else {
+                    // 添付ファイル
+                    attachmentCount++;
+                    parsedData.attachments.push({
+                        file: file,
+                        path: file.webkitRelativePath || file.name,
+                        type: file.type
+                    });
+                }
+            }
+
+            // データプレビューを表示
+            showDataPreview(jsonFileCount, attachmentCount);
+        }
+
+        // ファイル内容を読み込む
+        function readFileContent(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        // データプレビュー表示
+        function showDataPreview(jsonFiles, attachments) {
+            const preview = document.getElementById('dataPreview');
+            const summary = document.getElementById('dataSummary');
+            
+            summary.innerHTML = `
+                <div class="summary-item">
+                    <span>連絡先:</span>
+                    <span>${parsedData.contacts.length}件</span>
+                </div>
+                <div class="summary-item">
+                    <span>ミーティング:</span>
+                    <span>${parsedData.meetings.length}件</span>
+                </div>
+                <div class="summary-item">
+                    <span>JSONファイル:</span>
+                    <span>${jsonFiles}個</span>
+                </div>
+                <div class="summary-item">
+                    <span>添付ファイル:</span>
+                    <span>${attachments}個</span>
+                </div>
+                <div class="summary-item">
+                    <span>オプション設定:</span>
+                    <span>${parsedData.options ? '有' : '無'}</span>
+                </div>
+                <div class="summary-item">
+                    <span>メタデータ:</span>
+                    <span>${parsedData.metadata ? '有' : '無'}</span>
+                </div>
+            `;
+            
+            preview.classList.remove('hidden');
+            updateStepStatus('dataStatus', 'success');
+            enableNextStep();
+        }
+
+        // データ検証
+        function validateData() {
+            const results = document.getElementById('validationResults');
+            const summary = document.getElementById('validationSummary');
+            
+            let issues = [];
+            let warnings = [];
+
+            // 基本的な検証
+            if (parsedData.contacts.length === 0) {
+                issues.push('連絡先データが見つかりません');
+            }
+
+            // 連絡先のID重複チェック
+            const contactIds = parsedData.contacts.map(c => c.id).filter(id => id);
+            const duplicateIds = contactIds.filter((id, index) => contactIds.indexOf(id) !== index);
+            if (duplicateIds.length > 0) {
+                warnings.push(`重複する連絡先ID: ${duplicateIds.join(', ')}`);
+            }
+
+            // ミーティングの連絡先ID参照チェック
+            const orphanMeetings = parsedData.meetings.filter(m => 
+                m.contactId && !contactIds.includes(m.contactId)
+            );
+            if (orphanMeetings.length > 0) {
+                warnings.push(`${orphanMeetings.length}件のミーティングが存在しない連絡先を参照しています`);
+            }
+
+            // 結果表示
+            let summaryHtml = '';
+            
+            if (issues.length === 0) {
+                summaryHtml += '<div class="success-box">データ検証が完了しました。移行可能です。</div>';
+            } else {
+                summaryHtml += '<div class="error-box"><h5>エラー</h5><ul>';
+                issues.forEach(issue => summaryHtml += `<li>${issue}</li>`);
+                summaryHtml += '</ul></div>';
+            }
+
+            if (warnings.length > 0) {
+                summaryHtml += '<div class="warning-box"><h5>警告</h5><ul>';
+                warnings.forEach(warning => summaryHtml += `<li>${warning}</li>`);
+                summaryHtml += '</ul></div>';
+            }
+
+            summary.innerHTML = summaryHtml;
+            results.classList.remove('hidden');
+
+            if (issues.length === 0) {
+                enableNextStep();
+            }
+            
+            addLog(`データ検証完了: ${issues.length}個のエラー, ${warnings.length}個の警告`, 
+                   issues.length === 0 ? 'success' : 'error');
+        }
+
+        // 新しいフォルダ作成
+        async function createMigrationFolder() {
+            if (!isAuthenticated) return;
+
+            try {
+                const response = await gapi.client.drive.files.create({
+                    resource: {
+                        name: '1to1meeting_migrated',
+                        mimeType: 'application/vnd.google-apps.folder'
+                    },
+                    fields: 'id,name'
+                });
+
+                targetFolderId = response.result.id;
+                showFolderSelected(`新しいフォルダ「${response.result.name}」が作成されました`);
+                addLog(`移行先フォルダを作成しました: ${response.result.name}`, 'success');
+                
+            } catch (error) {
+                addLog('フォルダ作成エラー: ' + error.message, 'error');
+            }
+        }
+
+        // 既存フォルダ選択（簡略化）
+        async function selectExistingFolder() {
+            // 実際の実装では、フォルダブラウザを表示
+            const folderId = prompt('既存の1to1meetingフォルダIDを入力してください:');
+            if (folderId) {
+                targetFolderId = folderId;
+                showFolderSelected(`既存フォルダ（ID: ${folderId}）が選択されました`);
+                addLog(`移行先フォルダを選択しました: ${folderId}`, 'success');
+            }
+        }
+
+        // フォルダ選択完了表示
+        function showFolderSelected(message) {
+            const element = document.getElementById('folderSelected');
+            document.getElementById('selectedFolderInfo').textContent = message;
+            element.classList.remove('hidden');
+            updateStepStatus('destinationStatus', 'success');
+            document.getElementById('startMigrationBtn').disabled = false;
+        }
+
+        // 移行開始
+        async function startMigration() {
+            if (!isAuthenticated || !targetFolderId || parsedData.contacts.length === 0) {
+                addLog('移行の前提条件が満たされていません', 'error');
+                return;
+            }
+
+            document.getElementById('startMigrationBtn').disabled = true;
+            document.getElementById('migrationProgress').classList.remove('hidden');
+            document.getElementById('migrationLog').classList.remove('hidden');
+            updateStepStatus('migrationStatus', 'progress');
+
+            try {
+                await performMigration();
+                updateStepStatus('migrationStatus', 'success');
+                updateStepStatus('completionStatus', 'success');
+                showMigrationResults();
+                
+            } catch (error) {
+                updateStepStatus('migrationStatus', 'error');
+                addLog('移行処理でエラーが発生しました: ' + error.message, 'error');
+            }
+        }
+
+        // 移行処理実行
+        async function performMigration() {
+            const totalSteps = parsedData.contacts.length + Math.floor(parsedData.meetings.length / 10) + 
+                              parsedData.attachments.length + 5; // 5は初期化とインデックス作成など
+            let currentStep = 0;
+
+            // フォルダ構造の作成
+            addLog('フォルダ構造を作成中...', 'info');
+            const folders = await createFolderStructure(targetFolderId);
+            currentStep++;
+            updateProgress(currentStep, totalSteps, '基本フォルダ構造を作成しました');
+
+            // 連絡先データの移行
+            addLog('連絡先データを移行中...', 'info');
+            for (const contact of parsedData.contacts) {
+                try {
+                    await migrateSingleContact(contact, folders.contacts);
+                    migrationResults.contactsCreated++;
+                    currentStep++;
+                    updateProgress(currentStep, totalSteps, 
+                        `連絡先: ${contact.name || 'Unknown'} (${migrationResults.contactsCreated}/${parsedData.contacts.length})`);
+                    
+                } catch (error) {
+                    migrationResults.errors.push(`連絡先移行エラー (${contact.name}): ${error.message}`);
+                    addLog(`連絡先移行エラー: ${contact.name} - ${error.message}`, 'error');
+                }
+            }
+
+            // ミーティングデータの移行
+            addLog('ミーティングデータを移行中...', 'info');
+            const meetingsByContact = groupMeetingsByContact(parsedData.meetings);
+            
+            for (const [contactId, meetings] of Object.entries(meetingsByContact)) {
+                try {
+                    await migrateMeetingsForContact(contactId, meetings, folders.meetings);
+                    migrationResults.meetingsCreated += meetings.length;
+                    
+                    if (migrationResults.meetingsCreated % 10 === 0) {
+                        currentStep++;
+                        updateProgress(currentStep, totalSteps, 
+                            `ミーティング移行済み: ${migrationResults.meetingsCreated}件`);
+                    }
+                } catch (error) {
+                    migrationResults.errors.push(`ミーティング移行エラー (${contactId}): ${error.message}`);
+                    addLog(`ミーティング移行エラー: ${contactId} - ${error.message}`, 'error');
+                }
+            }
+
+            // 添付ファイルの移行
+            addLog('添付ファイルを移行中...', 'info');
+            for (const attachment of parsedData.attachments) {
+                try {
+                    await migrateAttachment(attachment, folders.attachments);
+                    migrationResults.attachmentsUploaded++;
+                    currentStep++;
+                    updateProgress(currentStep, totalSteps, 
+                        `添付ファイル: ${attachment.file.name} (${migrationResults.attachmentsUploaded}/${parsedData.attachments.length})`);
+                } catch (error) {
+                    migrationResults.errors.push(`添付ファイル移行エラー (${attachment.file.name}): ${error.message}`);
+                    addLog(`添付ファイル移行エラー: ${attachment.file.name} - ${error.message}`, 'error');
+                }
+            }
+
+            // インデックスとメタデータの作成
+            addLog('インデックスとメタデータを作成中...', 'info');
+            await createIndexesAndMetadata(folders);
+            currentStep++;
+            updateProgress(currentStep, totalSteps, 'インデックスとメタデータを作成しました');
+
+            // オプション設定の移行
+            if (parsedData.options) {
+                await migrateOptions(folders.root);
+                addLog('オプション設定を移行しました', 'success');
+            }
+
+            currentStep = totalSteps;
+            updateProgress(currentStep, totalSteps, '移行が完了しました！');
+            addLog('すべての移行処理が完了しました', 'success');
+        }
+
+        // フォルダ構造作成
+        async function createFolderStructure(rootFolderId) {
+            const folders = { root: rootFolderId };
+
+            // 各フォルダを作成
+            const folderNames = ['index', 'contacts', 'meetings', 'attachments'];
+            
+            for (const name of folderNames) {
+                const response = await gapi.client.drive.files.create({
+                    resource: {
+                        name: name,
+                        mimeType: 'application/vnd.google-apps.folder',
+                        parents: [rootFolderId]
+                    },
+                    fields: 'id'
+                });
+                folders[name] = response.result.id;
+            }
+
+            // attachmentsのサブフォルダ
+            const attachmentSubFolders = ['contacts', 'meetings'];
+            folders.attachmentsSub = {};
+            
+            for (const name of attachmentSubFolders) {
+                const response = await gapi.client.drive.files.create({
+                    resource: {
+                        name: name,
+                        mimeType: 'application/vnd.google-apps.folder',
+                        parents: [folders.attachments]
+                    },
+                    fields: 'id'
+                });
+                folders.attachmentsSub[name] = response.result.id;
+            }
+
+            return folders;
+        }
+
+        // 単一連絡先の移行
+        async function migrateSingleContact(contact, contactsFolderId) {
+            // IDが無い場合は生成
+            if (!contact.id) {
+                contact.id = String(migrationResults.contactsCreated + 1).padStart(6, '0');
+            }
+
+            // タイムスタンプを追加
+            if (!contact.createdAt) {
+                contact.createdAt = new Date().toISOString();
+            }
+            contact.updatedAt = new Date().toISOString();
+
+            const fileName = `contact-${contact.id.padStart(6, '0')}.json`;
+            const fileContent = JSON.stringify(contact, null, 2);
+
+            await uploadJsonFile(fileName, fileContent, contactsFolderId);
+        }
+
+        // ミーティングをconnectId別にグループ化
+        function groupMeetingsByContact(meetings) {
+            const grouped = {};
+            meetings.forEach(meeting => {
+                if (!meeting.contactId) return;
+                
+                if (!grouped[meeting.contactId]) {
+                    grouped[meeting.contactId] = [];
+                }
+                grouped[meeting.contactId].push(meeting);
+            });
+            return grouped;
+        }
+
+        // 連絡先別ミーティング移行
+        async function migrateMeetingsForContact(contactId, meetings, meetingsFolderId) {
+            if (!contactId || meetings.length === 0) return;
+
+            const fileName = `contact-${contactId.padStart(6, '0')}-meetings.json`;
+            const fileContent = JSON.stringify(meetings, null, 2);
+
+            await uploadJsonFile(fileName, fileContent, meetingsFolderId);
+        }
+
+        // 添付ファイル移行
+        async function migrateAttachment(attachment, attachmentsFolderId) {
+            // ファイルパスから適切なサブフォルダを判定
+            const isContactAttachment = attachment.path.includes('contact');
+            const subFolderId = isContactAttachment ? 
+                (await getOrCreateFolder('contacts', attachmentsFolderId)) :
+                (await getOrCreateFolder('meetings', attachmentsFolderId));
+
+            await uploadBinaryFile(attachment.file.name, attachment.file, subFolderId);
+        }
+
+        // インデックスとメタデータの作成
+        async function createIndexesAndMetadata(folders) {
+            // 連絡先インデックス
+            const contactsIndex = {};
+            parsedData.contacts.forEach(contact => {
+                contactsIndex[contact.id] = {
+                    id: contact.id,
+                    name: contact.name,
+                    company: contact.company || '',
+                    lastUpdated: new Date().toISOString(),
+                    status: contact.status || '新規'
+                };
+            });
+
+            // ミーティングインデックス
+            const meetingsIndex = {};
+            const meetingsByContact = groupMeetingsByContact(parsedData.meetings);
+            
+            Object.entries(meetingsByContact).forEach(([contactId, meetings]) => {
+                meetingsIndex[contactId] = {
+                    contactId: contactId,
+                    meetingCount: meetings.length,
+                    lastMeetingDate: meetings.length > 0 ? 
+                        Math.max(...meetings.map(m => new Date(m.date || 0).getTime())) : null,
+                    lastUpdated: new Date().toISOString()
+                };
+            });
+
+            // 検索インデックス（簡略化）
+            const searchIndex = {};
+            parsedData.contacts.forEach(contact => {
+                const searchText = [
+                    contact.name,
+                    contact.furigana,
+                    contact.company,
+                    ...(contact.types || []),
+                    ...(contact.affiliations || [])
+                ].filter(text => text).join(' ').toLowerCase();
+                searchIndex[contact.id] = searchText;
+            });
+
+            // メタデータ
+            const metadata = {
+                version: '2.0',
+                migrationFrom: 'local',
+                migrationDate: new Date().toISOString(),
+                totalContacts: parsedData.contacts.length,
+                totalMeetings: parsedData.meetings.length,
+                nextContactId: parsedData.contacts.length + 1,
+                nextMeetingId: parsedData.meetings.length + 1
+            };
+
+            // アップロード
+            await uploadJsonFile('contacts-index.json', JSON.stringify(contactsIndex, null, 2), folders.index);
+            await uploadJsonFile('meetings-index.json', JSON.stringify(meetingsIndex, null, 2), folders.index);
+            await uploadJsonFile('search-index.json', JSON.stringify(searchIndex, null, 2), folders.index);
+            await uploadJsonFile('metadata.json', JSON.stringify(metadata, null, 2), folders.index);
+        }
+
+        // オプション移行
+        async function migrateOptions(rootFolderId) {
+            if (!parsedData.options) return;
+            
+            const fileContent = JSON.stringify(parsedData.options, null, 2);
+            await uploadJsonFile('options.json', fileContent, rootFolderId);
+        }
+
+        // JSONファイルアップロード
+        async function uploadJsonFile(fileName, content, parentId) {
+            const metadata = {
+                name: fileName,
+                parents: [parentId],
+                mimeType: 'application/json'
+            };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+            form.append('file', new Blob([content], {type: 'application/json'}));
+
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + gapi.client.getToken().access_token
+                },
+                body: form
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        // バイナリファイルアップロード
+        async function uploadBinaryFile(fileName, file, parentId) {
+            const metadata = {
+                name: fileName,
+                parents: [parentId]
+            };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+            form.append('file', file);
+
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + gapi.client.getToken().access_token
+                },
+                body: form
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        // フォルダ取得または作成
+        async function getOrCreateFolder(name, parentId) {
+            // 既存フォルダの検索
+            const searchResponse = await gapi.client.drive.files.list({
+                q: `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder'`,
+                fields: 'files(id)'
+            });
+
+            if (searchResponse.result.files.length > 0) {
+                return searchResponse.result.files[0].id;
+            }
+
+            // 新規作成
+            const createResponse = await gapi.client.drive.files.create({
+                resource: {
+                    name: name,
+                    mimeType: 'application/vnd.google-apps.folder',
+                    parents: [parentId]
+                },
+                fields: 'id'
+            });
+
+            return createResponse.result.id;
+        }
+
+        // 進捗更新
+        function updateProgress(current, total, message) {
+            const percentage = Math.round((current / total) * 100);
+            document.getElementById('progressFill').style.width = percentage + '%';
+            document.getElementById('progressText').textContent = `${percentage}% - ${message}`;
+        }
+
+        // ステータス更新
+        function updateStepStatus(elementId, status) {
+            const element = document.getElementById(elementId);
+            element.className = `status-indicator status-${status}`;
+        }
+
+        // ログ追加
+        function addLog(message, type = 'info') {
+            const logEntries = document.getElementById('logEntries');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logEntries.appendChild(entry);
+            logEntries.scrollTop = logEntries.scrollHeight;
+        }
+
+        // 次ステップ有効化
+        function enableNextStep() {
+            // 各ステップの条件をチェックして次のステップを有効化
+            // この実装は簡略化されています
+        }
+
+        // 移行結果表示
+        function showMigrationResults() {
+            const results = document.getElementById('completionResults');
+            const summary = document.getElementById('migrationSummary');
+            
+            let summaryHtml = '<div class="success-box">';
+            summaryHtml += '<h4>移行完了</h4>';
+            summaryHtml += `<p>連絡先: ${migrationResults.contactsCreated}件作成</p>`;
+            summaryHtml += `<p>ミーティング: ${migrationResults.meetingsCreated}件作成</p>`;
+            summaryHtml += `<p>添付ファイル: ${migrationResults.attachmentsUploaded}個アップロード</p>`;
+            
+            if (migrationResults.errors.length > 0) {
+                summaryHtml += `<p style="color: var(--warning-color);">警告: ${migrationResults.errors.length}個のエラーがありました</p>`;
+            }
+            
+            summaryHtml += '</div>';
+
+            if (migrationResults.errors.length > 0) {
+                summaryHtml += '<div class="warning-box"><h5>発生したエラー:</h5><ul>';
+                migrationResults.errors.forEach(error => {
+                    summaryHtml += `<li>${error}</li>`;
+                });
+                summaryHtml += '</ul></div>';
+            }
+
+            summary.innerHTML = summaryHtml;
+            results.classList.remove('hidden');
+        }
+
+        // 移行されたシステムを開く
+        function openMigrationSystem() {
+            // 実際の実装では、メインシステムのURLにフォルダIDを渡す
+            const systemUrl = `index.html?folderId=${targetFolderId}`;
+            window.open(systemUrl, '_blank');
+        }
+    </script>
+</body>
+</html>
