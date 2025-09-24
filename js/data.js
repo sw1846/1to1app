@@ -494,8 +494,7 @@ async function loadAllData() {
     try {
         console.log('データ読み込み開始...');
         
-        await loadMetadata();
-        \1if (!contactsIndex || Object.keys(contactsIndex).length === 0) { console.warn('インデックスが空です。Driveから再構築します...'); await rebuildContactsIndexFromDrive(); } await loadContactsFromIndex();
+        await loadMetadata();if (!contactsIndex || Object.keys(contactsIndex).length === 0) { console.warn('インデックスが空です。Driveから再構築します...'); await rebuildContactsIndexFromDrive(); } await loadContactsFromIndex();
         await loadMeetingsFromIndex();
         await loadOptions();
         
@@ -911,11 +910,11 @@ async function saveAllData() {
 }
 
 // 連絡先を分散形式で保存
-\1
+
 if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
 
 // レガシーデータを分散形式に変換して保存
-\1
+
 if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
 
 // 単一連絡先の保存
