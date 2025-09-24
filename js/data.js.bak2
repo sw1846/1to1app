@@ -903,6 +903,30 @@ async function loadContactsDirectly() {
         if (typeof saveContactsIndex === 'function') await saveContactsIndex();
     } catch (e) { console.error('直接検索エラー:', e); }
 }
+        const files = response.result.files || [];
+        console.log(`直接検索で${files.length}個の連絡先ファイルを発見`);
+
+        for (const file of files) {
+            try {
+                const fileResponse = await gapi.client.drive.files.get({
+                    fileId: file.id,
+                    alt: 'media'
+                });
+
+                const contact = JSON.parse(fileResponse.body);
+                const normalizedContact = normalizeContactData(contact);
+                contacts.push(normalizedContact);
+                
+                // インデックスも更新
+                if (typeof updateContactIndex === 'function') {
+                    updateContactIndex(normalizedContact);
+                }
+                
+                console.log(`直接読み込み成功: ${normalizedContact.name}`);
+            } catch (err) {
+                console.error(`ファイル${file.name}の読み込みエラー:`, err);
+            }
+        }
     } catch (error) {
         console.error('直接ファイル検索エラー:', error);
     }

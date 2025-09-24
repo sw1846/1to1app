@@ -505,7 +505,7 @@
     <script src="js/main.js"></script>
     
     <!-- Google API - 関数が定義された後に読み込み -->
-    <script defer src="https://apis.google.com/js/api.js" onload="if (window.initializeGoogleAPI) window.initializeGoogleAPI(); else console.error('initializeGoogleAPI not found');"></script>
-    <script defer src="https://accounts.google.com/gsi/client" onload="if (window.initializeGIS) window.initializeGIS(); else console.error('initializeGIS not found');"></script>
+    <script defer src="https://apis.google.com/js/api.js" onload="if(typeof initializeGoogleAPI === 'function') { initializeGoogleAPI(); } else { console.error('initializeGoogleAPI not found'); }"></script>
+    <script defer src="https://accounts.google.com/gsi/client" onload="if(typeof initializeGIS === 'function') { initializeGIS(); } else { console.error('initializeGIS not found'); }"></script>
 </body>
 </html>
