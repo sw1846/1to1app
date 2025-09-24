@@ -959,14 +959,18 @@ async function saveJsonFileToFolder(filename, data, folderId) {
         
         if (fileId) {
             // 既存ファイルの更新
-            const response = await gapi.client.request({
-                path: `/drive/v3/files/${fileId}`,
+            const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
                 method: 'PATCH',
-                body: jsonData,
                 headers: {
-                    'Content-Type': 'application/json'
-                }
+                    'Authorization': `Bearer ${gapi.client.getToken().access_token}`,
+                    'Content-Type': 'application/json; charset=UTF-8'
+                },
+                body: jsonData
             });
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Drive update failed: ${res.status} ${errText}`);
+            }
             console.log(`ファイル更新成功: ${filename}`);
         } else {
             // 新規ファイル作成
