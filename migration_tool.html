@@ -537,42 +537,180 @@
             let jsonFileCount = 0;
             let attachmentCount = 0;
 
+            // デバッグ情報を出力
+            console.log('=== ファイル解析開始 ===');
+            console.log('選択されたファイル数:', selectedFiles.length);
+
             for (const file of selectedFiles) {
-                if (file.name.endsWith('.json')) {
+                const fileName = file.name;
+                const filePath = file.webkitRelativePath || file.name;
+                
+                console.log(`処理中のファイル: ${fileName} (パス: ${filePath})`);
+
+                if (fileName.endsWith('.json')) {
                     jsonFileCount++;
                     try {
                         const content = await readFileContent(file);
-                        const data = JSON.parse(content);
+                        console.log(`ファイル内容サイズ: ${content.length}文字`);
                         
-                        // ファイル名に基づいてデータを分類
-                        if (file.name.startsWith('contact-') && file.name.endsWith('.json') && !file.name.includes('meetings')) {
-                            parsedData.contacts.push(data);
-                        } else if (file.name.includes('meetings.json')) {
+                        const data = JSON.parse(content);
+                        console.log(`JSONデータ解析成功: ${fileName}`);
+                        
+                        // フォルダパスとファイル内容による柔軟な判定
+                        let identified = false;
+
+                        // 1. フォルダパスによる判定（最優先）
+                        if (filePath.includes('/contacts/') || filePath.includes('\\contacts\\')) {
+                            // contactsフォルダ内のJSONファイルは連絡先として扱う
+                            console.log(`contactsフォルダから連絡先と判定: ${fileName}`);
+                            if (Array.isArray(data)) {
+                                parsedData.contacts.push(...data);
+                            } else {
+                                parsedData.contacts.push(data);
+                            }
+                            identified = true;
+                            
+                        } else if (filePath.includes('/meetings/') || filePath.includes('\\meetings\\') || fileName.includes('meetings')) {
+                            // meetingsフォルダ内またはファイル名にmeetingsが含まれる
+                            console.log(`meetingsフォルダ/ファイル名からミーティングと判定: ${fileName}`);
                             if (Array.isArray(data)) {
                                 parsedData.meetings.push(...data);
+                            } else {
+                                parsedData.meetings.push(data);
                             }
-                        } else if (file.name === 'options.json') {
-                            parsedData.options = data;
-                        } else if (file.name === 'metadata.json') {
-                            parsedData.metadata = data;
-                        } else if (file.name.includes('index.json')) {
-                            const indexType = file.name.replace('-index.json', '').replace('.json', '');
-                            parsedData.indexes[indexType] = data;
+                            identified = true;
+                            
+                        } else if (filePath.includes('/index/') || filePath.includes('\\index\\') || fileName.includes('index')) {
+                            // indexフォルダ内またはファイル名にindexが含まれる
+                            console.log(`indexフォルダ/ファイル名からインデックスと判定: ${fileName}`);
+                            let indexType = 'unknown';
+                            if (fileName.includes('contact')) indexType = 'contacts';
+                            else if (fileName.includes('meeting')) indexType = 'meetings';  
+                            else if (fileName.includes('search')) indexType = 'search';
+                            else if (fileName.includes('metadata')) indexType = 'metadata';
+                            
+                            if (indexType === 'metadata') {
+                                parsedData.metadata = data;
+                            } else {
+                                parsedData.indexes[indexType] = data;
+                            }
+                            identified = true;
+                        }
+                        
+                        // 2. 特定ファイル名による判定
+                        if (!identified) {
+                            if (fileName === 'options.json' || filePath.endsWith('/options.json') || filePath.endsWith('\\options.json')) {
+                                console.log(`ファイル名からオプションと判定: ${fileName}`);
+                                parsedData.options = data;
+                                identified = true;
+                                
+                            } else if (fileName === 'metadata.json' || filePath.endsWith('/metadata.json') || filePath.endsWith('\\metadata.json')) {
+                                console.log(`ファイル名からメタデータと判定: ${fileName}`);
+                                parsedData.metadata = data;
+                                identified = true;
+                                
+                            } else if (fileName === 'contacts.json' || fileName.includes('contacts')) {
+                                // レガシー形式の連絡先ファイル
+                                console.log(`レガシー連絡先ファイルと判定: ${fileName}`);
+                                if (Array.isArray(data)) {
+                                    parsedData.contacts.push(...data);
+                                } else {
+                                    parsedData.contacts.push(data);
+                                }
+                                identified = true;
+                                
+                            } else if (fileName === 'meetings.json' || fileName.includes('meeting')) {
+                                // レガシー形式のミーティングファイル
+                                console.log(`レガシーミーティングファイルと判定: ${fileName}`);
+                                if (Array.isArray(data)) {
+                                    parsedData.meetings.push(...data);
+                                } else {
+                                    parsedData.meetings.push(data);
+                                }
+                                identified = true;
+                            }
+                        }
+                        
+                        // 3. ファイル内容による自動判定（最後の手段）
+                        if (!identified) {
+                            console.log(`ファイル内容で自動判定を試行: ${fileName}`);
+                            
+                            if (Array.isArray(data)) {
+                                // 配列の場合、最初の要素をチェック
+                                if (data.length > 0) {
+                                    const firstItem = data[0];
+                                    // 連絡先の特徴的なフィールドをチェック
+                                    if (firstItem.name && (firstItem.company !== undefined || firstItem.emails !== undefined || firstItem.phones !== undefined || firstItem.types !== undefined)) {
+                                        console.log(`配列内容から連絡先と判定: ${fileName}`);
+                                        parsedData.contacts.push(...data);
+                                        identified = true;
+                                    } 
+                                    // ミーティングの特徴的なフィールドをチェック
+                                    else if (firstItem.contactId || (firstItem.date !== undefined && firstItem.content !== undefined) || firstItem.todos !== undefined) {
+                                        console.log(`配列内容からミーティングと判定: ${fileName}`);
+                                        parsedData.meetings.push(...data);
+                                        identified = true;
+                                    }
+                                }
+                            } else if (typeof data === 'object' && data !== null) {
+                                // 単一オブジェクトの判定
+                                // 連絡先の特徴的なフィールドをチェック
+                                if (data.name && (data.company !== undefined || data.emails !== undefined || data.phones !== undefined || data.types !== undefined || data.affiliations !== undefined)) {
+                                    console.log(`オブジェクト内容から連絡先と判定: ${fileName}`);
+                                    parsedData.contacts.push(data);
+                                    identified = true;
+                                } 
+                                // ミーティングの特徴的なフィールドをチェック
+                                else if (data.contactId || (data.date !== undefined && data.content !== undefined) || data.todos !== undefined) {
+                                    console.log(`オブジェクト内容からミーティングと判定: ${fileName}`);
+                                    parsedData.meetings.push(data);
+                                    identified = true;
+                                }
+                                // オプション設定の特徴的なフィールドをチェック
+                                else if (data.types && Array.isArray(data.types) && data.affiliations && Array.isArray(data.affiliations)) {
+                                    console.log(`内容からオプションと判定: ${fileName}`);
+                                    parsedData.options = data;
+                                    identified = true;
+                                }
+                                // メタデータの特徴的なフィールドをチェック
+                                else if (data.version && (data.totalContacts !== undefined || data.nextContactId !== undefined)) {
+                                    console.log(`内容からメタデータと判定: ${fileName}`);
+                                    parsedData.metadata = data;
+                                    identified = true;
+                                }
+                            }
+                            
+                            if (!identified) {
+                                console.warn(`判定不能なJSONファイル: ${fileName} - 無視されます`);
+                                addLog(`判定不能なJSONファイル: ${fileName}`, 'warning');
+                            }
                         }
                         
                     } catch (error) {
-                        addLog(`${file.name}の解析に失敗: ${error.message}`, 'error');
+                        console.error(`JSONファイル解析エラー: ${fileName}`, error);
+                        addLog(`${fileName}の解析に失敗: ${error.message}`, 'error');
                     }
                 } else {
                     // 添付ファイル
                     attachmentCount++;
+                    console.log(`添付ファイル: ${fileName}`);
                     parsedData.attachments.push({
                         file: file,
-                        path: file.webkitRelativePath || file.name,
+                        path: filePath,
                         type: file.type
                     });
                 }
             }
+
+            // 解析結果のデバッグ出力
+            console.log('=== 解析結果 ===');
+            console.log(`連絡先: ${parsedData.contacts.length}件`);
+            console.log(`ミーティング: ${parsedData.meetings.length}件`);
+            console.log(`オプション: ${parsedData.options ? '有' : '無'}`);
+            console.log(`メタデータ: ${parsedData.metadata ? '有' : '無'}`);
+            console.log(`インデックス: ${Object.keys(parsedData.indexes).length}個`);
+            console.log(`添付ファイル: ${parsedData.attachments.length}個`);
+            console.log('==================');
 
             // データプレビューを表示
             showDataPreview(jsonFileCount, attachmentCount);
