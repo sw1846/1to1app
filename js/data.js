@@ -903,11 +903,6 @@ async function loadContactsDirectly() {
         if (typeof saveContactsIndex === 'function') await saveContactsIndex();
     } catch (e) { console.error('直接検索エラー:', e); }
 }
-' in parents and name contains 'contact-' and name contains '.json' and trashed=false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-
         const files = response.result.files || [];
         console.log(`直接検索で${files.length}個の連絡先ファイルを発見`);
 
