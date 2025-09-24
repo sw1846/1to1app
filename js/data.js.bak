@@ -11,130 +11,6 @@ let gapiInited = false;
 let gisInited = false;
 let tokenClient = null;
 
-// --- OAuth2 token utilities (auto-refresh & auth wrappers) ---
-let accessToken = null;
-let tokenObtainedAt = 0;
-let refreshTimerId = null;
-
-function getAccessToken() {
-    try {
-        const t = (gapi && gapi.client && gapi.client.getToken) ? gapi.client.getToken() : null;
-        return (t && t.access_token) ? t.access_token : accessToken;
-    } catch (e) {
-        return accessToken;
-    }
-}
-
-function setAccessTokenFromResponse(resp) {
-    if (resp && resp.access_token) {
-        accessToken = resp.access_token;
-        tokenObtainedAt = Date.now();
-        try {
-            if (gapi && gapi.client && gapi.client.setToken) {
-                gapi.client.setToken({ access_token: accessToken });
-            }
-        } catch (e) {
-            console.warn('setToken で警告:', e);
-        }
-        scheduleProactiveRefresh();
-    }
-}
-
-function scheduleProactiveRefresh() {
-    try {
-        if (refreshTimerId) clearInterval(refreshTimerId);
-        refreshTimerId = setInterval(() => {
-            const elapsed = Date.now() - tokenObtainedAt;
-            // 45分経過でサイレント再取得（有効期限内に更新）
-            if (elapsed > 45 * 60 * 1000) {
-                refreshAccessToken().catch(err => console.warn('トークン自動更新失敗:', err));
-            }
-        }, 60 * 1000);
-    } catch (e) {
-        console.warn('scheduleProactiveRefresh 警告:', e);
-    }
-}
-
-function is401(err) {
-    try {
-        if (!err) return false;
-        if (typeof err === 'number' && err === 401) return true;
-        if (err.status === 401) return true;
-        if (err.result && err.result.error && err.result.error.code === 401) return true;
-        if (err.body && typeof err.body === 'string' && err.body.includes('401')) return true;
-        if (typeof err === 'string' && err.includes('401')) return true;
-    } catch (e) {}
-    return false;
-}
-
-function refreshAccessToken() {
-    return new Promise((resolve, reject) => {
-        if (!tokenClient) return reject(new Error('tokenClient が初期化されていません'));
-        try {
-            tokenClient.callback = (resp) => {
-                if (resp && !resp.error && resp.access_token) {
-                    setAccessTokenFromResponse(resp);
-                    resolve();
-                } else {
-                    reject(resp || new Error('トークン再取得に失敗'));
-                }
-            };
-            tokenClient.requestAccessToken({ prompt: '' }); // silent refresh
-        } catch (e) {
-            reject(e);
-        }
-    });
-}
-
-async function withGapiAuthRetry(requestFn, retries = 1) {
-    try {
-        return await requestFn();
-    } catch (e) {
-        if (is401(e) && retries > 0) {
-            await refreshAccessToken();
-            return await withGapiAuthRetry(requestFn, retries - 1);
-        }
-        throw e;
-    }
-}
-
-async function authorizedFetch(url, options = {}, retries = 1) {
-    const opts = Object.assign({}, options);
-    const headers = Object.assign({}, opts.headers || {});
-    headers['Authorization'] = `Bearer ${getAccessToken()}`;
-    opts.headers = headers;
-
-    let res = await fetch(url, opts);
-    if (res.status === 401 && retries > 0) {
-        await refreshAccessToken();
-        const headers2 = Object.assign({}, opts.headers || {});
-        headers2['Authorization'] = `Bearer ${getAccessToken()}`;
-        const opts2 = Object.assign({}, opts, { headers: headers2 });
-        res = await fetch(url, opts2);
-    }
-    return res;
-}
-
-// getFileIdInFolder リトライ版（401 検出でトークン再取得→再試行）
-async function getFileIdInFolderWithRetry(filename, folderId) {
-    if (!folderId) return null;
-    try {
-        const response = await withGapiAuthRetry(() => gapi.client.drive.files.list({
-            q: `name='${filename}' and '${folderId}' in parents and trashed=false`,
-            fields: 'files(id)',
-            spaces: 'drive'
-        }), 1);
-        if (response.result && response.result.files && response.result.files.length > 0) {
-            return response.result.files[0].id;
-        }
-        return null;
-    } catch (error) {
-        console.error('ファイルID取得エラー(リトライ後):', error);
-        return null;
-    }
-}
-
-
 
 // Driveページネーション対応：指定フォルダ内ファイルを全件取得
 async function listAllFilesInFolder(folderId, namePrefix) {
@@ -229,7 +105,8 @@ async function handleAuthClick() {
             throw resp;
         }
         
-        setAccessTokenFromResponse(resp);
+        accessToken = resp.access_token;
+        gapi.client.setToken(resp);
         
         try {
             console.log('Drive API Discovery Document読み込み中...');
@@ -683,7 +560,7 @@ async function loadAllData() {
 // メタデータ読み込み
 async function loadMetadata() {
     try {
-        const fileId = await getFileIdInFolderWithRetry('metadata.json', folderStructure.index);
+        const fileId = await getFileIdInFolder('metadata.json', folderStructure.index);
         if (!fileId) {
             metadata = {
                 version: '2.0',
@@ -712,7 +589,7 @@ async function loadMetadata() {
 async function loadIndexes() {
     try {
         // 連絡先インデックス
-        const contactsIndexId = await getFileIdInFolderWithRetry('contacts-index.json', folderStructure.index);
+        const contactsIndexId = await getFileIdInFolder('contacts-index.json', folderStructure.index);
         if (contactsIndexId) {
             const response = await gapi.client.drive.files.get({
                 fileId: contactsIndexId,
@@ -722,7 +599,7 @@ async function loadIndexes() {
         }
 
         // ミーティングインデックス
-        const meetingsIndexId = await getFileIdInFolderWithRetry('meetings-index.json', folderStructure.index);
+        const meetingsIndexId = await getFileIdInFolder('meetings-index.json', folderStructure.index);
         if (meetingsIndexId) {
             const response = await gapi.client.drive.files.get({
                 fileId: meetingsIndexId,
@@ -732,7 +609,7 @@ async function loadIndexes() {
         }
 
         // 検索インデックス
-        const searchIndexId = await getFileIdInFolderWithRetry('search-index.json', folderStructure.index);
+        const searchIndexId = await getFileIdInFolder('search-index.json', folderStructure.index);
         if (searchIndexId) {
             const response = await gapi.client.drive.files.get({
                 fileId: searchIndexId,
@@ -784,7 +661,7 @@ async function loadSingleContact(contactId) {
     if (!indexEntry) return null;
 
     try {
-        const fileId = await getFileIdInFolderWithRetry(contactFileNameFromId(contactId), folderStructure.contacts);
+        const fileId = await getFileIdInFolder(contactFileNameFromId(contactId), folderStructure.contacts);
         if (!fileId) return null;
 
         const response = await gapi.client.drive.files.get({
@@ -859,7 +736,7 @@ async function loadMeetingsFromIndex() {
 // 特定連絡先のミーティング読み込み
 async function loadContactMeetings(contactId) {
     try {
-        const fileId = await getFileIdInFolderWithRetry(`contact-${String(contactId).padStart(6, '0')}-meetings.json`, folderStructure.meetings);
+        const fileId = await getFileIdInFolder(`contact-${String(contactId).padStart(6, '0')}-meetings.json`, folderStructure.meetings);
         if (!fileId) return [];
 
         const response = await gapi.client.drive.files.get({
@@ -977,7 +854,7 @@ async function loadMeetingsDirectly() {
 // オプションデータ読み込み
 async function loadOptions() {
     try {
-        const fileId = await getFileIdInFolderWithRetry('options.json', folderStructure.root);
+        const fileId = await getFileIdInFolder('options.json', folderStructure.root);
         if (!fileId) {
             // デフォルト値を使用
             return;
@@ -1119,12 +996,12 @@ async function saveMetadata() {
 // フォルダ内のJSONファイル保存（修正版 - 400エラー対応）
 async function saveJsonFileToFolder(filename, data, folderId) {
     try {
-        const fileId = await getFileIdInFolderWithRetry(filename, folderId);
+        const fileId = await getFileIdInFolder(filename, folderId);
         const jsonData = JSON.stringify(data, null, 2);
         
         if (fileId) {
 const jsonData = JSON.stringify(data, null, 2);
-const res = await authorizedFetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {method:'PATCH',headers:{'Authorization':`Bearer ${gapi.client.getToken().access_token}`,'Content-Type':'application/json; charset=UTF-8'},body:jsonData});
+const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {method:'PATCH',headers:{'Authorization':`Bearer ${gapi.client.getToken().access_token}`,'Content-Type':'application/json; charset=UTF-8'},body:jsonData});
 if(!res.ok){const errText=await res.text();throw new Error(`Drive update failed: ${res.status} ${errText}`);}console.log(`ファイル更新成功: ${filename}`);
 } else {
             // 新規ファイル作成
@@ -1138,7 +1015,7 @@ if(!res.ok){const errText=await res.text();throw new Error(`Drive update failed:
             form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
             form.append('file', new Blob([jsonData], {type: 'application/json'}));
             
-            const response = await authorizedFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${gapi.client.getToken().access_token}`
@@ -1159,7 +1036,7 @@ if(!res.ok){const errText=await res.text();throw new Error(`Drive update failed:
 }
 
 // 特定フォルダ内のファイルIDを取得
-async function getFileIdInFolderWithRetry(filename, folderId) {
+async function getFileIdInFolder(filename, folderId) {
     if (!folderId) return null;
 
     try {
@@ -1231,7 +1108,8 @@ async function saveAttachmentToFileSystem(fileName, dataUrl, contactName) {
         form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
         form.append('file', blob);
 
-        const response = await authorizedFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+        const response = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
             {
                 method: 'POST',
                 headers: new Headers({'Authorization': 'Bearer ' + gapi.client.getToken().access_token}),
