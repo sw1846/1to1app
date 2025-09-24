@@ -5,6 +5,25 @@ const CLIENT_ID = GOOGLE_DRIVE_CONFIG.CLIENT_ID;
 const SCOPES = GOOGLE_DRIVE_CONFIG.SCOPES;
 
 // Google API初期化（APIキーなし）
+
+// Driveページネーション対応：指定フォルダ内ファイルを全件取得
+async function listAllFilesInFolder(folderId, namePrefix) {
+    let files = [];
+    let pageToken = null;
+    do {
+        const resp = await gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and name contains '${namePrefix}' and name contains '.json' and trashed=false`,
+            fields: 'nextPageToken, files(id, name, modifiedTime)',
+            spaces: 'drive',
+            pageSize: 1000,
+            pageToken: pageToken || undefined,
+            orderBy: 'name_natural'
+        });
+        files = files.concat(resp.result.files || []);
+        pageToken = resp.result.nextPageToken;
+    } while (pageToken);
+    return files;
+}
 async function initializeGoogleAPI() {
     try {
         console.log('Google API初期化開始（APIキーなし）...');
@@ -476,12 +495,7 @@ async function loadAllData() {
         console.log('データ読み込み開始...');
         
         await loadMetadata();
-        await loadIndexes();
-        if (!contactsIndex || Object.keys(contactsIndex).length === 0) {
-            console.warn('インデックスが空です。Driveから再構築します...');
-            await rebuildContactsIndexFromDrive();
-        }
-        await loadContactsFromIndex();
+        \1if (!contactsIndex || Object.keys(contactsIndex).length === 0) { console.warn('インデックスが空です。Driveから再構築します...'); await rebuildContactsIndexFromDrive(); } await loadContactsFromIndex();
         await loadMeetingsFromIndex();
         await loadOptions();
         
@@ -604,49 +618,6 @@ async function loadIndexes() {
     }
 }
 
-// インデックス保存
-async function saveContactsIndex() {
-    try {
-        if (!folderStructure.index) {
-            folderStructure.index = await getOrCreateFolder('index', folderStructure.root);
-        }
-        await saveJsonFileToFolder('contacts-index.json', contactsIndex || {}, folderStructure.index);
-        console.log('contacts-index.json を保存しました');
-    } catch (e) {
-        console.error('contacts-index 保存エラー:', e);
-    }
-}
-
-// 連絡先インデックス再構築（ファイル名からID抽出 → 保存）
-async function rebuildContactsIndexFromDrive() {
-    try {
-        if (!folderStructure.contacts) return;
-        const resp = await gapi.client.drive.files.list({
-            q: `'${folderStructure.contacts}' in parents and name contains 'contact-' and name contains '.json' and trashed=false`,
-            fields: 'files(id, name, modifiedTime)',
-            spaces: 'drive',
-            pageSize: 1000
-        });
-        contactsIndex = {};
-        const files = resp.result.files || [];
-        for (const f of files) {
-            const m = f.name && f.name.match(/contact-(\d+)\.json$/);
-            if (m) {
-                const id = m[1];
-                contactsIndex[id] = {
-                    id,
-                    lastUpdated: f.modifiedTime || new Date().toISOString()
-                };
-            }
-        }
-        console.log(`インデックス再構築: ${Object.keys(contactsIndex).length}件`);
-        await saveContactsIndex();
-    } catch (e) {
-        console.error('インデックス再構築エラー:', e);
-    }
-}
-
-
 // 連絡先データをインデックスから読み込み
 async function loadContactsFromIndex() {
     contacts = [];
@@ -681,7 +652,7 @@ async function loadSingleContact(contactId) {
     if (!indexEntry) return null;
 
     try {
-        const fileId = await getFileIdInFolder(`contact-${String(contactId).padStart(6, '0')}.json`, folderStructure.contacts);
+        const fileId = await getFileIdInFolder(${contactFileNameFromId(contactId)}, folderStructure.contacts);
         if (!fileId) return null;
 
         const response = await gapi.client.drive.files.get({
@@ -772,10 +743,35 @@ async function loadContactMeetings(contactId) {
 }
 
 // 直接ファイル検索（インデックスが空の場合のフォールバック）
+
 async function loadContactsDirectly() {
     try {
-        const response = await gapi.client.drive.files.list({
-            q: `'${folderStructure.contacts}' in parents and name contains 'contact-' and name contains '.json' and trashed=false`,
+        const files = await listAllFilesInFolder(folderStructure.contacts, 'contact-');
+        console.log(`直接検索で${files.length}個の連絡先ファイルを発見`);
+        for (const file of files) {
+            try {
+                const fr = await gapi.client.drive.files.get({ fileId: file.id, alt: 'media' });
+                const contact = JSON.parse(fr.body);
+                if (contact) {
+                    const normalized = normalizeContactData(contact);
+                    contacts.push(normalized);
+                    console.log(`直接読み込み成功: ${normalized.name}`);
+                    if (normalized.id) {
+                        contactsIndex[normalized.id] = {
+                            id: normalized.id,
+                            name: normalized.name || '',
+                            company: normalized.company || '',
+                            lastUpdated: file.modifiedTime || new Date().toISOString(),
+                            status: normalized.status || '新規'
+                        };
+                    }
+                }
+            } catch (e) { console.error('直接読み込みファイルエラー:', e); }
+        }
+        if (typeof saveContactsIndex === 'function') await saveContactsIndex();
+    } catch (e) { console.error('直接検索エラー:', e); }
+}
+' in parents and name contains 'contact-' and name contains '.json' and trashed=false`,
             fields: 'files(id, name)',
             spaces: 'drive'
         });
@@ -789,17 +785,8 @@ async function loadContactsDirectly() {
                     fileId: file.id,
                     alt: 'media'
                 });
+
                 const contact = JSON.parse(fileResponse.body);
-                // 直接読み込み時もインデックスに反映
-                if (contact && contact.id) {
-                    contactsIndex[contact.id] = {
-                        id: contact.id,
-                        name: contact.name || '',
-                        company: contact.company || '',
-                        lastUpdated: new Date().toISOString(),
-                        status: contact.status || '新規'
-                    };
-                }
                 const normalizedContact = normalizeContactData(contact);
                 contacts.push(normalizedContact);
                 
@@ -816,11 +803,7 @@ async function loadContactsDirectly() {
     } catch (error) {
         console.error('直接ファイル検索エラー:', error);
     }
-
-        // 直接読み込み後にインデックス保存
-        await saveContactsIndex();
 }
-
 
 // ミーティングデータの直接読み込み
 async function loadMeetingsDirectly() {
@@ -905,7 +888,6 @@ async function saveAllData() {
     
     try {
         await saveContactsDistributed();
-        await saveContactsIndex();
         await saveMeetingsDistributed();
         await saveOptions();
         if (typeof rebuildIndexes === 'function') {
@@ -929,31 +911,17 @@ async function saveAllData() {
 }
 
 // 連絡先を分散形式で保存
-async function saveContactsDistributed() {
-    for (const contact of contacts) {
-        await saveSingleContact(contact);
-    }
-}
+\1
+if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
 
 // レガシーデータを分散形式に変換して保存
-async function convertAndSaveContacts() {
-    for (const contact of contacts) {
-        // IDが存在しない場合は新しいIDを生成
-        if (!contact.id) {
-            contact.id = String(metadata.nextContactId++).padStart(6, '0');
-        }
-        await saveSingleContact(contact);
-    }
-
-    // 変換保存後にインデックス保存
-    await saveContactsIndex();
-}
-
+\1
+if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
 
 // 単一連絡先の保存
 async function saveSingleContact(contact) {
     const contactId = contact.id;
-    const fileName = `contact-${String(contactId).padStart(6, '0')}.json`;
+    const fileName = ${contactFileNameFromId(contactId)};
     
     await saveJsonFileToFolder(fileName, contact, folderStructure.contacts);
     
@@ -1023,17 +991,10 @@ async function saveJsonFileToFolder(filename, data, folderId) {
         const jsonData = JSON.stringify(data, null, 2);
         
         if (fileId) {
-            // 既存ファイルの更新
-            const response = await gapi.client.request({
-                path: `/drive/v3/files/${fileId}`,
-                method: 'PATCH',
-                body: jsonData,
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            console.log(`ファイル更新成功: ${filename}`);
-        } else {
+const jsonData = JSON.stringify(data, null, 2);
+const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {method:'PATCH',headers:{'Authorization':`Bearer ${gapi.client.getToken().access_token}`,'Content-Type':'application/json; charset=UTF-8'},body:jsonData});
+if(!res.ok){const errText=await res.text();throw new Error(`Drive update failed: ${res.status} ${errText}`);}console.log(`ファイル更新成功: ${filename}`);
+} else {
             // 新規ファイル作成
             const metadata = {
                 name: filename,
@@ -1212,4 +1173,37 @@ if (typeof window !== 'undefined') {
     window.browseFolders = browseFolders;
     window.handleLegacyJsonImport = handleLegacyJsonImport;
     window.loadImageFromGoogleDrive = loadImageFromGoogleDrive;
+}
+// インデックス保存
+async function saveContactsIndex() {
+    try {
+        if (!folderStructure.index) {
+            folderStructure.index = await getOrCreateFolder('index', folderStructure.root);
+        }
+        await saveJsonFileToFolder('contacts-index.json', contactsIndex || {}, folderStructure.index);
+        console.log('contacts-index.json を保存しました');
+    } catch (e) { console.error('contacts-index 保存エラー:', e); }
+}
+// 連絡先インデックス再構築
+async function rebuildContactsIndexFromDrive() {
+    try {
+        if (!folderStructure.contacts) return;
+        const files = await listAllFilesInFolder(folderStructure.contacts, 'contact-');
+        contactsIndex = {};
+        for (const f of files) {
+            const m = f.name && f.name.match(/contact-(.+)\.json$/);
+            if (m) {
+                const id = m[1];
+                contactsIndex[id] = { id, lastUpdated: f.modifiedTime || new Date().toISOString() };
+            }
+        }
+        console.log(`インデックス再構築: ${Object.keys(contactsIndex).length}件`);
+        await saveContactsIndex();
+    } catch (e) { console.error('インデックス再構築エラー:', e); }
+}
+
+function contactFileNameFromId(cid) {
+    const s = String(cid || '').trim();
+    if (/^\d+$/.test(s)) return `contact-${s.padStart(6, '0')}.json`;
+    return `contact-${s}.json`;
 }
