@@ -651,7 +651,7 @@ async function loadSingleContact(contactId) {
     if (!indexEntry) return null;
 
     try {
-        const fileId = await getFileIdInFolder(${contactFileNameFromId(contactId)}, folderStructure.contacts);
+        const fileId = await getFileIdInFolder(contactFileNameFromId(contactId), folderStructure.contacts);
         if (!fileId) return null;
 
         const response = await gapi.client.drive.files.get({
@@ -920,7 +920,7 @@ if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
 // 単一連絡先の保存
 async function saveSingleContact(contact) {
     const contactId = contact.id;
-    const fileName = ${contactFileNameFromId(contactId)};
+    const fileName = contactFileNameFromId(contactId);
     
     await saveJsonFileToFolder(fileName, contact, folderStructure.contacts);
     
