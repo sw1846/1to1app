@@ -1,81 +1,96 @@
 /* =========================================================
- * main.js（初期化＋進捗ログ＋メモリ監視）
- * 既存の main.js がある場合は、重複しないよう該当関数を統合してください。
+ * main.js（初期化＋進捗ログ＋メモリ監視＋フォルダ構成＋データ読込）
  * ========================================================= */
 (function(global){
   'use strict';
-  if(global.__APP_MAIN_INITED__) return; // 二重初期化ガード
+  if(global.__APP_MAIN_INITED__) return;
   global.__APP_MAIN_INITED__ = true;
 
-  const MB = 1024*1024;
+  function log(...a){ try{ console.log('[main]', ...a);}catch(e){} }
+  function setStatus(t){ const el = document.getElementById('statusText'); if(el) el.textContent = t; }
 
-  function formatMem(){
-    const perf = performance && performance.memory ? performance.memory : null;
-    if(!perf) return null;
-    return {
-      usedMB: (perf.usedJSHeapSize/MB).toFixed(0),
-      totalMB: (perf.totalJSHeapSize/MB).toFixed(0),
-      limitMB: (perf.jsHeapSizeLimit/MB).toFixed(0)
-    };
-  }
-
-  function monitorPerformance(){
-    const m = formatMem();
-    if(m){
-      const used = Number(m.usedMB);
-      if(used >= 450){
-        console.warn(`メモリ使用量が多いです: ${m.usedMB}MB`);
-      } else {
-        console.log(`メモリ使用量: ${m.usedMB}MB`);
-      }
+  function wireAuthButtons(){
+    const authBtn = document.getElementById('authorizeBtn');
+    const outBtn  = document.getElementById('signoutBtn');
+    if(authBtn){
+      authBtn.addEventListener('click', async ()=>{
+        try{
+          await AppData.initializeGoogleAPI();
+          await AppData.initializeGIS();
+          // Interactive token
+          await new Promise((resolve,reject)=>{
+            google.accounts.oauth2.initTokenClient({
+              client_id: (window.APP_CONFIG && APP_CONFIG.GOOGLE_CLIENT_ID) || (window.DRIVE_CONFIG && DRIVE_CONFIG.CLIENT_ID),
+              scope: (window.APP_CONFIG && APP_CONFIG.GOOGLE_SCOPES) || (window.DRIVE_CONFIG && DRIVE_CONFIG.SCOPES),
+              callback: ()=> resolve()
+            }).requestAccessToken({prompt:'consent'});
+          });
+          AppData.setAuthenticated(true);
+          document.getElementById('authorizeBtn')?.classList.add('hidden');
+          document.getElementById('signoutBtn')?.classList.remove('hidden');
+          setStatus('サインイン済み');
+          await afterSignedIn();
+        }catch(e){
+          console.error(e);
+          setStatus('サインイン失敗');
+        }
+      });
+    }
+    if(outBtn){
+      outBtn.addEventListener('click', async ()=>{
+        try{ google.accounts.oauth2.revoke(gapi.client.getToken()?.access_token || '', ()=>{}); }catch(e){}
+        AppData.setAuthenticated(false);
+        document.getElementById('authorizeBtn')?.classList.remove('hidden');
+        document.getElementById('signoutBtn')?.classList.add('hidden');
+        setStatus('サインアウトしました');
+      });
     }
   }
 
-  function attachProgressLogs(){
-    if(!global.AppData || !AppData.setProgressHandler){
-      console.warn('AppData が未ロードです。progressログを設定できません。');
-      return;
-    }
-    AppData.setProgressHandler((phase, payload)=>{
-      switch(phase){
-        case 'contacts:list': console.log('連絡先リスト取得開始'); break;
-        case 'contacts:download:start': console.log(`連絡先ダウンロード開始: total=${payload.total}`); break;
-        case 'contacts:download:progress': console.log(`連絡先進捗: ${payload.done}/${payload.total}`); break;
-        case 'contacts:download:done': console.log(`連絡先ダウンロード完了: total=${payload.total}`); break;
-        case 'meetings:list': console.log('ミーティングリスト取得開始（再帰）'); break;
-        case 'meetings:download:start': console.log(`ミーティングダウンロード開始: total=${payload.total}`); break;
-        case 'meetings:download:progress': console.log(`ミーティング進捗: ${payload.done}/${payload.total}`); break;
-        case 'meetings:download:done': console.log(`ミーティングダウンロード完了: total=${payload.total}`); break;
-        case 'rebuild:start': console.log('インデックス再構築開始'); break;
-        case 'rebuild:done': console.log(`インデックス再構築完了: contacts=${payload.contacts} meetings=${payload.meetings}`); break;
-        case 'contacts:error': console.error('連絡先エラー:', payload.message); break;
-        case 'meetings:error': console.error('ミーティングエラー:', payload.message); break;
+  async function afterSignedIn(){
+    try{
+      setStatus('フォルダ構成を確認中...');
+      const rootName = (window.DRIVE_CONFIG && DRIVE_CONFIG.ROOT_FOLDER_NAME) || '1to1meeting';
+      const struct = await AppData.ensureFolderStructureByName(rootName);
+
+      // 既存のグローバル folderStructure にも流し込む
+      if (typeof window.folderStructure !== 'undefined'){
+        window.folderStructure.root = struct.root;
+        window.folderStructure.index = struct.index;
+        window.folderStructure.contacts = struct.contacts;
+        window.folderStructure.meetings = struct.meetings;
+        window.folderStructure.attachments = struct.attachments;
+        window.folderStructure.attachmentsContacts = struct.attachmentsContacts;
+        window.folderStructure.attachmentsMeetings = struct.attachmentsMeetings;
       }
-    });
+      await AppData.selectExistingFolder(struct);
+
+      setStatus('データを読み込み中...');
+      const result = await AppData.loadAllData();
+      if(result){
+        // グローバル配列に反映（既存UI互換）
+        if(Array.isArray(result.contacts)) window.contacts = result.contacts;
+        if(Array.isArray(result.meetings)) window.meetings = result.meetings;
+        if(result.options && typeof result.options === 'object') window.options = Object.assign(window.options||{}, result.options);
+      }
+      // UI初期描画
+      if (typeof renderContacts === 'function') renderContacts();
+      setStatus('準備完了');
+      log('初期化完了');
+    }catch(e){
+      console.error(e);
+      setStatus('初期化エラー: ' + (e?.message||e));
+    }
   }
 
   async function boot(){
-    console.log('DOM読み込み完了 - 分散ファイル構造システム初期化開始...');
+    log('DOM読み込み完了 - 初期化開始...');
+    wireAuthButtons();
+    AppData.setProgressHandler((msg)=> log('[progress]', msg));
 
-    await AppData.initializeGoogleAPI();
-    await AppData.initializeGIS();
-
-    attachProgressLogs();
-
-    console.log('イベントリスナー初期化開始...');
-    // 既存UIのイベント設定をここに（必要なら）統合してください
-    console.log('イベントリスナー初期化完了');
-
-    console.log('分散ファイル構造システム初期化完了');
-    console.log('システム状態:', AppData.STATE);
-
-    console.log('ページ読み込み完了 - 追加初期化開始');
-    // 認証・フォルダ選択後に以下を呼び出してください：
-    // await AppData.selectExistingFolder({ root:'<ROOT>', index:'<INDEX>', contacts:'<CONTACTS>', meetings:'<MEETINGS>', attachments:'<ATTACH>' });
-    // await AppData.loadAllData();
-
-    setInterval(monitorPerformance, 3000);
-    console.log('分散ファイル構造システム完全初期化完了');
+    // 事前初期化（自動ロード）
+    if(global.gapi) await AppData.initializeGoogleAPI();
+    if(global.google && global.google.accounts) AppData.initializeGIS();
   }
 
   if(document.readyState === 'loading'){
@@ -83,5 +98,4 @@
   } else {
     boot();
   }
-
 })(window);

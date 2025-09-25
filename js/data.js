@@ -213,7 +213,81 @@
     }
   }
 
-  // ========================= 再帰走査（meetings対応の要） =========================
+  // ========================= フォルダ作成/取得ユーティリティ =========================
+const MIME_FOLDER = 'application/vnd.google-apps.folder';
+
+async function driveCreateFolder(name, parentId=null){
+  await ensureDriveLoaded();
+  return await withBackoff(async ()=>{
+    const res = await gapi.client.drive.files.create({
+      resource: Object.assign({ name, mimeType: MIME_FOLDER }, parentId ? { parents: [parentId] } : {}),
+      fields: 'id,name,parents'
+    });
+    return res.result;
+  });
+}
+
+async function driveFindFolderByNameUnder(parentId, name){
+  await ensureDriveLoaded();
+  return await withBackoff(async ()=>{
+    const res = await gapi.client.drive.files.list({
+      q: `name='${name.replace(/'/g, "\'")}' and '${parentId}' in parents and mimeType='${MIME_FOLDER}' and trashed=false`,
+      fields: 'files(id,name,parents)',
+      pageSize: 1
+    });
+    return (res.result.files && res.result.files[0]) || null;
+  });
+}
+
+async function driveFindOrCreateFolderUnder(parentId, name){
+  const exist = await driveFindFolderByNameUnder(parentId, name);
+  if (exist) return exist.id;
+  const created = await driveCreateFolder(name, parentId);
+  return created.id;
+}
+
+async function driveFindRootByName(name){
+  await ensureDriveLoaded();
+  return await withBackoff(async ()=>{
+    const res = await gapi.client.drive.files.list({
+      q: `name='${name.replace(/'/g, "\'")}' and mimeType='${MIME_FOLDER}' and trashed=false`,
+      fields: 'files(id,name)',
+      pageSize: 1
+    });
+    return (res.result.files && res.result.files[0]) || null;
+  });
+}
+
+async function driveFindOrCreateRootByName(name){
+  const exist = await driveFindRootByName(name);
+  if (exist) return exist.id;
+  const created = await driveCreateFolder(name, null);
+  return created.id;
+}
+
+/**
+ * 既定のフォルダ構成を保証してIDを返す
+ *  - ROOT
+ *    - index
+ *    - contacts
+ *    - meetings
+ *    - attachments
+ *      - contacts
+ *      - meetings
+ */
+async function ensureFolderStructureByName(rootName){
+  await ensureDriveLoaded();
+  const rootId = await driveFindOrCreateRootByName(rootName);
+  const indexId = await driveFindOrCreateFolderUnder(rootId, 'index');
+  const contactsId = await driveFindOrCreateFolderUnder(rootId, 'contacts');
+  const meetingsId = await driveFindOrCreateFolderUnder(rootId, 'meetings');
+  const attachmentsId = await driveFindOrCreateFolderUnder(rootId, 'attachments');
+  const attachmentsContacts = await driveFindOrCreateFolderUnder(attachmentsId, 'contacts');
+  const attachmentsMeetings = await driveFindOrCreateFolderUnder(attachmentsId, 'meetings');
+  return { root: rootId, index: indexId, contacts: contactsId, meetings: meetingsId, attachments: attachmentsId, attachmentsContacts, attachmentsMeetings };
+}
+
+// ========================= 再帰走査（meetings対応の要） =========================
   async function listJsonFilesRecursively(rootFolderId){
     const out = [];
     const stack = [rootFolderId];
@@ -452,6 +526,20 @@ function initializeGIS(){
   }
 
   // ========================= 外部公開API =========================
+  
+async function getAccessTokenForFetch(){
+  await ensureDriveLoaded();
+  const t = gapi.client.getToken();
+  if(!t || !t.access_token){
+    await new Promise((resolve,reject)=>{
+      if(!__tokenClient){ __initTokenClient(); }
+      __tokenClient.callback = (resp)=> resp && resp.access_token ? resolve() : reject(resp);
+      __tokenClient.requestAccessToken({prompt:'consent'});
+    });
+  }
+  return gapi.client.getToken() && gapi.client.getToken().access_token;
+}
+
   const AppData = {
     STATE,
     setProgressHandler,
@@ -461,7 +549,11 @@ function initializeGIS(){
     selectExistingFolder,
     loadAllData,
     rebuildIndexes,
-  };
+  
+    ensureFolderStructureByName,
+
+    getAccessTokenForFetch,
+};
 
   
 // ======= グローバル関数（HTML の onload / onclick 互換のため） =======

@@ -1148,3 +1148,32 @@ function handleCSVImport(event) {
     };
     reader.readAsText(file, 'utf-8');
 }
+// ========= Google Drive 画像読み込みユーティリティ =========
+async function loadImageFromGoogleDrive(ref){
+    try {
+        if(!ref) return null;
+        if (ref.startsWith('data:')) return ref;
+        if (ref.startsWith('drive:')) {
+            const fileId = ref.split(':')[1];
+            const token = (typeof AppData !== 'undefined' && AppData.getAccessTokenForFetch) ? await AppData.getAccessTokenForFetch() : (gapi.client.getToken() && gapi.client.getToken().access_token);
+            if(!token) throw new Error('アクセストークン未取得');
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if(!res.ok) throw new Error('Drive fetch失敗: ' + res.status);
+            const blob = await res.blob();
+            return await new Promise((resolve)=>{
+                const fr = new FileReader();
+                fr.onload = ()=> resolve(fr.result);
+                fr.readAsDataURL(blob);
+            });
+        }
+        // それ以外はURLとしてそのまま返す
+        return ref;
+    } catch(e){
+        console.warn('loadImageFromGoogleDrive エラー:', e);
+        return null;
+    }
+}
+
+// （任意）添付保存のDrive実装が必要な場合は後日実装。未定義チェックでフォールバックします。

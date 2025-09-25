@@ -305,3 +305,19 @@ function loadSystemConfig() {
 
 // 初期化時に設定を読み込む
 loadSystemConfig();
+// --- 自動同期: APP_CONFIG が未設定なら DRIVE_CONFIG から補完 ---
+(function(){
+  try{
+    if (window.DRIVE_CONFIG && window.DRIVE_CONFIG.CLIENT_ID) {
+      if (!window.APP_CONFIG) window.APP_CONFIG = {};
+      if (!window.APP_CONFIG.GOOGLE_CLIENT_ID || window.APP_CONFIG.GOOGLE_CLIENT_ID.includes('<<PUT_YOUR_GIS_CLIENT_ID_HERE>>')) {
+        window.APP_CONFIG.GOOGLE_CLIENT_ID = window.DRIVE_CONFIG.CLIENT_ID;
+      }
+      if (!window.APP_CONFIG.GOOGLE_SCOPES) {
+        window.APP_CONFIG.GOOGLE_SCOPES = (window.DRIVE_CONFIG.SCOPES || 'https://www.googleapis.com/auth/drive.file') + ' https://www.googleapis.com/auth/drive.appdata';
+      } else if (!window.APP_CONFIG.GOOGLE_SCOPES.includes('drive.appdata')) {
+        window.APP_CONFIG.GOOGLE_SCOPES += ' https://www.googleapis.com/auth/drive.appdata';
+      }
+    }
+  }catch(e){}
+})(); // SYNC_APP_CONFIG_FROM_DRIVE_CONFIG
