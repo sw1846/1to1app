@@ -1,9 +1,9 @@
-/* ===== 1to1app U build required JS (2025-09-25U2) =====
+/* ===== 1to1app U build required JS (2025-09-25U3) =====
    - AppData + initializeGoogleAPI / initializeGIS / handleAuthClick / setProgressHandler
    - FedCM 有効 (use_fedcm_for_prompt: true)
    - gapi / GIS の自動ローダー & 順序待ち
    - 同時要求/二重初期化ガード
-   - 最小スコープ推奨: https://www.googleapis.com/auth/drive.metadata.readonly
+   - Drive フォルダ操作ユーティリティ（ensureFolderStructureByName 等）追加
 */
 (function(global){
   'use strict';
@@ -22,6 +22,13 @@
   function sanitizeScopes(s){
     s = (s || '').replace(/\u3000/g,' ').replace(/\s+/g,' ').trim();
     return s || 'https://www.googleapis.com/auth/drive.metadata.readonly';
+  }
+  function hasScope(needle){
+    try{
+      var scopes = (global.APP_CONFIG && APP_CONFIG.SCOPES) || '';
+      scopes = sanitizeScopes(scopes);
+      return scopes.split(' ').indexOf(needle) >= 0;
+    }catch(e){ return false; }
   }
 
   // --- loader: GIS ---
@@ -157,12 +164,90 @@
     })();
   }
 
+  // --- Drive helpers ---
+  function _ensureReady(){
+    if(!(global.gapi && gapi.client && STATE.gapiReady)){
+      throw new Error('gapi client not ready');
+    }
+  }
+  function _queryFolders(name, parentId){
+    var q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + name.replace(/'/g,"\\'") + "'";
+    if(parentId){ q += " and '" + parentId + "' in parents"; }
+    return gapi.client.drive.files.list({
+      q: q,
+      fields: 'files(id,name,parents)',
+      pageSize: 10,
+      spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    }).then(function(r){ return r.result.files || []; });
+  }
+  function _createFolder(name, parentId){
+    var body = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+    if(parentId){ body.parents = [parentId]; }
+    return gapi.client.drive.files.create({
+      resource: body,
+      fields: 'id,name,parents',
+      supportsAllDrives: true
+    }).then(function(r){ return r.result; });
+  }
+
+  function getOrCreateFolderId(name, parentId){
+    _ensureReady();
+    if(!hasScope('https://www.googleapis.com/auth/drive.file')){
+      console.warn('drive.file スコープがありません（作成は不可・検索のみ実施）');
+    }
+    return _queryFolders(name, parentId).then(function(list){
+      if(list.length>0){ return list[0].id; }
+      if(!hasScope('https://www.googleapis.com/auth/drive.file')){
+        var e = new Error('insufficient_scope: drive.file required to create "' + name + '"');
+        e.code = 'insufficient_scope';
+        throw e;
+      }
+      return _createFolder(name, parentId).then(function(obj){ return obj.id; });
+    });
+  }
+
+  function ensureFolderStructureByName(path, options){
+    _ensureReady();
+    options = options || {};
+    var parts = Array.isArray(path) ? path.slice() : String(path||'').split('/').filter(Boolean);
+    if(parts.length===0){ return Promise.reject(new Error('path is empty')); }
+    var currentParent = options.rootId || 'root';
+    var createdAny = false;
+    var ids = [];
+
+    function step(){
+      if(parts.length===0){ return Promise.resolve({id: currentParent, created: createdAny, pathIds: ids}); }
+      var name = parts.shift();
+      return getOrCreateFolderId(name, currentParent).then(function(id){
+        ids.push(id);
+        if(id === 'insufficient_scope'){ throw new Error('insufficient_scope'); }
+        if(!id){ throw new Error('failed to resolve id for "'+name+'"'); }
+        currentParent = id;
+        return step();
+      }).catch(function(err){
+        // surface friendly message
+        if(err && err.code === 'insufficient_scope'){
+          var msg = 'Driveフォルダ作成には drive.file スコープが必要です。OAuth同意画面のスコープに追加し、APP_CONFIG.SCOPES にも加えてください。';
+          alert(msg);
+        }
+        throw err;
+      });
+    }
+    return step();
+  }
+
   // --- public API ---
   var AppData = {
     initializeGoogleAPI: function(){ return ensureGapiClient(); },
     initializeGIS: function(){ __initTokenClientWithRetry(); },
     setAuthenticated: function(v){ /* compatibility no-op */ },
-    setProgressHandler: function(fn){ STATE.progress = (typeof fn==='function') ? fn : function(){}; }
+    setProgressHandler: function(fn){ STATE.progress = (typeof fn==='function') ? fn : function(){}; },
+
+    // New public helpers for main.js
+    getOrCreateFolderId: getOrCreateFolderId,
+    ensureFolderStructureByName: ensureFolderStructureByName
   };
 
   global.AppData = AppData;
@@ -190,7 +275,7 @@
   };
 
   // --- build marker ---
-  (function(g){ g.__BUILD_ID__='2025-09-25U2'; })(global);
+  (function(g){ g.__BUILD_ID__='2025-09-25U3'; })(global);
 
   // proactive load
   ensureGisScript();
