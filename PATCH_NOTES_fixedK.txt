@@ -1,5 +1,0 @@
-[fixedK 変更点]
-- js/data.20250925k.js: `async function initializeGIS()` を `function initializeGIS()` へ変更（awaitは未使用のため非asyncでOK）
-- __BUILD_ID__ を '2025-09-25K' に設定
-- index.html: 読み込み対象を data.20250925k.js に変更
-- index.html: 直後に BUILD ID をコンソールに出す inline script を追加（どの版が動いているか可視化）
