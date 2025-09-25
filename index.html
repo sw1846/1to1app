@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="favicon.ico">
 </head>
-<body>
+<body data-build="2025-09-25J">
     <!-- ヘッダー -->
     <header class="header">
         <div class="header-content">
@@ -491,11 +491,12 @@
 
     <!-- JavaScript読み込み - 修正版の順序 -->
     <!-- まず設定と基本関数 -->
+    <script src="js/sw-unregister.js"></script>
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     
     <!-- 次にデータ管理（Google API関連を含む） -->
-    <script src="js/data.js?v=20250925a"></script>
+    <script src="js/data.20250925j.js"></script>
     
     <!-- 機能別のスクリプト -->
     <script src="js/contacts.js"></script>
@@ -506,7 +507,7 @@
     <script src="js/main.js"></script>
     
     <!-- Google API - 関数が定義された後に読み込み -->
-    <script defer src="https://apis.google.com/js/api.js" onload="typeof initializeGoogleAPI==='function' ? initializeGoogleAPI() : console.error('initializeGoogleAPI not found')"></script>
-    <script defer src="https://accounts.google.com/gsi/client" onload="typeof initializeGIS==='function' ? initializeGIS() : console.error('initializeGIS not found')"></script>
+    <script defer src="https://apis.google.com/js/api.js" onload="typeof initializeGoogleAPI==='function' ? initializeGoogleAPI() : console.error('initializeGoogleAPI not found')" onerror="console.error('gapi api.js load failed')"></script>
+    <script defer src="https://accounts.google.com/gsi/client" onload="typeof initializeGIS==='function' ? initializeGIS() : console.error('initializeGIS not found')" onerror="console.error('gsi client load failed')"></script>
 </body>
 </html>
