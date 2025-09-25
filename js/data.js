@@ -1063,6 +1063,37 @@ async function saveSingleContact(contact) {
 }
 
 // ミーティングを分散形式で保存
+
+// 連絡先を分散形式で保存
+async function saveContactsDistributed() {
+    try {
+        // フォルダがない場合は作成
+        if (!folderStructure.contacts) {
+            folderStructure.contacts = await getOrCreateFolder('contacts', folderStructure.root);
+        }
+        if (!Array.isArray(contacts)) {
+            console.warn('contacts が配列ではありません。保存をスキップします。');
+            return;
+        }
+        // 各連絡先を個別ファイルに保存
+        for (const contact of contacts) {
+            if (!contact || !contact.id) continue;
+            await saveSingleContact(contact);
+            // インデックス更新（最終更新時刻を付与）
+            if (typeof contactsIndex === 'object' && contactsIndex) {
+                contactsIndex[contact.id] = {
+                    id: contact.id,
+                    lastUpdated: (contact.updatedAt || new Date().toISOString())
+                };
+            }
+        }
+        // インデックスを保存
+        await saveContactsIndex();
+    } catch (e) {
+        console.error('saveContactsDistributed 保存エラー:', e);
+        throw e;
+    }
+}
 async function saveMeetingsDistributed() {
     // 連絡先別にミーティングをグループ化
     const meetingsByContact = {};
