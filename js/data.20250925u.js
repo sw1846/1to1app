@@ -1,9 +1,8 @@
-/* ===== 1to1app U build required JS (2025-09-25U3) =====
-   - AppData + initializeGoogleAPI / initializeGIS / handleAuthClick / setProgressHandler
-   - FedCM 有効 (use_fedcm_for_prompt: true)
-   - gapi / GIS の自動ローダー & 順序待ち
-   - 同時要求/二重初期化ガード
-   - Drive フォルダ操作ユーティリティ（ensureFolderStructureByName 等）追加
+/* ===== 1to1app U build required JS (2025-09-25U4) =====
+   - FedCM 有効 / gapi・GIS 自動ローダー
+   - 二重初期化/同時要求ガード
+   - Drive helpers（ensureFolderStructureByName 等）
+   - ★ 成否イベント発火：document へ 'gis:token' / 'gis:error'
 */
 (function(global){
   'use strict';
@@ -12,7 +11,7 @@
     gisReady: false,
     tokenInFlight: false,
     tokenClient: null,
-    progress: function(){},   // main.js から進捗を受けるためのコールバック
+    progress: function(){},
     gisScriptRequested: false,
     gapiScriptRequested: false
   };
@@ -30,8 +29,9 @@
       return scopes.split(' ').indexOf(needle) >= 0;
     }catch(e){ return false; }
   }
+  function btns(){ return Array.prototype.slice.call(document.querySelectorAll('#googleSignInBtn, [data-role="google-signin"], button[onclick*="handleAuthClick"]')); }
+  function setBtnsDisabled(v){ try{ btns().forEach(function(b){ b.disabled=!!v; b.dataset.busy=v?'1':''; }); }catch(e){} }
 
-  // --- loader: GIS ---
   function ensureGisScript(){
     try{
       if(global.google && global.google.accounts && global.google.accounts.oauth2) return true;
@@ -47,15 +47,13 @@
         s.src = 'https://accounts.google.com/gsi/client';
         s.async = true;
         s.defer = true;
-        s.onload = function(){ log('GIS スクリプト読込完了'); };
+        s.onload = function(){ log('gapi スクリプト読込完了'); };
         document.head.appendChild(s);
       }
       STATE.gisScriptRequested = true;
       return false;
     }catch(e){ return false; }
   }
-
-  // --- loader: gapi ---
   function ensureGapiScript(){
     try{
       if(global.gapi && typeof gapi.load === 'function') return true;
@@ -79,7 +77,6 @@
     }catch(e){ return false; }
   }
 
-  // --- gapi client init ---
   function ensureGapiClient(){
     return new Promise(function(resolve){
       STATE.progress('gapi:init:start');
@@ -114,7 +111,6 @@
     });
   }
 
-  // --- token client init ---
   function __initTokenClientInternal(){
     if(STATE.tokenClient){ return true; }
     if(!(global.google && google.accounts && google.accounts.oauth2)){ return false; }
@@ -130,7 +126,7 @@
     STATE.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: cid.trim(),
       scope: scopes,
-      use_fedcm_for_prompt: true,   // 3rd party Cookie 無しでも通る構成
+      use_fedcm_for_prompt: true,
       callback: function(resp){
         STATE.tokenInFlight = false;
         log('token resp', resp);
@@ -139,12 +135,16 @@
             gapi.client.setToken({ access_token: resp.access_token });
           }
           setStatus('サインイン済み');
+          document.dispatchEvent(new CustomEvent('gis:token', {detail: resp}));
         }catch(e){}
+        setBtnsDisabled(false);
       },
       error_callback: function(err){
         STATE.tokenInFlight = false;
         console.error('[GIS] error:', err);
+        document.dispatchEvent(new CustomEvent('gis:error', {detail: err}));
         alert('[GIS ERROR] ' + (err && (err.error || err.type || err.message) || 'unknown'));
+        setBtnsDisabled(false);
       },
       prompt: 'consent'
     });
@@ -152,7 +152,6 @@
     log('GIS 初期化完了');
     return true;
   }
-
   function __initTokenClientWithRetry(cb){
     if(__initTokenClientInternal()){ cb && cb(true); return; }
     ensureGisScript();
@@ -164,7 +163,6 @@
     })();
   }
 
-  // --- Drive helpers ---
   function _ensureReady(){
     if(!(global.gapi && gapi.client && STATE.gapiReady)){
       throw new Error('gapi client not ready');
@@ -191,7 +189,6 @@
       supportsAllDrives: true
     }).then(function(r){ return r.result; });
   }
-
   function getOrCreateFolderId(name, parentId){
     _ensureReady();
     if(!hasScope('https://www.googleapis.com/auth/drive.file')){
@@ -207,45 +204,32 @@
       return _createFolder(name, parentId).then(function(obj){ return obj.id; });
     });
   }
-
   function ensureFolderStructureByName(path, options){
     _ensureReady();
     options = options || {};
     var parts = Array.isArray(path) ? path.slice() : String(path||'').split('/').filter(Boolean);
     if(parts.length===0){ return Promise.reject(new Error('path is empty')); }
     var currentParent = options.rootId || 'root';
-    var createdAny = false;
     var ids = [];
-
     function step(){
-      if(parts.length===0){ return Promise.resolve({id: currentParent, created: createdAny, pathIds: ids}); }
+      if(parts.length===0){ return Promise.resolve({id: currentParent, pathIds: ids}); }
       var name = parts.shift();
       return getOrCreateFolderId(name, currentParent).then(function(id){
         ids.push(id);
-        if(id === 'insufficient_scope'){ throw new Error('insufficient_scope'); }
-        if(!id){ throw new Error('failed to resolve id for "'+name+'"'); }
         currentParent = id;
         return step();
-      }).catch(function(err){
-        // surface friendly message
-        if(err && err.code === 'insufficient_scope'){
-          var msg = 'Driveフォルダ作成には drive.file スコープが必要です。OAuth同意画面のスコープに追加し、APP_CONFIG.SCOPES にも加えてください。';
-          alert(msg);
-        }
-        throw err;
       });
     }
     return step();
   }
 
-  // --- public API ---
+  // public API
   var AppData = {
     initializeGoogleAPI: function(){ return ensureGapiClient(); },
     initializeGIS: function(){ __initTokenClientWithRetry(); },
-    setAuthenticated: function(v){ /* compatibility no-op */ },
+    setAuthenticated: function(v){ /* no-op */ },
     setProgressHandler: function(fn){ STATE.progress = (typeof fn==='function') ? fn : function(){}; },
 
-    // New public helpers for main.js
     getOrCreateFolderId: getOrCreateFolderId,
     ensureFolderStructureByName: ensureFolderStructureByName
   };
@@ -255,6 +239,7 @@
   global.initializeGIS = function(){ return AppData.initializeGIS(); };
   global.handleAuthClick = function(){
     try{
+      setBtnsDisabled(true);
       if(STATE.tokenClient){
         if(STATE.tokenInFlight){ console.warn('token 要求中'); return; }
         STATE.tokenInFlight = true;
@@ -262,22 +247,21 @@
         return;
       }
       __initTokenClientWithRetry(function(ok){
-        if(!ok){ console.warn('tokenClient 初期化失敗'); return; }
+        if(!ok){ console.warn('tokenClient 初期化失敗'); setBtnsDisabled(false); return; }
         if(STATE.tokenInFlight){ console.warn('token 要求中'); return; }
         STATE.tokenInFlight = true;
         try{ STATE.tokenClient.requestAccessToken({ prompt: 'consent' }); }
-        catch(e){ STATE.tokenInFlight = false; console.error(e); }
+        catch(e){ STATE.tokenInFlight = false; setBtnsDisabled(false); console.error(e); }
       });
     }catch(e){
       STATE.tokenInFlight = false;
+      setBtnsDisabled(false);
       console.error(e);
     }
   };
 
-  // --- build marker ---
-  (function(g){ g.__BUILD_ID__='2025-09-25U3'; })(global);
+  (function(g){ g.__BUILD_ID__='2025-09-25U4'; })(global);
 
-  // proactive load
   ensureGisScript();
   ensureGapiScript();
 })(window);

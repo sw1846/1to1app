@@ -1,106 +1,72 @@
-/* =========================================================
- * main.js（初期化＋進捗ログ＋メモリ監視＋フォルダ構成＋データ読込）
- * ========================================================= */
-(function(global){
+/* ===== 1to1app main.js (U4) ===== */
+(function(){
   'use strict';
-  if(global.__APP_MAIN_INITED__) return;
-  global.__APP_MAIN_INITED__ = true;
+  function log(){ console.log.apply(console, ['[main]'].concat([].slice.call(arguments))); }
+  function qs(sel){ return document.querySelector(sel); }
+  function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+  function setStatus(t){ var el=qs('#statusText'); if(el) el.textContent=t; }
 
-  function log(...a){ try{ console.log('[main]', ...a);}catch(e){} }
-  function setStatus(t){ const el = document.getElementById('statusText'); if(el) el.textContent = t; }
+  function hideSignin(){
+    qsa('#googleSignInBtn, [data-role="google-signin"], button[onclick*="handleAuthClick"]').forEach(function(b){
+      b.style.display='none';
+    });
+  }
 
-  function ensureAppData(){ if(!global.AppData){ console.error('[main] AppData 未定義: data.js の読み込みや構文を確認してください'); return false;} return true; }
-
-  function wireAuthButtons(){
-    const authBtn = document.getElementById('authorizeBtn');
-    const outBtn  = document.getElementById('signoutBtn');
-    if(authBtn){
-      authBtn.addEventListener('click', async ()=>{
-        try{
-          if(!ensureAppData()) throw new Error('AppData missing');
-          await AppData.initializeGoogleAPI();
-          await AppData.initializeGIS();
-          // Interactive token
-          await new Promise((resolve,reject)=>{
-            google.accounts.oauth2.initTokenClient({
-              client_id: (window.APP_CONFIG && APP_CONFIG.GOOGLE_CLIENT_ID) || (window.DRIVE_CONFIG && DRIVE_CONFIG.CLIENT_ID),
-              scope: (window.APP_CONFIG && APP_CONFIG.GOOGLE_SCOPES) || (window.DRIVE_CONFIG && DRIVE_CONFIG.SCOPES),
-              callback: ()=> resolve()
-            }).requestAccessToken({prompt:'consent'});
-          });
-          AppData.setAuthenticated(true);
-          document.getElementById('authorizeBtn')?.classList.add('hidden');
-          document.getElementById('signoutBtn')?.classList.remove('hidden');
-          setStatus('サインイン済み');
-          await afterSignedIn();
-        }catch(e){
-          console.error(e);
-          setStatus('サインイン失敗');
-        }
-      });
+  function ensureAppData(){
+    if(typeof window.AppData !== 'object'){
+      log('AppData 未定義: data.js の読み込みや構文を確認してください');
+      throw new Error('AppData missing');
     }
-    if(outBtn){
-      outBtn.addEventListener('click', async ()=>{
-        try{ google.accounts.oauth2.revoke(gapi.client.getToken()?.access_token || '', ()=>{}); }catch(e){}
-          if(!ensureAppData()) throw new Error('AppData missing');
-        AppData.setAuthenticated(false);
-        document.getElementById('authorizeBtn')?.classList.remove('hidden');
-        document.getElementById('signoutBtn')?.classList.add('hidden');
-        setStatus('サインアウトしました');
-      });
+    if(typeof AppData.setProgressHandler === 'function'){
+      AppData.setProgressHandler(function(tag){ log('[progress]', tag); });
     }
   }
 
-  async function afterSignedIn(){
-    try{
-      setStatus('フォルダ構成を確認中...');
-      const rootName = (window.DRIVE_CONFIG && DRIVE_CONFIG.ROOT_FOLDER_NAME) || '1to1meeting';
-      const struct = await AppData.ensureFolderStructureByName(rootName);
-
-      // 既存のグローバル folderStructure にも流し込む
-      if (typeof window.folderStructure !== 'undefined'){
-        window.folderStructure.root = struct.root;
-        window.folderStructure.index = struct.index;
-        window.folderStructure.contacts = struct.contacts;
-        window.folderStructure.meetings = struct.meetings;
-        window.folderStructure.attachments = struct.attachments;
-        window.folderStructure.attachmentsContacts = struct.attachmentsContacts;
-        window.folderStructure.attachmentsMeetings = struct.attachmentsMeetings;
-      }
-      await AppData.selectExistingFolder(struct);
-
-      setStatus('データを読み込み中...');
-      const result = await AppData.loadAllData();
-      if(result){
-        // グローバル配列に反映（既存UI互換）
-        if(Array.isArray(result.contacts)) window.contacts = result.contacts;
-        if(Array.isArray(result.meetings)) window.meetings = result.meetings;
-        if(result.options && typeof result.options === 'object') window.options = Object.assign(window.options||{}, result.options);
-      }
-      // UI初期描画
-      if (typeof renderContacts === 'function') renderContacts();
-      setStatus('準備完了');
-      log('初期化完了');
-    }catch(e){
+  function listMyDriveSample(){
+    if(!(window.gapi && gapi.client)){ return Promise.resolve(); }
+    return gapi.client.drive.files.list({
+      pageSize: 5,
+      fields: 'files(id,name,modifiedTime)',
+      orderBy: 'modifiedTime desc',
+      spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    }).then(function(resp){
+      var files = (resp.result && resp.result.files) || [];
+      log('Drive sample files:', files);
+    }).catch(function(e){
       console.error(e);
-      setStatus('初期化エラー: ' + (e?.message||e));
+    });
+  }
+
+  function afterSignedIn(tokenResp){
+    hideSignin();
+    setStatus('サインイン済み');
+    // 必要な初期化を順次呼ぶ（存在する場合のみ）
+    if(window.AppData && typeof AppData.ensureFolderStructureByName === 'function'){
+      AppData.ensureFolderStructureByName(['PlaceOn','1to1']).catch(function(e){ console.warn('ensureFolderStructureByName:', e.message||e); });
     }
+    listMyDriveSample();
   }
 
-  async function boot(){
+  document.addEventListener('gis:token', function(ev){
+    log('token captured');
+    afterSignedIn(ev.detail);
+  });
+  document.addEventListener('gis:error', function(ev){
+    console.error(ev.detail);
+  });
+
+  document.addEventListener('DOMContentLoaded', function boot(){
     log('DOM読み込み完了 - 初期化開始...');
-    wireAuthButtons();
-    if(!ensureAppData()){ setStatus('初期化エラー: AppData 未定義'); return; }
-    AppData.setProgressHandler((msg)=> log('[progress]', msg));
-
-    // 事前初期化（自動ロード）
-    if(global.gapi) await AppData.initializeGoogleAPI();
-    if(global.google && global.google.accounts) AppData.initializeGIS();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
-})(window);
+    try{
+      ensureAppData();
+    }catch(e){ console.error(e); return; }
+    // gapi の discovery をロード（重複は AppData 側で保護）
+    if(typeof window.initializeGoogleAPI === 'function'){
+      window.initializeGoogleAPI();
+    }
+    // 旧UIから残る「ログイン」ボタンがあれば、クリック時は data.js の handleAuthClick が呼ばれます。
+    // ここでは追加の onClick は付与しません（重複防止）。
+  });
+})();
