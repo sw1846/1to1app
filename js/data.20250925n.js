@@ -144,13 +144,58 @@
   global.AppData = AppData;
   global.initializeGoogleAPI = function(){ return AppData.initializeGoogleAPI(); };
   global.initializeGIS = function(){ return AppData.initializeGIS(); };
-  global.handleAuthClick = function(){
-    try{
-      if(global.__tokenClient){ global.__tokenClient.requestAccessToken({ prompt: 'consent' }); }
-      else { console.warn('tokenClient 未初期化'); }
-    }catch(e){ console.error(e); }
-  };
+  
+function __showPopupHelpOverlay(msg){
+  try{
+    var id='popupHelpOverlay';
+    if(document.getElementById(id)){ return; }
+    var el=document.createElement('div');
+    el.id=id;
+    el.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    el.innerHTML = '<div style="max-width:720px;width:100%;background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.3);font-family:sans-serif;">'
+      + '<h2 style="margin:0 0 8px 0;font-size:20px;">Google認証ポップアップが閉じられました</h2>'
+      + '<p style="margin:6px 0 12px 0;color:#444;">' + (msg||'ブラウザ設定や拡張の影響でポップアップが閉じられた可能性があります。') + '</p>'
+      + '<ol style="margin:0 0 12px 20px;line-height:1.6;color:#333;">'
+      + '<li>このサイト <code>https://sw1846.github.io</code> でポップアップを許可</li>'
+      + '<li><code>accounts.google.com</code> のサードパーティCookieを一時的に許可</li>'
+      + '<li>広告ブロッカー/トラッキング防止（Brave/拡張）をオフにして再試行</li>'
+      + '</ol>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">'
+      + '  <button id="popupHelpRetry" style="padding:8px 14px;border-radius:8px;border:1px solid #0a66c2;background:#0a66c2;color:#fff;cursor:pointer;">再試行</button>'
+      + '  <button id="popupHelpClose" style="padding:8px 14px;border-radius:8px;border:1px solid #999;background:#fff;color:#333;cursor:pointer;">閉じる</button>'
+      + '</div>'
+      + '</div>';
+    document.body.appendChild(el);
+    document.getElementById('popupHelpClose').onclick=function(){ el.remove(); };
+    document.getElementById('popupHelpRetry').onclick=function(){
+      el.remove();
+      try{ if(window.__tokenClient){ window.__tokenClient.requestAccessToken({ prompt: 'consent' }); } }catch(e){ console.error(e); }
+    };
+  }catch(e){ console.warn('overlay failed', e); }
+}
+global.handleAuthClick = function(){
+  try{
+    if(global.__tokenClient){
+      var done=false;
+      var timer=setTimeout(function(){ if(!done){ console.warn('[GIS] slow popup response'); } }, 5000);
+      global.__tokenClient.requestAccessToken({
+        prompt: 'consent',
+        callback: function(resp){ done=true; clearTimeout(timer); console.log('[GIS] token resp(cb):', resp); if(resp && resp.access_token){ setStatus('サインイン済み'); } }
+      });
+    } else {
+      console.warn('tokenClient 未初期化');
+      __showPopupHelpOverlay('認証モジュールが初期化されていません。ページを再読み込みしてください。');
+    }
+  }catch(e){
+    console.error(e);
+    if(e && (e.type==='popup_closed' || /Popup window closed/i.test(e.message||''))){
+      __showPopupHelpOverlay('ポップアップが閉じられました。ブラウザ設定をご確認の上、再試行してください。');
+    } else {
+      __showPopupHelpOverlay('想定外のエラー: ' + (e && e.message ? e.message : e));
+    }
+  }
+};
 
   // Build marker
-  (function(g){ g.__BUILD_ID__='2025-09-25N'; })(global);
+  (function(g){ g.__BUILD_ID__='2025-09-25O'; })(global);
 })(window);
