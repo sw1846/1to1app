@@ -310,7 +310,7 @@ loadSystemConfig();
   try{
     if (window.DRIVE_CONFIG && window.DRIVE_CONFIG.CLIENT_ID) {
       if (!window.APP_CONFIG) window.APP_CONFIG = {};
-      if (!window.APP_CONFIG.GOOGLE_CLIENT_ID || window.APP_CONFIG.GOOGLE_CLIENT_ID.includes('<<PUT_YOUR_GIS_CLIENT_ID_HERE>>')) {
+      if (!window.APP_CONFIG.GOOGLE_CLIENT_ID || window.APP_CONFIG.GOOGLE_CLIENT_ID.includes('938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com')) {
         window.APP_CONFIG.GOOGLE_CLIENT_ID = window.DRIVE_CONFIG.CLIENT_ID;
       }
       if (!window.APP_CONFIG.GOOGLE_SCOPES) {
