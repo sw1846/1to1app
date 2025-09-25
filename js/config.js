@@ -1,6 +1,6 @@
 // === Google OAuth 設定（必ず自分の Client ID を設定してください） ===
 window.APP_CONFIG = window.APP_CONFIG || {};
-window.APP_CONFIG.GOOGLE_CLIENT_ID = window.APP_CONFIG.GOOGLE_CLIENT_ID || '38239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
+window.APP_CONFIG.GOOGLE_CLIENT_ID = window.APP_CONFIG.GOOGLE_CLIENT_ID || '938239904261-vt7rego8tmo4vhhcjp3fadca25asuh73.apps.googleusercontent.com';
 window.APP_CONFIG.GOOGLE_SCOPES = window.APP_CONFIG.GOOGLE_SCOPES || 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
 
 // config.js - 分散ファイル構造対応のグローバル変数と設定
