@@ -9,12 +9,15 @@
   function log(...a){ try{ console.log('[main]', ...a);}catch(e){} }
   function setStatus(t){ const el = document.getElementById('statusText'); if(el) el.textContent = t; }
 
+  function ensureAppData(){ if(!global.AppData){ console.error('[main] AppData 未定義: data.js の読み込みや構文を確認してください'); return false;} return true; }
+
   function wireAuthButtons(){
     const authBtn = document.getElementById('authorizeBtn');
     const outBtn  = document.getElementById('signoutBtn');
     if(authBtn){
       authBtn.addEventListener('click', async ()=>{
         try{
+          if(!ensureAppData()) throw new Error('AppData missing');
           await AppData.initializeGoogleAPI();
           await AppData.initializeGIS();
           // Interactive token
@@ -39,6 +42,7 @@
     if(outBtn){
       outBtn.addEventListener('click', async ()=>{
         try{ google.accounts.oauth2.revoke(gapi.client.getToken()?.access_token || '', ()=>{}); }catch(e){}
+          if(!ensureAppData()) throw new Error('AppData missing');
         AppData.setAuthenticated(false);
         document.getElementById('authorizeBtn')?.classList.remove('hidden');
         document.getElementById('signoutBtn')?.classList.add('hidden');
@@ -86,6 +90,7 @@
   async function boot(){
     log('DOM読み込み完了 - 初期化開始...');
     wireAuthButtons();
+    if(!ensureAppData()){ setStatus('初期化エラー: AppData 未定義'); return; }
     AppData.setProgressHandler((msg)=> log('[progress]', msg));
 
     // 事前初期化（自動ロード）

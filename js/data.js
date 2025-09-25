@@ -445,20 +445,44 @@ async function ensureFolderStructureByName(rootName){
   }
 
   // ========================= 初期化/フォルダ設定/データ読込 =========================
-  async 
-function initializeGoogleAPI(){
+  async function initializeGoogleAPI(){
     if(STATE.isInitialized){ return; }
     log('Google API初期化開始（APIキーなし）...');
     try{
       if(global.gapi && gapi.load){
-        var loaded = false;
-        var done = (ok)=>{
-          if(loaded) return;
-          loaded = true;
-          STATE.isInitialized = true;
-          log('Google API初期化完了（認証待機中）');
-        };
-        gapi.load('client', {callback: done, onerror: ()=>{ console.warn('gapi.load(client) 失敗'); done(false); }, timeout: 5000, ontimeout: ()=>{ console.warn('gapi.load(client) タイムアウト'); done(false);} });
+        let settled = false;
+        await new Promise((resolve) => {
+          const timer = setTimeout(() => {
+            if (!settled) {
+              console.warn('gapi.load(client) タイムアウト');
+              settled = true;
+              resolve();
+            }
+          }, 10000);
+          try {
+            gapi.load('client', {
+              callback: () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve();
+              },
+              onerror: () => {
+                if (settled) return;
+                console.warn('gapi.load(client) でエラー');
+                settled = true;
+                clearTimeout(timer);
+                resolve();
+              }
+            });
+          } catch(e) {
+            console.warn('gapi.load(client) 呼び出し例外:', e);
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+        STATE.isInitialized = true;
+        log('Google API初期化完了（認証待機中）');
       } else {
         console.warn('gapi がまだロードされていませんが続行します。');
         STATE.isInitialized = true;
@@ -475,8 +499,7 @@ function initializeGoogleAPI(){
     log('Google API初期化完了（認証待機中）');
   }
 
-  async 
-function initializeGIS(){
+  async function initializeGIS(){
     log('Google Identity Services初期化開始...');
     __initTokenClient();
     log('Google Identity Services初期化完了');
