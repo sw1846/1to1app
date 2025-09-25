@@ -903,10 +903,6 @@ async function loadContactsDirectly() {
         if (typeof saveContactsIndex === 'function') await saveContactsIndex();
     } catch (e) { console.error('直接検索エラー:', e); }
 }
-    } catch (error) {
-        console.error('直接ファイル検索エラー:', error);
-    }
-}
 
 // ミーティングデータの直接読み込み
 async function loadMeetingsDirectly() {
