@@ -1,5 +1,5 @@
 
-/* ===== Minimal GIS + Drive bootstrap (S build) ===== */
+/* ===== Minimal GIS + Drive bootstrap (T build / FedCM enabled) ===== */
 (function(global){
   'use strict';
   var STATE = {
@@ -7,8 +7,9 @@
     gisReady: false,
     tokenInFlight: false,
     tokenClient: null,
-    progress: function(){}, // progress handler
-    gisScriptRequested: false
+    progress: function(){},
+    gisScriptRequested: false,
+    gapiScriptRequested: false
   };
 
   function log(){ try{ console.log.apply(console, ['[data]'].concat([].slice.call(arguments))); }catch(e){} }
@@ -41,11 +42,47 @@
     }catch(e){ return false; }
   }
 
+  function ensureGapiScript(){
+    try{
+      if(global.gapi && typeof gapi.load === 'function') return true;
+      if(STATE.gapiScriptRequested) return false;
+      var exists = false;
+      var scripts = document.getElementsByTagName('script');
+      for(var i=0;i<scripts.length;i++){
+        var src = scripts[i].getAttribute('src') || '';
+        if(src.indexOf('https://apis.google.com/js/api.js') === 0){ exists = true; break; }
+      }
+      if(!exists){
+        var s = document.createElement('script');
+        s.src = 'https://apis.google.com/js/api.js';
+        s.async = true;
+        s.defer = true;
+        s.onload = function(){ log('gapi スクリプト読込完了'); };
+        document.head.appendChild(s);
+      }
+      STATE.gapiScriptRequested = true;
+      return false;
+    }catch(e){ return false; }
+  }
+
   function ensureGapiClient(){
     return new Promise(function(resolve){
       STATE.progress('gapi:init:start');
       if (STATE.gapiReady){ STATE.progress('gapi:init:cached'); return resolve(); }
-      if (!(global.gapi && gapi.load)){ STATE.progress('gapi:init:skip'); return resolve(); } // api.js は defer で読み込み済み前提
+      if (!(global.gapi && gapi.load)){
+        ensureGapiScript();
+        // poll for gapi.load
+        var tries=0, max=30;
+        (function waitGapi(){
+          if(global.gapi && gapi.load){
+            // proceed
+            return ensureGapiClient().then(resolve);
+          }
+          if(++tries>=max){ STATE.progress('gapi:init:skip'); return resolve(); }
+          setTimeout(waitGapi, 100);
+        })();
+        return;
+      }
       try{
         gapi.load('client', {
           callback: function(){
@@ -85,6 +122,7 @@
     STATE.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: cid.trim(),
       scope: scopes,
+      use_fedcm_for_prompt: true,  // ★ FedCMを使用（3rd-party Cookie不要）
       callback: function(resp){
         STATE.tokenInFlight = false;
         log('token resp', resp);
@@ -108,14 +146,13 @@
   }
 
   function __initTokenClientWithRetry(cb){
-    // attempt immediately; if google not ready, ensure script and retry up to ~3s
     if(__initTokenClientInternal()){ cb && cb(true); return; }
     ensureGisScript();
-    var tries = 0, max = 15;
+    var tries = 0, max = 30;
     (function tick(){
       if(__initTokenClientInternal()){ cb && cb(true); return; }
       if(++tries >= max){ console.warn('GIS ライブラリ未ロード（timeout）'); cb && cb(false); return; }
-      setTimeout(tick, 200);
+      setTimeout(tick, 100);
     })();
   }
 
@@ -137,7 +174,6 @@
         STATE.tokenClient.requestAccessToken({ prompt: 'consent' });
         return;
       }
-      // Not initialized yet → init then request
       __initTokenClientWithRetry(function(ok){
         if(!ok){ console.warn('tokenClient 初期化失敗'); return; }
         if(STATE.tokenInFlight){ console.warn('token 要求中'); return; }
@@ -151,8 +187,9 @@
   };
 
   // Build marker
-  (function(g){ g.__BUILD_ID__='2025-09-25S'; })(global);
+  (function(g){ g.__BUILD_ID__='2025-09-25T'; })(global);
 
-  // Proactively load GIS script if missing
+  // Proactively load scripts if missing
   ensureGisScript();
+  ensureGapiScript();
 })(window);
