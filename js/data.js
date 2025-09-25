@@ -214,7 +214,7 @@
   }
 
   // ========================= フォルダ作成/取得ユーティリティ =========================
-const MIME_FOLDER = 'application/vnd.google-apps.folder';
+// MIME_FOLDER is defined earlier; using existing constant.
 
 async function driveCreateFolder(name, parentId=null){
   await ensureDriveLoaded();
