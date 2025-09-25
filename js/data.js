@@ -11,6 +11,47 @@
  * ========================================================= */
 (function(global){
   'use strict';
+  // ===== Google OAuth (GIS) Token Client =====
+  let __tokenClient = null;
+  function __initTokenClient(){
+    try{
+      const cfg = (global.APP_CONFIG || {});
+      const clientId = cfg.GOOGLE_CLIENT_ID || (global.GOOGLE_CLIENT_ID) || '';
+      const scopes = cfg.GOOGLE_SCOPES || (global.GOOGLE_SCOPES) || 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
+      if(!clientId){
+        console.warn('GOOGLE_CLIENT_ID が設定されていません。config.js の APP_CONFIG.GOOGLE_CLIENT_ID を設定してください。');
+        return null;
+      }
+      if(!(global.google && google.accounts && google.accounts.oauth2)){
+        console.warn('Google Identity Services がまだロードされていません。');
+        return null;
+      }
+      __tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: scopes,
+        callback: (tokenResponse)=>{
+          if(global.gapi && gapi.client && tokenResponse && tokenResponse.access_token){
+            gapi.client.setToken({access_token: tokenResponse.access_token});
+            setAuthenticated(true);
+            try{
+              const authBtn = document.getElementById('authorizeBtn');
+              const outBtn = document.getElementById('signoutBtn');
+              if(authBtn) authBtn.style.display = 'none';
+              if(outBtn) outBtn.style.display = '';
+            }catch(e){}
+            console.log('GIS: アクセストークン取得完了');
+          } else {
+            console.warn('GIS: アクセストークンを設定できませんでした。');
+          }
+        }
+      });
+      return __tokenClient;
+    }catch(e){
+      console.error('GISトークンクライアント初期化エラー:', e);
+      return null;
+    }
+  }
+
 
   // ========================= 共通ユーティリティ =========================
   const SLEEP = (ms)=> new Promise(r=> setTimeout(r, ms));
@@ -330,19 +371,43 @@
   }
 
   // ========================= 初期化/フォルダ設定/データ読込 =========================
-  async function initializeGoogleAPI(){
+  async 
+function initializeGoogleAPI(){
     if(STATE.isInitialized){ return; }
+    log('Google API初期化開始（APIキーなし）...');
+    try{
+      if(global.gapi && gapi.load){
+        var loaded = false;
+        var done = (ok)=>{
+          if(loaded) return;
+          loaded = true;
+          STATE.isInitialized = true;
+          log('Google API初期化完了（認証待機中）');
+        };
+        gapi.load('client', {callback: done, onerror: ()=>{ console.warn('gapi.load(client) 失敗'); done(false); }, timeout: 5000, ontimeout: ()=>{ console.warn('gapi.load(client) タイムアウト'); done(false);} });
+      } else {
+        console.warn('gapi がまだロードされていませんが続行します。');
+        STATE.isInitialized = true;
+      }
+    }catch(e){
+      console.warn('gapi 初期化時に例外:', e);
+      STATE.isInitialized = true;
+    }
+  }
+
     log('Google API初期化開始（APIキーなし）...');
     // gapi のロードは HTML 側（script タグ）で実施済みを想定
     STATE.isInitialized = true;
     log('Google API初期化完了（認証待機中）');
   }
 
-  async function initializeGIS(){
+  async 
+function initializeGIS(){
     log('Google Identity Services初期化開始...');
-    // HTML側で token client 作成済み想定。ここではログのみ。
+    __initTokenClient();
     log('Google Identity Services初期化完了');
   }
+
 
   function setAuthenticated(v){ STATE.isAuthenticated = !!v; }
 
@@ -398,6 +463,48 @@
     rebuildIndexes,
   };
 
-  global.AppData = AppData;
+  
+// ======= グローバル関数（HTML の onload / onclick 互換のため） =======
+try{
+  global.initializeGoogleAPI = ()=> AppData.initializeGoogleAPI();
+  global.initializeGIS = ()=> AppData.initializeGIS();
+  global.handleAuthClick = ()=>{
+    if(!__tokenClient){ __initTokenClient(); }
+    if(__tokenClient){
+      try{
+        __tokenClient.requestAccessToken({prompt: 'consent'});
+      }catch(e){
+        console.error('アクセストークン要求エラー:', e);
+      }
+    } else {
+      console.warn('GIS トークンクライアントが未初期化です。');
+    }
+  };
+  global.handleSignoutClick = ()=>{
+    try{
+      const t = (global.gapi && gapi.client) ? gapi.client.getToken() : null;
+      if(t && t.access_token && global.google && google.accounts && google.accounts.oauth2){
+        google.accounts.oauth2.revoke(t.access_token, ()=>{
+          console.log('トークンを取り消しました');
+        });
+      }
+      if(global.gapi && gapi.client){ gapi.client.setToken(null); }
+    }catch(e){
+      console.warn('サインアウト処理でエラー:', e);
+    }
+    setAuthenticated(false);
+    try{
+      const authBtn = document.getElementById('authorizeBtn');
+      const outBtn = document.getElementById('signoutBtn');
+      if(authBtn) authBtn.style.display = '';
+      if(outBtn) outBtn.style.display = 'none';
+    }catch(e){}
+  };
+}catch(e){
+  console.warn('グローバル関数のエクスポートに失敗:', e);
+}
+
+
+global.AppData = AppData;
 
 })(window);

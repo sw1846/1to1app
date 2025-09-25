@@ -1,3 +1,8 @@
+// === Google OAuth 設定（必ず自分の Client ID を設定してください） ===
+window.APP_CONFIG = window.APP_CONFIG || {};
+window.APP_CONFIG.GOOGLE_CLIENT_ID = window.APP_CONFIG.GOOGLE_CLIENT_ID || '<<PUT_YOUR_GIS_CLIENT_ID_HERE>>';
+window.APP_CONFIG.GOOGLE_SCOPES = window.APP_CONFIG.GOOGLE_SCOPES || 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata';
+
 // config.js - 分散ファイル構造対応のグローバル変数と設定
 
 // グローバル変数
