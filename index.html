@@ -17,6 +17,7 @@
                 <button class="btn btn-success" id="authorizeBtn" onclick="handleAuthClick()">
                     🔐 Googleでログイン
                 </button>
+<button class="btn" onclick="initializeCodeClient(); handleAuthRedirectClick()">Googleでログイン（リダイレクト方式・ポップアップ回避）</button>
                 <button class="btn btn-danger" id="signoutBtn" style="display: none;" onclick="handleSignoutClick()">
                     🚪 ログアウト
                 </button>
@@ -495,7 +496,7 @@
     <script src="js/utils.js"></script>
     
     <!-- 次にデータ管理（Google API関連を含む） -->
-    <script src="js/data.20250925n.js"></script>
+    <script src="js/data.20250925p.js"></script>
     <script>(function(){console.log("[marker] BUILD", window.__BUILD_ID__);})();</script>
     
     <!-- 機能別のスクリプト -->
