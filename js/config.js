@@ -39,15 +39,20 @@ let metadata = {
     createdAt: null
 };
 
-// Google Drive API関連（data.jsから移動）
-// 注意: これらの変数はdata.jsで初期化されます
-let tokenClient = null;
-let gapiInited = false;
-let gisInited = false;
-let currentFolderId = null;
-let accessToken = null;
+// Google Drive API関連（data.jsで定義・初期化）
+// 注意: ここでは再宣言しない。data.js 側の window.* を利用する。
+if (typeof window !== 'undefined') {
+    window.tokenClient = window.tokenClient || null;
+    window.gapiInited = window.gapiInited || false;
+    window.gisInited = window.gisInited || false;
+    window.currentFolderId = window.currentFolderId || null;
+    // Also expose as global var for non-module scripts
+    var currentFolderId = window.currentFolderId;
+    window.accessToken = window.accessToken || null;
+}
 
 // UI状態
+
 let currentContactId = null;
 let currentMeetingId = null;
 let currentView = 'card';
