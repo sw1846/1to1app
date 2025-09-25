@@ -903,6 +903,34 @@ async function loadContactsDirectly() {
         if (typeof saveContactsIndex === 'function') await saveContactsIndex();
     } catch (e) { console.error('直接検索エラー:', e); }
 }
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
+// [REMOVED stray top-level block]
 
 // ミーティングデータの直接読み込み
 async function loadMeetingsDirectly() {
@@ -1011,11 +1039,11 @@ async function saveAllData() {
 
 // 連絡先を分散形式で保存
 
-if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
+// [REMOVED top-level await saveContactsIndex()]
 
 // レガシーデータを分散形式に変換して保存
 
-if (typeof saveContactsIndex === 'function') { await saveContactsIndex(); }
+// [REMOVED top-level await saveContactsIndex()]
 
 // 単一連絡先の保存
 async function saveSingleContact(contact) {
