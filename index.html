@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="favicon.ico">
 </head>
-<body data-build="2025-09-25J">
+<body>
     <!-- ヘッダー -->
     <header class="header">
         <div class="header-content">
@@ -491,13 +491,12 @@
 
     <!-- JavaScript読み込み - 修正版の順序 -->
     <!-- まず設定と基本関数 -->
-    <script src="js/sw-unregister.js"></script>
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     
     <!-- 次にデータ管理（Google API関連を含む） -->
-    <script src="js/data.20250925l.js"></script>
-    <script>(function(){try{console.log("[marker] BUILD", window.__BUILD_ID__);}catch(e){console.log("[marker] no build id");}})();</script>
+    <script src="js/data.20250925m.js"></script>
+    <script>(function(){console.log("[marker] BUILD", window.__BUILD_ID__);})();</script>
     
     <!-- 機能別のスクリプト -->
     <script src="js/contacts.js"></script>
