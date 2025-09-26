@@ -348,4 +348,5 @@
     if(mt){ out.metadata = await downloadJsonById(mt.id); }
   }catch(e){ console.warn('metadata 読込失敗', e); }
   return out;
+}
 })(window);

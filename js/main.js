@@ -186,7 +186,6 @@
       }
     }
     // データをグローバルに反映
-    \1
     console.log('[main] contacts in payload:', window.contacts && window.contacts.length);
     try{ if(typeof updateFilters==='function') updateFilters(); }catch(e){ console.warn('updateFilters warn', e); }
     try{ if(typeof renderContacts==='function') renderContacts(); }catch(e){ console.warn('renderContacts warn', e); }

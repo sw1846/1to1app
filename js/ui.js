@@ -40,7 +40,6 @@ function closeModal(modalId) {
 }
 
 // 連絡先表示
-\1
   var list = getFilteredContacts();
   console.log('[ui] renderContacts count:', list && list.length);
 
