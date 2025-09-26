@@ -350,6 +350,11 @@ function clearReferrerFilter() {
 
 // フィルター更新
 function updateFilters() {
+    // options が未定義でも落ちないようにガード
+    const safeOptions = (window.options && typeof window.options === 'object') ? window.options : {};
+    const types = Array.isArray(safeOptions.types) ? safeOptions.types : [];
+    const affiliations = Array.isArray(safeOptions.affiliations) ? safeOptions.affiliations : [];
+    const industryInterests = Array.isArray(safeOptions.industryInterests) ? safeOptions.industryInterests : [];
     const typeSelect = document.getElementById('typeFilter');
     if (!typeSelect) return;
     
@@ -357,7 +362,7 @@ function updateFilters() {
     typeSelect.innerHTML = '<option value="">種別: すべて</option>';
     
     // ソート済みのオプションを追加
-    const sortedTypes = [...options.types].sort();
+    const sortedTypes = [...types].sort();
     sortedTypes.forEach(type => {
         const option = document.createElement('option');
         option.value = type;

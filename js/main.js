@@ -174,6 +174,21 @@
     }
     setStatus('インデックスを読み込み中...');
     var payload = await AppData.loadAllFromMigrated(folderId);
+
+    // 取得したペイロードをグローバルに反映（堅牢化）
+    window.contacts = Array.isArray(payload.contacts) ? payload.contacts
+      : (Array.isArray(payload.contacts && payload.contacts.items) ? payload.contacts.items
+      : (Array.isArray(payload.contacts && payload.contacts.list) ? payload.contacts.list
+      : (Array.isArray(payload.contacts && payload.contacts.data) ? payload.contacts.data : [])));
+    window.meetingsByContact = payload.meetings || payload.meetingsByContact || {};
+    window.meetings = [];
+    Object.keys(window.meetingsByContact).forEach(function(cid){
+      var arr = window.meetingsByContact[cid] || [];
+      for (var i=0; i<arr.length; i++) window.meetings.push(arr[i]);
+    });
+    window.searchIndex = payload.search || payload.searchIndex || {};
+    window.metadata = payload.metadata || {};
+    window.options = (window.metadata && window.metadata.options) ? window.metadata.options : (payload.options || {});
     // フォルダ構造を公開（保存/削除時に利用）
     window.folderStructure = payload.structure || {};
     if(window.folderStructure){

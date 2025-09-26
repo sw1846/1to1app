@@ -317,7 +317,7 @@
     if(f){
       var cj = await downloadJsonById(f);
       // allow array or {contacts:[...]}
-      out.contacts = Array.isArray(cj) ? cj : (Array.isArray(cj && cj.contacts) ? cj.contacts : []);
+      out.contacts = Array.isArray(cj) ? cj : (Array.isArray(cj && cj.contacts) ? cj.contacts : (Array.isArray(cj && cj.items) ? cj.items : (Array.isArray(cj && cj.list) ? cj.list : (Array.isArray(cj && cj.data) ? cj.data : []))));
     }
   }catch(e){ console.warn('contacts-index 読込失敗', e); }
   // meetings-index
