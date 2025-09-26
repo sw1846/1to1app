@@ -82,7 +82,7 @@ function getFilteredContacts() {
     const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     const typeFilterValue = typeFilter ? typeFilter.value : '';
 
-    return contacts.filter(contact => {
+    return (window.contacts||[]).filter(contact => {
         const matchesSearch = !searchQuery || 
             contact.name.toLowerCase().includes(searchQuery) ||
             (contact.company && contact.company.toLowerCase().includes(searchQuery)) ||
@@ -272,7 +272,7 @@ function renderContactTree(container, contactList) {
         }
         
         const referrerInFilteredList = contactList.some(c => c.name === contact.referrer);
-        const referrerExists = contacts.some(c => c.name === contact.referrer);
+        const referrerExists = (window.contacts||[]).some(c => c.name === contact.referrer);
         
         return !referrerInFilteredList || !referrerExists;
     });
@@ -658,7 +658,7 @@ async function handleDrop(e) {
         const contactId = draggedCard.dataset.contactId;
 
         // ステータス更新
-        const contact = contacts.find(c => c.id === contactId);
+        const contact = (window.contacts||[]).find(c => c.id === contactId);
         if (contact) {
             contact.status = newStatus;
             if (typeof saveAllData === 'function') {
@@ -856,7 +856,7 @@ async function saveStatuses() {
         
         if (originalStatus && newStatus && originalStatus !== newStatus) {
             // 該当するコンタクトのステータスを更新
-            contacts.forEach(contact => {
+            (window.contacts||[]).forEach(contact => {
                 if ((contact.status || '新規') === originalStatus) {
                     contact.status = newStatus;
                 }
@@ -867,7 +867,7 @@ async function saveStatuses() {
     // 削除されたステータスのコンタクトは最初のステータスに移動
     const deletedStatuses = options.statuses.filter(s => !newStatuses.includes(s));
     if (deletedStatuses.length > 0 && newStatuses.length > 0) {
-        contacts.forEach(contact => {
+        (window.contacts||[]).forEach(contact => {
             if (deletedStatuses.includes(contact.status || '新規')) {
                 contact.status = newStatuses[0];
             }

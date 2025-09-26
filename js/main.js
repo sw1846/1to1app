@@ -537,3 +537,17 @@
   window.showFolderSelectModal = showFolderSelectModal;
   
 })();
+
+  // サインアウト（簡易） - トークン無効化してリロード
+  window.handleSignoutClick = function(){
+    try{
+      if(window.google && google.accounts && google.accounts.oauth2){
+        var t = gapi && gapi.client && gapi.client.getToken && gapi.client.getToken();
+        var at = t && t.access_token;
+        if(at){ google.accounts.oauth2.revoke(at, function(){ /* noop */ }); }
+      }
+      if(gapi && gapi.client){ gapi.client.setToken(''); }
+    }catch(e){ console.warn('signout cleanup warn', e); }
+    try{ localStorage.clear(); sessionStorage.clear(); }catch(_){}
+    location.reload();
+  };
