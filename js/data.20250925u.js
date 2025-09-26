@@ -47,7 +47,7 @@
         s.src = 'https://accounts.google.com/gsi/client';
         s.async = true;
         s.defer = true;
-        s.onload = function(){ log('gapi スクリプト読込完了'); };
+        s.onload = function(){ log('GIS スクリプト読込完了'); };
         document.head.appendChild(s);
       }
       STATE.gisScriptRequested = true;

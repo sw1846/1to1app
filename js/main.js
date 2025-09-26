@@ -135,8 +135,32 @@
     if(modal) modal.remove();
   };
 
+
   // ========== Drive 読み込み（簡易） ==========
-  function listFilesInFolder(folderId, limit){
+  // 指定フォルダ直下のファイルをいくつか一覧表示（確認用）
+  async function listFilesInFolder(folderId, limit){
+    if(!(window.gapi && gapi.client && gapi.client.drive && gapi.client.drive.files)){
+      // gapi が未初期化の場合は空配列
+      return [];
+    }
+    var params = {
+      q: "'" + folderId + "' in parents and trashed = false",
+      fields: "files(id,name,mimeType,modifiedTime,owners(displayName))",
+      pageSize: typeof limit === 'number' ? limit : 50,
+      orderBy: "modifiedTime desc",
+      spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    };
+    try{
+      var resp = await gapi.client.drive.files.list(params);
+      return (resp.result && resp.result.files) || [];
+    }catch(e){
+      console.warn('listFilesInFolder 失敗', e);
+      return [];
+    }
+  }
+
   // 既存データ読み込みパイプライン
   async function loadFromFolderId(folderId){
     // 上部に簡易一覧も表示（デバッグ/確認用）
@@ -154,10 +178,10 @@
     window.folderStructure = payload.structure || {};
     if(window.folderStructure){
       // 後方互換のためのエイリアス
-      if(!window.folderStructure.attachmentsContacts && window.folderStructure.attachmentsContacts == null && payload.structure.attachmentsContacts){
+      if(!window.folderStructure.attachmentsContacts && payload.structure && payload.structure.attachmentsContacts){
         window.folderStructure.attachmentsContacts = payload.structure.attachmentsContacts;
       }
-      if(!window.folderStructure.attachmentsMeetings && payload.structure.attachmentsMeetings){
+      if(!window.folderStructure.attachmentsMeetings && payload.structure && payload.structure.attachmentsMeetings){
         window.folderStructure.attachmentsMeetings = payload.structure.attachmentsMeetings;
       }
     }
@@ -165,36 +189,29 @@
     window.contacts = Array.isArray(payload.contacts) ? payload.contacts : [];
     // meetingsは配列で保持（UIでの集計が楽）
     window.meetings = [];
-    Object.keys(payload.meetingsByContact||{}).forEach(function(cid){
-      (payload.meetingsByContact[cid]||[]).forEach(function(m){ window.meetings.push(m); });
-    });
-    if(payload.options){ window.options = payload.options; }
+    if(payload.meetingsByContact){
+      Object.keys(payload.meetingsByContact).forEach(function(cid){
+        var arr = payload.meetingsByContact[cid] || [];
+        for(var i=0;i<arr.length;i++){ window.meetings.push(arr[i]); }
+      });
+    }
+    window.options = payload.options || {};
     window.metadata = payload.metadata || {};
     window.indexes = payload.indexes || {};
 
-    // UI反映
-    initializeMainApp();
-    setStatus('データ読み込み完了 (' + window.contacts.length + '名 / ' + window.meetings.length + '件)');
+    // UI 更新（既存関数を尊重）
+    try{ if(typeof window.renderContacts === 'function') window.renderContacts(window.contacts); }catch(e){ console.warn('renderContacts失敗', e); }
+    try{ if(typeof window.updateFilters === 'function') window.updateFilters(); }catch(e){ console.warn('updateFilters失敗', e); }
+    try{ if(typeof window.setupMultiSelect === 'function') window.setupMultiSelect(); }catch(e){ console.warn('setupMultiSelect失敗', e); }
 
-    // 初期描画
-    if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
-    if(typeof window.updateFilters === 'function'){ window.updateFilters(); }
-    if(typeof window.setupMultiSelect === 'function'){ window.setupMultiSelect(); }
+    setStatus('データ読み込み完了');
+    hideSignin();
+    showApp();
+    return true;
   }
 
-    if(!(window.gapi && gapi.client)){ return Promise.resolve([]); }
-    return gapi.client.drive.files.list({
-      q: "'" + folderId + "' in parents and trashed=false",
-      fields: 'files(id,name,modifiedTime,owners(displayName))',
-      pageSize: limit||20,
-      orderBy: 'modifiedTime desc',
-      spaces: 'drive',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true
-    }).then(function(resp){
-      return (resp.result && resp.result.files) || [];
-    });
-  }
+  // 念のためグローバルにも公開（他モジュールから直接呼びたい場合に備える）
+  window.loadFromFolderId = loadFromFolderId;
 
   function renderDataPanel(files, folderPath){
     injectStyles();
