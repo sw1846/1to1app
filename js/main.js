@@ -175,7 +175,17 @@
     setStatus('インデックスを読み込み中...');
     var payload = await AppData.loadAllFromMigrated(folderId);
 
-    // 取得したペイロードをグローバルに反映（堅牢化）
+        try{
+      if(payload && payload.structure && typeof AppData.hydrateMissingFromFiles==='function'){
+        setStatus('詳細データを読込中...');
+        var hydrated = await AppData.hydrateMissingFromFiles(payload.structure, (payload.contacts||[]), (payload.meetings||payload.meetingsByContact||{}));
+        if(hydrated){
+          payload.contacts = hydrated.contacts || payload.contacts;
+          payload.meetingsByContact = hydrated.meetingsByContact || payload.meetingsByContact;
+        }
+      }
+    }catch(e){ console.warn('hydrate 失敗', e); }
+// 取得したペイロードをグローバルに反映（堅牢化）
     window.contacts = Array.isArray(payload.contacts) ? payload.contacts
       : (Array.isArray(payload.contacts && payload.contacts.items) ? payload.contacts.items
       : (Array.isArray(payload.contacts && payload.contacts.list) ? payload.contacts.list

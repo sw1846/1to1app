@@ -395,4 +395,64 @@ global.AppData.loadAllFromMigrated = async function(rootFolderId){
   return all;
 };
 
+
+
+// Hydrate missing contact and meeting details by reading per-contact JSON files
+global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, meetingsMap){
+  await ensureGapiClient();
+  if(!structure) return;
+  // Build filename -> id maps for contacts and meetings
+  var contactFolderId = structure.contacts;
+  var meetingsFolderId = structure.meetings;
+  var contactFiles = {};
+  var meetingFiles = {};
+  if(contactFolderId){
+    try{
+      var files = await driveListChildren(contactFolderId, { nameContains: 'contact-' });
+      files.forEach(function(f){ contactFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('contactsフォルダ一覧失敗', e); }
+  }
+  if(meetingsFolderId){
+    try{
+      var files2 = await driveListChildren(meetingsFolderId, { nameContains: 'contact-' });
+      files2.forEach(function(f){ meetingFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('meetingsフォルダ一覧失敗', e); }
+  }
+  // Helper to pad id
+  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+  // Merge detail JSON into contactsArr
+  if(Array.isArray(contactsArr) && contactFolderId){
+    for(var i=0;i<contactsArr.length;i++){
+      var c = contactsArr[i] || {};
+      // Heuristic: if only minimal fields exist, try to hydrate
+      var needs = (!c.email && !c.emails && !c.phones && !c.photo && !c.business && !c.businesses && !c.memo && !c.priorInfo);
+      var fname = 'contact-' + pad6(c.id) + '.json';
+      var fileId = contactFiles[fname.toLowerCase()];
+      if(needs && fileId){
+        try{
+          var detail = await downloadJsonById(fileId);
+          // Shallow merge, detail wins
+          for(var k in detail){ if(detail.hasOwnProperty(k)) c[k] = detail[k]; }
+        }catch(e){ console.warn('contact hydrate失敗', c.id, e); }
+      }
+    }
+  }
+  // Build/merge meetings map
+  if(meetingsFolderId){
+    if(!meetingsMap || typeof meetingsMap !== 'object') meetingsMap = {};
+    for(var i=0;i<contactsArr.length;i++){
+      var cid = contactsArr[i] && contactsArr[i].id;
+      if(!cid) continue;
+      var fname2 = 'contact-' + pad6(cid) + '-meetings.json';
+      var mid = meetingFiles[fname2.toLowerCase()];
+      if(mid){
+        try{
+          var list = await downloadJsonById(mid);
+          meetingsMap[cid] = Array.isArray(list) ? list : (Array.isArray(list && list.items) ? list.items : []);
+        }catch(e){ console.warn('meetings hydrate失敗', cid, e); }
+      }
+    }
+  }
+  return { contacts: contactsArr, meetingsByContact: meetingsMap };
+};
 })(window);
