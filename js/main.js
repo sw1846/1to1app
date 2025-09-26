@@ -186,7 +186,11 @@
       }
     }
     // データをグローバルに反映
-    window.contacts = Array.isArray(payload.contacts) ? payload.contacts : [];
+    \1
+    console.log('[main] contacts in payload:', window.contacts && window.contacts.length);
+    try{ if(typeof updateFilters==='function') updateFilters(); }catch(e){ console.warn('updateFilters warn', e); }
+    try{ if(typeof renderContacts==='function') renderContacts(); }catch(e){ console.warn('renderContacts warn', e); }
+    try{ if(typeof selectTab==='function') selectTab('contacts'); }catch(e){}
     // meetingsは配列で保持（UIでの集計が楽）
     window.meetings = [];
     if(payload.meetingsByContact){

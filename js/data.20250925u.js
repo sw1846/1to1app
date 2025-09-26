@@ -310,155 +310,42 @@
   }
 
   async function loadIndexes(indexFolderId){
-    if(!indexFolderId) return { contacts:{}, meetings:{}, search:{}, metadata:null };
-    var [contactsIdx, meetingsIdx, searchIdx, metadata] = await Promise.all([
-      readJsonByNameInFolder(indexFolderId, 'contacts-index.json'),
-      readJsonByNameInFolder(indexFolderId, 'meetings-index.json'),
-      readJsonByNameInFolder(indexFolderId, 'search-index.json'),
-      readJsonByNameInFolder(indexFolderId, 'metadata.json')
-    ]);
-    return { contacts: contactsIdx||{}, meetings: meetingsIdx||{}, search: searchIdx||{}, metadata: metadata||null };
-  }
-
-  async function listJsonFiles(folderId){
-    // MIMEタイプを限定しない（移行ツールの保存時に text/plain や application/octet-stream の場合があるため）
-    var files = await driveListChildren(folderId, { /* no mime filter */ });
-    return files || [];
-  }
-
-  async function loadAllContacts(contactsFolderId){
-    if(!contactsFolderId) return [];
-    var files = await listJsonFiles(contactsFolderId);
-    // filter only contact-*.json
-    files = files.filter(function(f){ return /\.json$/i.test(f.name || '') && /^contact-\d+\.json$/i.test(f.name || ''); });
-    files.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-    var results = [];
-    for(var i=0;i<files.length;i++){
-      try{
-        var obj = await downloadJsonById(files[i].id);
-        if(obj && !obj.id){
-          // derive from filename
-          var m = (files[i].name||'').match(/contact-([\w\-]+)\.json/i); if(m) obj.id = m[1];
-        }
-        results.push(obj);
-      }catch(e){ console.error('連絡先読込失敗', files[i].name, e); }
+  var out = {contacts:[], meetings:{}, search:{}, metadata:{}};
+  // contacts-index
+  try{
+    var f = await driveFindChildByName(indexFolderId, 'contacts-index.json');
+    if(f){
+      var cj = await downloadJsonById(f.id);
+      // allow array or {contacts:[...]}
+      out.contacts = Array.isArray(cj) ? cj : (Array.isArray(cj && cj.contacts) ? cj.contacts : []);
     }
-    return results;
-  }
-
-  async function loadAllMeetings(meetingsFolderId){
-    if(!meetingsFolderId) return {};
-    var files = await listJsonFiles(meetingsFolderId);
-    files = files.filter(function(f){ return /-meetings\.json$/i.test(f.name || ''); });
-    var map = {};
-    for(var i=0;i<files.length;i++){
-      var name = files[i].name || '';
-      var m = name.match(/contact-(\d+)-meetings\.json/i);
-      if(!m) continue;
-      var contactId = m[1];
-      try{
-        var arr = await downloadJsonById(files[i].id);
-        if(Array.isArray(arr)) map[contactId] = arr;
-      }catch(e){ console.error('ミーティング読込失敗', name, e); }
+  }catch(e){ console.warn('contacts-index 読込失敗', e); }
+  // meetings-index
+  try{
+    var mf = await driveFindChildByName(indexFolderId, 'meetings-index.json');
+    if(mf){
+      var mj = await downloadJsonById(mf.id);
+      out.meetings = (mj && mj.items) ? mj.items : (mj || {});
     }
-    return map;
-  }
-
-  async function loadAllFromMigrated(rootFolderId){
-    var structure = await resolveMigratedStructure(rootFolderId);
-    var indexes = structure.index ? await loadIndexes(structure.index) : await (async function(){ return {contacts:{},meetings:{},search:{},metadata: await readJsonByNameInFolder(structure.root,'metadata.json')}; })();
-    var options = await readJsonByNameInFolder(structure.root, 'options.json');
-    var contacts = await loadAllContacts(structure.contacts);
-    var meetingsByContact = await loadAllMeetings(structure.meetings);
-    var metadata = indexes.metadata || null;
-
-    return { structure: structure, contacts: contacts, meetingsByContact: meetingsByContact, options: options, metadata: metadata, indexes: indexes };
-  }
-
-  // ======== Drive JSON write helpers (used by contacts.js / meetings.js) ========
-  async function getFileIdInFolder(name, parentId){
-    var files = await driveListChildren(parentId, { });
-    var f = files.find(function(x){ return String(x.name||'') === String(name); });
-    return f ? f.id : null;
-  }
-
-  async function saveJsonFileToFolder(name, data, parentId){
-    var metadata = { name: name, parents: [parentId], mimeType: 'application/json' };
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    var form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', blob);
-
-    var token = gapi.client.getToken && gapi.client.getToken().access_token;
-    if(!token) throw new Error('アクセストークン未取得');
-
-    // try update
-    var existingId = await getFileIdInFolder(name, parentId);
-    var url;
-    var method;
-    if(existingId){
-      url = 'https://www.googleapis.com/upload/drive/v3/files/' + existingId + '?uploadType=multipart';
-      method = 'PATCH';
-    }else{
-      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-      method = 'POST';
-    }
-    var res = await fetch(url, { method: method, headers: { 'Authorization': 'Bearer ' + token }, body: form });
-    if(!res.ok) throw new Error('JSON保存失敗: ' + res.status);
-    return await res.json();
-  }
-
-
-  // public API
-  var AppData = {
-    initializeGoogleAPI: function(){ return ensureGapiClient(); },
-    initializeGIS: function(){ __initTokenClientWithRetry(); },
-    setAuthenticated: function(v){ /* no-op */ },
-    setProgressHandler: function(fn){ STATE.progress = (typeof fn==='function') ? fn : function(){}; },
-
-    getOrCreateFolderId: getOrCreateFolderId,
-    ensureFolderStructureByName: ensureFolderStructureByName,
-    resolveMigratedStructure: resolveMigratedStructure,
-    readJsonByNameInFolder: readJsonByNameInFolder,
-    loadAllFromMigrated: loadAllFromMigrated,
-    saveJsonFileToFolder: saveJsonFileToFolder,
-    getFileIdInFolder: getFileIdInFolder,
-    driveListChildren: driveListChildren
-  };
-
-  global.AppData = AppData;
-  global.initializeGoogleAPI = function(){ return AppData.initializeGoogleAPI(); };
-  global.initializeGIS = function(){ return AppData.initializeGIS(); };
-  
-  // expose helper functions to global for other modules
-  global.saveJsonFileToFolder = saveJsonFileToFolder;
-  global.getFileIdInFolder = getFileIdInFolder;
-
-  global.handleAuthClick = function(){
-    try{
-      setBtnsDisabled(true);
-      if(STATE.tokenClient){
-        if(STATE.tokenInFlight){ console.warn('token 要求中'); return; }
-        STATE.tokenInFlight = true;
-        STATE.tokenClient.requestAccessToken({ prompt: 'consent' });
-        return;
+  }catch(e){ console.warn('meetings-index 読込失敗', e); }
+  // search-index
+  try{
+    var sf = await driveFindChildByName(indexFolderId, 'search-index.json');
+    if(sf){
+      var sj = await downloadJsonById(sf.id);
+      // allow array of {id,text} or object map
+      if(Array.isArray(sj)){
+        var map = {}; sj.forEach(function(r){ if(r && r.id) map[r.id] = r.text || ''; });
+        out.search = map;
+      }else{
+        out.search = sj || {};
       }
-      __initTokenClientWithRetry(function(ok){
-        if(!ok){ console.warn('tokenClient 初期化失敗'); setBtnsDisabled(false); return; }
-        if(STATE.tokenInFlight){ console.warn('token 要求中'); return; }
-        STATE.tokenInFlight = true;
-        try{ STATE.tokenClient.requestAccessToken({ prompt: 'consent' }); }
-        catch(e){ STATE.tokenInFlight = false; setBtnsDisabled(false); console.error(e); }
-      });
-    }catch(e){
-      STATE.tokenInFlight = false;
-      setBtnsDisabled(false);
-      console.error(e);
     }
-  };
-
-  (function(g){ g.__BUILD_ID__='2025-09-25U4'; })(global);
-
-  ensureGisScript();
-  ensureGapiScript();
+  }catch(e){ console.warn('search-index 読込失敗', e); }
+  // metadata
+  try{
+    var mt = await driveFindChildByName(indexFolderId, 'metadata.json');
+    if(mt){ out.metadata = await downloadJsonById(mt.id); }
+  }catch(e){ console.warn('metadata 読込失敗', e); }
+  return out;
 })(window);

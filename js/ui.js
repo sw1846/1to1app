@@ -40,7 +40,10 @@ function closeModal(modalId) {
 }
 
 // 連絡先表示
-function renderContacts() {
+\1
+  var list = getFilteredContacts();
+  console.log('[ui] renderContacts count:', list && list.length);
+
     const container = document.getElementById('contactsList');
     if (!container) return;
     
@@ -75,41 +78,30 @@ function renderContacts() {
 }
 
 // フィルタリング
-function getFilteredContacts() {
-    const searchInput = document.getElementById('searchInput');
-    const typeFilter = document.getElementById('typeFilter');
-    
-    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
-    const typeFilterValue = typeFilter ? typeFilter.value : '';
-
-    return (window.contacts||[]).filter(contact => {
-        const matchesSearch = !searchQuery || 
-            contact.name.toLowerCase().includes(searchQuery) ||
-            (contact.company && contact.company.toLowerCase().includes(searchQuery)) ||
-            (contact.businesses && contact.businesses.some(b => b.toLowerCase().includes(searchQuery))) ||
-            (contact.business && contact.business.toLowerCase().includes(searchQuery)) ||
-            (contact.history && contact.history.toLowerCase().includes(searchQuery)) ||
-            (contact.priorInfo && contact.priorInfo.toLowerCase().includes(searchQuery));
-
-        const matchesType = !typeFilterValue || (Array.isArray(contact.types) && contact.types.includes(typeFilterValue));
-        
-        const matchesAffiliation = !filterValues.affiliation || 
-            (Array.isArray(contact.affiliations) && contact.affiliations.some(a => a.toLowerCase().includes(filterValues.affiliation.toLowerCase())));
-        
-        const matchesBusiness = !filterValues.business || 
-            ((Array.isArray(contact.businesses) && contact.businesses.some(b => b.toLowerCase().includes(filterValues.business.toLowerCase()))) ||
-            (typeof contact.business === 'string' && contact.business.toLowerCase().includes(filterValues.business.toLowerCase())));
-        
-        const matchesIndustryInterests = !filterValues.industryInterests || 
-            (Array.isArray(contact.industryInterests) && contact.industryInterests.some(i => i.toLowerCase().includes(filterValues.industryInterests.toLowerCase())));
-        
-        const matchesResidence = !filterValues.residence || 
-            (contact.residence && contact.residence.toLowerCase().includes(filterValues.residence.toLowerCase()));
-        
-        const matchesReferrer = !referrerFilter || contact.referrer === referrerFilter;
-
-        return matchesSearch && matchesType && matchesAffiliation && matchesBusiness && matchesIndustryInterests && matchesResidence && matchesReferrer;
-    });
+function getFilteredContacts(){
+  var list = (window.contacts||[]).slice();
+  try{
+    var queryInput = document.getElementById('searchInput');
+    var q = (queryInput && queryInput.value || '').trim();
+    if(q){
+      var lower = q.toLowerCase();
+      list = list.filter(function(c){
+        return (c.name && c.name.toLowerCase().includes(lower)) ||
+               (c.company && c.company.toLowerCase().includes(lower)) ||
+               (c.furigana && c.furigana.toLowerCase().includes(lower));
+      });
+    }
+    // 追加の詳細フィルタは存在する場合のみ適用
+    if(window.selectedOptions && selectedOptions.types && selectedOptions.types.size){
+      list = list.filter(function(c){
+        var t = c.types || [];
+        return Array.from(selectedOptions.types).every(function(x){ return t.indexOf(x) >= 0; });
+      });
+    }
+  }catch(e){
+    console.warn('getFilteredContacts warn', e);
+  }
+  return list;
 }
 
 function filterContacts() {
