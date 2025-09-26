@@ -206,7 +206,7 @@
 
     setStatus('データ読み込み完了');
     hideSignin();
-    showApp();
+    showAppInterface();
     return true;
   }
 
@@ -483,6 +483,7 @@
 
   function afterSignedIn(tokenResp){
     log('認証完了 - UIを更新中...');
+    try{ initializeMainApp(); }catch(e){}
     
     // UIの状態を更新
     showAppInterface();
@@ -518,6 +519,9 @@
       setStatus('システム初期化エラー');
       return; 
     }
+    
+    // UIとグローバル状態の初期化（ビュー/フィルタ等）
+    try{ initializeMainApp(); }catch(e){ console.warn('initializeMainApp で警告:', e); }
     
     if(typeof window.initializeGoogleAPI === 'function'){
       window.initializeGoogleAPI();
