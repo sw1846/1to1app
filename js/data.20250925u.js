@@ -315,7 +315,7 @@
   try{
     var f = await driveFindChildByName(indexFolderId, 'contacts-index.json');
     if(f){
-      var cj = await downloadJsonById(f.id);
+      var cj = await downloadJsonById(f);
       // allow array or {contacts:[...]}
       out.contacts = Array.isArray(cj) ? cj : (Array.isArray(cj && cj.contacts) ? cj.contacts : []);
     }
@@ -324,7 +324,7 @@
   try{
     var mf = await driveFindChildByName(indexFolderId, 'meetings-index.json');
     if(mf){
-      var mj = await downloadJsonById(mf.id);
+      var mj = await downloadJsonById(mf);
       out.meetings = (mj && mj.items) ? mj.items : (mj || {});
     }
   }catch(e){ console.warn('meetings-index 読込失敗', e); }
@@ -332,7 +332,7 @@
   try{
     var sf = await driveFindChildByName(indexFolderId, 'search-index.json');
     if(sf){
-      var sj = await downloadJsonById(sf.id);
+      var sj = await downloadJsonById(sf);
       // allow array of {id,text} or object map
       if(Array.isArray(sj)){
         var map = {}; sj.forEach(function(r){ if(r && r.id) map[r.id] = r.text || ''; });
@@ -345,7 +345,7 @@
   // metadata
   try{
     var mt = await driveFindChildByName(indexFolderId, 'metadata.json');
-    if(mt){ out.metadata = await downloadJsonById(mt.id); }
+    if(mt){ out.metadata = await downloadJsonById(mt); }
   }catch(e){ console.warn('metadata 読込失敗', e); }
   return out;
 }

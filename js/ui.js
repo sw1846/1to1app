@@ -49,6 +49,12 @@ window.renderContacts = renderContacts;
     if (!container) return;
     
     let filteredContacts = getFilteredContacts();
+    // 空配列なら空状態を描画して終了
+    if (!filteredContacts || !filteredContacts.length) {
+        container.className = '';
+        container.innerHTML = '<div class="empty">連絡先がありません。Driveの保存先に <code>index/contacts-index.json</code> が存在するか確認してください。</div>';
+        return;
+    }
     filteredContacts = sortContacts(filteredContacts);
 
     container.innerHTML = '';
@@ -79,7 +85,6 @@ window.renderContacts = renderContacts;
 }
 
 // フィルタリング
-}
 function getFilteredContacts(){
   var list = (window.contacts||[]).slice();
   try{

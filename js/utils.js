@@ -710,6 +710,7 @@ function updateMultiSelectOptions() {
 }
 
 function updateMultiSelectOption(type, optionList) {
+    if (!Array.isArray(optionList)) { optionList = []; }
     const container = document.getElementById(`${type}Options`);
     if (!container) return;
 
