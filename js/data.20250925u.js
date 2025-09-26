@@ -223,6 +223,183 @@
     return step();
   }
 
+  
+  // ======== Drive JSON helpers (migrated data loader) ========
+  async function driveListChildren(parentId, opts){
+    _ensureReady();
+    opts = opts || {};
+    var q = ["'" + parentId + "' in parents", "trashed=false"];
+    if(opts.nameContains){ q.push("name contains '" + opts.nameContains.replace(/'/g,"\\'") + "'"); }
+    if(opts.mimeType){ q.push("mimeType='" + opts.mimeType + "'"); }
+    var params = {
+      q: q.join(' and '),
+      fields: 'files(id,name,mimeType,modifiedTime,parents)',
+      pageSize: opts.pageSize || 1000,
+      spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    };
+    var resp = await gapi.client.drive.files.list(params);
+    return (resp.result && resp.result.files) || [];
+  }
+
+  async function driveFindChildByName(parentId, name, mimeType){
+    var files = await driveListChildren(parentId, { });
+    var lower = String(name).toLowerCase();
+    var found = files.find(function(f){
+      if(mimeType && f.mimeType !== mimeType) return false;
+      return String(f.name||'').toLowerCase() === lower;
+    });
+    if(found) return found.id;
+    // try contains for safety
+    found = files.find(function(f){
+      if(mimeType && f.mimeType !== mimeType) return false;
+      return String(f.name||'').toLowerCase().indexOf(lower) >= 0;
+    });
+    return found ? found.id : null;
+  }
+
+  async function downloadJsonById(fileId){
+    var token = gapi.client.getToken && gapi.client.getToken().access_token;
+    if(!token) throw new Error('アクセストークン未取得');
+    var res = await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if(!res.ok){ throw new Error('JSON取得失敗: ' + res.status); }
+    return await res.json();
+  }
+
+  async function readJsonByNameInFolder(folderId, name){
+    var id = await driveFindChildByName(folderId, name, 'application/json');
+    if(!id) return null;
+    return await downloadJsonById(id);
+  }
+
+  async function resolveMigratedStructure(rootFolderId){
+    var MIME_FOLDER = 'application/vnd.google-apps.folder';
+    var indexId = await driveFindChildByName(rootFolderId, 'index', MIME_FOLDER);
+    var contactsId = await driveFindChildByName(rootFolderId, 'contacts', MIME_FOLDER);
+    var meetingsId = await driveFindChildByName(rootFolderId, 'meetings', MIME_FOLDER);
+    var attachmentsId = await driveFindChildByName(rootFolderId, 'attachments', MIME_FOLDER);
+
+    // attachments subfolders (optional)
+    var attachmentsContactsId = null, attachmentsMeetingsId = null;
+    if(attachmentsId){
+      attachmentsContactsId = await driveFindChildByName(attachmentsId, 'contacts', MIME_FOLDER);
+      attachmentsMeetingsId = await driveFindChildByName(attachmentsId, 'meetings', MIME_FOLDER);
+    }
+
+    return {
+      root: rootFolderId,
+      index: indexId,
+      contacts: contactsId,
+      meetings: meetingsId,
+      attachments: attachmentsId,
+      attachmentsContacts: attachmentsContactsId,
+      attachmentsMeetings: attachmentsMeetingsId
+    };
+  }
+
+  async function loadIndexes(indexFolderId){
+    if(!indexFolderId) return { contacts:{}, meetings:{}, search:{}, metadata:null };
+    var [contactsIdx, meetingsIdx, searchIdx, metadata] = await Promise.all([
+      readJsonByNameInFolder(indexFolderId, 'contacts-index.json'),
+      readJsonByNameInFolder(indexFolderId, 'meetings-index.json'),
+      readJsonByNameInFolder(indexFolderId, 'search-index.json'),
+      readJsonByNameInFolder(indexFolderId, 'metadata.json')
+    ]);
+    return { contacts: contactsIdx||{}, meetings: meetingsIdx||{}, search: searchIdx||{}, metadata: metadata||null };
+  }
+
+  async function listJsonFiles(folderId){
+    var files = await driveListChildren(folderId, { mimeType: 'application/json' });
+    return files;
+  }
+
+  async function loadAllContacts(contactsFolderId){
+    if(!contactsFolderId) return [];
+    var files = await listJsonFiles(contactsFolderId);
+    // filter only contact-*.json
+    files = files.filter(function(f){ return /\.json$/i.test(f.name || '') && /^contact-\d+\.json$/i.test(f.name || ''); });
+    files.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+    var results = [];
+    for(var i=0;i<files.length;i++){
+      try{
+        var obj = await downloadJsonById(files[i].id);
+        if(obj && !obj.id){
+          // derive from filename
+          var m = (files[i].name||'').match(/contact-(\d+)\.json/i);
+          if(m) obj.id = m[1];
+        }
+        results.push(obj);
+      }catch(e){ console.error('連絡先読込失敗', files[i].name, e); }
+    }
+    return results;
+  }
+
+  async function loadAllMeetings(meetingsFolderId){
+    if(!meetingsFolderId) return {};
+    var files = await listJsonFiles(meetingsFolderId);
+    files = files.filter(function(f){ return /-meetings\.json$/i.test(f.name || ''); });
+    var map = {};
+    for(var i=0;i<files.length;i++){
+      var name = files[i].name || '';
+      var m = name.match(/contact-(\d+)-meetings\.json/i);
+      if(!m) continue;
+      var contactId = m[1];
+      try{
+        var arr = await downloadJsonById(files[i].id);
+        if(Array.isArray(arr)) map[contactId] = arr;
+      }catch(e){ console.error('ミーティング読込失敗', name, e); }
+    }
+    return map;
+  }
+
+  async function loadAllFromMigrated(rootFolderId){
+    var structure = await resolveMigratedStructure(rootFolderId);
+    var indexes = await loadIndexes(structure.index);
+    var options = await readJsonByNameInFolder(structure.root, 'options.json');
+    var contacts = await loadAllContacts(structure.contacts);
+    var meetingsByContact = await loadAllMeetings(structure.meetings);
+    var metadata = indexes.metadata || null;
+
+    return { structure: structure, contacts: contacts, meetingsByContact: meetingsByContact, options: options, metadata: metadata, indexes: indexes };
+  }
+
+  // ======== Drive JSON write helpers (used by contacts.js / meetings.js) ========
+  async function getFileIdInFolder(name, parentId){
+    var files = await driveListChildren(parentId, { });
+    var f = files.find(function(x){ return String(x.name||'') === String(name); });
+    return f ? f.id : null;
+  }
+
+  async function saveJsonFileToFolder(name, data, parentId){
+    var metadata = { name: name, parents: [parentId], mimeType: 'application/json' };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+
+    var token = gapi.client.getToken && gapi.client.getToken().access_token;
+    if(!token) throw new Error('アクセストークン未取得');
+
+    // try update
+    var existingId = await getFileIdInFolder(name, parentId);
+    var url;
+    var method;
+    if(existingId){
+      url = 'https://www.googleapis.com/upload/drive/v3/files/' + existingId + '?uploadType=multipart';
+      method = 'PATCH';
+    }else{
+      url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+      method = 'POST';
+    }
+    var res = await fetch(url, { method: method, headers: { 'Authorization': 'Bearer ' + token }, body: form });
+    if(!res.ok) throw new Error('JSON保存失敗: ' + res.status);
+    return await res.json();
+  }
+
+
   // public API
   var AppData = {
     initializeGoogleAPI: function(){ return ensureGapiClient(); },
@@ -231,12 +408,23 @@
     setProgressHandler: function(fn){ STATE.progress = (typeof fn==='function') ? fn : function(){}; },
 
     getOrCreateFolderId: getOrCreateFolderId,
-    ensureFolderStructureByName: ensureFolderStructureByName
+    ensureFolderStructureByName: ensureFolderStructureByName,
+    resolveMigratedStructure: resolveMigratedStructure,
+    readJsonByNameInFolder: readJsonByNameInFolder,
+    loadAllFromMigrated: loadAllFromMigrated,
+    saveJsonFileToFolder: saveJsonFileToFolder,
+    getFileIdInFolder: getFileIdInFolder,
+    driveListChildren: driveListChildren
   };
 
   global.AppData = AppData;
   global.initializeGoogleAPI = function(){ return AppData.initializeGoogleAPI(); };
   global.initializeGIS = function(){ return AppData.initializeGIS(); };
+  
+  // expose helper functions to global for other modules
+  global.saveJsonFileToFolder = saveJsonFileToFolder;
+  global.getFileIdInFolder = getFileIdInFolder;
+
   global.handleAuthClick = function(){
     try{
       setBtnsDisabled(true);

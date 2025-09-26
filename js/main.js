@@ -6,6 +6,15 @@
 */
 (function(){
   'use strict';
+
+  // URL parameter helper
+  function getUrlParam(key){
+    try{
+      var s = new URLSearchParams(window.location.search);
+      return s.get(key) || null;
+    }catch(e){ return null; }
+  }
+
   
   function log(){ console.log.apply(console, ['[main]'].concat([].slice.call(arguments))); }
   function qs(sel){ return document.querySelector(sel); }
@@ -128,6 +137,51 @@
 
   // ========== Drive 読み込み（簡易） ==========
   function listFilesInFolder(folderId, limit){
+  // 既存データ読み込みパイプライン
+  async function loadFromFolderId(folderId){
+    // 上部に簡易一覧も表示（デバッグ/確認用）
+    try{
+      var files = await listFilesInFolder(folderId, 20);
+      renderDataPanel(files, localStorage.getItem(LS_KEY_PATH)||'(指定ID)');
+    }catch(e){ console.warn('フォルダ一覧取得に失敗', e); }
+
+    if(!(window.AppData && typeof AppData.loadAllFromMigrated === 'function')){
+      throw new Error('AppData.loadAllFromMigrated not available');
+    }
+    setStatus('インデックスを読み込み中...');
+    var payload = await AppData.loadAllFromMigrated(folderId);
+    // フォルダ構造を公開（保存/削除時に利用）
+    window.folderStructure = payload.structure || {};
+    if(window.folderStructure){
+      // 後方互換のためのエイリアス
+      if(!window.folderStructure.attachmentsContacts && window.folderStructure.attachmentsContacts == null && payload.structure.attachmentsContacts){
+        window.folderStructure.attachmentsContacts = payload.structure.attachmentsContacts;
+      }
+      if(!window.folderStructure.attachmentsMeetings && payload.structure.attachmentsMeetings){
+        window.folderStructure.attachmentsMeetings = payload.structure.attachmentsMeetings;
+      }
+    }
+    // データをグローバルに反映
+    window.contacts = Array.isArray(payload.contacts) ? payload.contacts : [];
+    // meetingsは配列で保持（UIでの集計が楽）
+    window.meetings = [];
+    Object.keys(payload.meetingsByContact||{}).forEach(function(cid){
+      (payload.meetingsByContact[cid]||[]).forEach(function(m){ window.meetings.push(m); });
+    });
+    if(payload.options){ window.options = payload.options; }
+    window.metadata = payload.metadata || {};
+    window.indexes = payload.indexes || {};
+
+    // UI反映
+    initializeMainApp();
+    setStatus('データ読み込み完了 (' + window.contacts.length + '名 / ' + window.meetings.length + '件)');
+
+    // 初期描画
+    if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
+    if(typeof window.updateFilters === 'function'){ window.updateFilters(); }
+    if(typeof window.setupMultiSelect === 'function'){ window.setupMultiSelect(); }
+  }
+
     if(!(window.gapi && gapi.client)){ return Promise.resolve([]); }
     return gapi.client.drive.files.list({
       q: "'" + folderId + "' in parents and trashed=false",
@@ -194,42 +248,46 @@
     return String(s||'').replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; });
   }
 
+  
   function chooseFolderAndLoad(pathOrFalse, forceModal){
+    var urlFolderId = getUrlParam('folderId');
+    if(urlFolderId){
+      // URL優先: 直接フォルダID指定
+      localStorage.setItem(LS_KEY_ID, urlFolderId);
+      localStorage.setItem(LS_KEY_PATH, '(指定ID)');
+      setStatus('指定フォルダからデータを読み込み中...');
+      return loadFromFolderId(urlFolderId).catch(function(err){
+        console.error('URL指定フォルダの読み込みに失敗:', err);
+        throw err;
+      });
+    }
+
     var savedId = localStorage.getItem(LS_KEY_ID);
     var savedPath = localStorage.getItem(LS_KEY_PATH) || 'PlaceOn/1to1';
     var p;
-    
     if(typeof pathOrFalse === 'string' && pathOrFalse){
       p = Promise.resolve(pathOrFalse);
     }else if(forceModal || !savedId){
-      return new Promise(function(resolve){ 
-        showFolderSelectModal(savedPath); 
-        resolve(); 
+      return new Promise(function(resolve){
+        showFolderSelectModal(savedPath);
+        resolve();
       });
     }else{
       p = Promise.resolve(savedPath);
     }
-    
+
     return p.then(function(path){
       if(!(window.AppData && typeof AppData.ensureFolderStructureByName === 'function')){
         throw new Error('AppData.ensureFolderStructureByName not available');
       }
-      
       setStatus('フォルダを確認中...');
       return AppData.ensureFolderStructureByName(path).then(function(info){
         var folderId = info && (info.id || info.folderId || info.pathIds && info.pathIds[info.pathIds.length-1]);
         if(!folderId) throw new Error('フォルダIDの解決に失敗しました');
-        
         localStorage.setItem(LS_KEY_ID, folderId);
         localStorage.setItem(LS_KEY_PATH, path);
         setStatus('サインイン済み');
-        
-        return listFilesInFolder(folderId, 20).then(function(files){
-          renderDataPanel(files, path);
-          
-          // アプリのメイン機能を初期化
-          initializeMainApp();
-        });
+        return loadFromFolderId(folderId);
       });
     }).catch(function(err){
       if(err && err.message === 'cancel'){ return; }
@@ -238,6 +296,7 @@
       throw err;
     });
   }
+
 
   function initializeMainApp(){
     // グローバル変数の初期化
