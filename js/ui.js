@@ -40,7 +40,9 @@ function closeModal(modalId) {
 }
 
 // 連絡先表示
+function renderContacts(){
   var list = getFilteredContacts();
+window.renderContacts = renderContacts;
   console.log('[ui] renderContacts count:', list && list.length);
 
     const container = document.getElementById('contactsList');
@@ -77,6 +79,7 @@ function closeModal(modalId) {
 }
 
 // フィルタリング
+}
 function getFilteredContacts(){
   var list = (window.contacts||[]).slice();
   try{

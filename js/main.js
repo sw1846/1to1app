@@ -539,6 +539,17 @@
   // グローバル関数のエクスポート
   window.showFolderSelectModal = showFolderSelectModal;
   
+  // サインイン（GIS起動）
+  window.handleAuthClick = function(){
+    try{
+      if(window.AppData && typeof AppData.signin === 'function'){
+        return AppData.signin();
+      }
+    }catch(e){}
+    console.error('AppData.signin が見つかりません。data.jsの読み込みをご確認ください。');
+    alert('サインインの初期化に失敗しました。ページを再読み込みしてお試しください。');
+  };
+
 })();
 
   // サインアウト（簡易） - トークン無効化してリロード

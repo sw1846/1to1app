@@ -349,4 +349,50 @@
   }catch(e){ console.warn('metadata 読込失敗', e); }
   return out;
 }
+
+// === Export minimal AppData API for main.js ===
+global.AppData = global.AppData || {};
+global.AppData.setProgressHandler = function(fn){
+  if (typeof fn === 'function'){ STATE.progress = fn; }
+};
+global.AppData.ensureFolderStructureByName = ensureFolderStructureByName;
+global.AppData.signin = function(){
+  try{
+    setBtnsDisabled(true);
+  }catch(e){}
+  // Ensure gapi client first, then init GIS token client and request token
+  ensureGapiClient().then(function(){
+    __initTokenClientWithRetry(function(ok){
+      if(!ok){
+        console.error('GIS init failed');
+        try{ setBtnsDisabled(false); }catch(e){}
+        alert('Googleサインインの準備に失敗しました。数秒後にもう一度お試しください。');
+        return;
+      }
+      try{
+        STATE.tokenInFlight = true;
+        if(STATE.tokenClient && STATE.tokenClient.requestAccessToken){
+          STATE.tokenClient.requestAccessToken({prompt: 'consent'});
+        }else{
+          console.error('tokenClient missing');
+          try{ setBtnsDisabled(false); }catch(e){}
+        }
+      }catch(err){
+        console.error('signin error', err);
+        try{ setBtnsDisabled(false); }catch(e){}
+      }
+    });
+  });
+};
+
+
+// Load all indexes from migrated folder structure root
+global.AppData.loadAllFromMigrated = async function(rootFolderId){
+  await ensureGapiClient();
+  var st = await resolveMigratedStructure(rootFolderId);
+  if(!st || !st.index){ throw new Error('index フォルダが見つかりません'); }
+  var all = await loadIndexes(st.index);
+  return all;
+};
+
 })(window);
