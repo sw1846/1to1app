@@ -266,7 +266,16 @@
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if(!res.ok){ throw new Error('JSON取得失敗: ' + res.status); }
-    return await res.json();
+    // robust parse (text/plain 対応 / BOM 除去)
+    var text = await res.text();
+    try{
+      // Remove BOM if present
+      if(text.charCodeAt(0) === 0xFEFF){ text = text.slice(1); }
+      return JSON.parse(text);
+    }catch(e){
+      console.error('JSON parse失敗', fileId, e, text && text.slice(0,200));
+      throw e;
+    }
   }
 
   async function readJsonByNameInFolder(folderId, name){
@@ -312,8 +321,9 @@
   }
 
   async function listJsonFiles(folderId){
-    var files = await driveListChildren(folderId, { mimeType: 'application/json' });
-    return files;
+    // MIMEタイプを限定しない（移行ツールの保存時に text/plain や application/octet-stream の場合があるため）
+    var files = await driveListChildren(folderId, { /* no mime filter */ });
+    return files || [];
   }
 
   async function loadAllContacts(contactsFolderId){
@@ -328,8 +338,7 @@
         var obj = await downloadJsonById(files[i].id);
         if(obj && !obj.id){
           // derive from filename
-          var m = (files[i].name||'').match(/contact-(\d+)\.json/i);
-          if(m) obj.id = m[1];
+          var m = (files[i].name||'').match(/contact-([\w\-]+)\.json/i); if(m) obj.id = m[1];
         }
         results.push(obj);
       }catch(e){ console.error('連絡先読込失敗', files[i].name, e); }
@@ -357,7 +366,7 @@
 
   async function loadAllFromMigrated(rootFolderId){
     var structure = await resolveMigratedStructure(rootFolderId);
-    var indexes = await loadIndexes(structure.index);
+    var indexes = structure.index ? await loadIndexes(structure.index) : await (async function(){ return {contacts:{},meetings:{},search:{},metadata: await readJsonByNameInFolder(structure.root,'metadata.json')}; })();
     var options = await readJsonByNameInFolder(structure.root, 'options.json');
     var contacts = await loadAllContacts(structure.contacts);
     var meetingsByContact = await loadAllMeetings(structure.meetings);
