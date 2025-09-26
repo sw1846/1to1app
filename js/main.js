@@ -48,7 +48,7 @@
       + '<div class="modal-content">'
       +   '<div class="modal-header">'
       +     '<h2>保存先フォルダを選択</h2>'
-      +     '<button class="btn btn-icon" onclick="closeModal(\\'folderModal\\')">✕</button>'
+      +     '<button class="btn btn-icon" onclick="closeModal(\'folderModal\')">✕</button>'
       +   '</div>'
       +   '<div class="modal-body">'
       +     '<p>Googleドライブ上の保存先フォルダの <b>パス</b> を「/」区切りで指定してください。存在しない場合は作成します。</p>'
@@ -56,7 +56,7 @@
       +     '<p style="font-size:12px;color:var(--text-muted)">例: <code>PlaceOn/1to1</code>（先頭/末尾のスラッシュは不要）</p>'
       +   '</div>'
       +   '<div class="modal-footer">'
-      +     '<button class="btn" onclick="closeModal(\\'folderModal\\')">キャンセル</button>'
+      +     '<button class="btn" onclick="closeModal(\'folderModal\')">キャンセル</button>'
       +     '<button class="btn btn-primary" id="folderOkBtn">決定</button>'
       +   '</div>'
       + '</div>';
