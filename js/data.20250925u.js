@@ -398,14 +398,17 @@ global.AppData.loadAllFromMigrated = async function(rootFolderId){
 
 
 // Hydrate missing contact and meeting details by reading per-contact JSON files
+
 global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, meetingsMap){
   await ensureGapiClient();
-  if(!structure) return;
-  // Build filename -> id maps for contacts and meetings
+  if(!structure) return { contacts: contactsArr||[], meetingsByContact: meetingsMap||{} };
   var contactFolderId = structure.contacts;
   var meetingsFolderId = structure.meetings;
+
   var contactFiles = {};
   var meetingFiles = {};
+  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+
   if(contactFolderId){
     try{
       var files = await driveListChildren(contactFolderId, { nameContains: 'contact-' });
@@ -418,30 +421,28 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
       files2.forEach(function(f){ meetingFiles[String(f.name||'').toLowerCase()] = f.id; });
     }catch(e){ console.warn('meetingsフォルダ一覧失敗', e); }
   }
-  // Helper to pad id
-  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
-  // Merge detail JSON into contactsArr
+
+  // ALWAYS merge per-contact detail if file exists
   if(Array.isArray(contactsArr) && contactFolderId){
     for(var i=0;i<contactsArr.length;i++){
       var c = contactsArr[i] || {};
-      // Heuristic: if only minimal fields exist, try to hydrate
-      var needs = (!c.email && !c.emails && !c.phones && !c.photo && !c.business && !c.businesses && !c.memo && !c.priorInfo);
       var fname = 'contact-' + pad6(c.id) + '.json';
       var fileId = contactFiles[fname.toLowerCase()];
-      if(needs && fileId){
+      if(fileId){
         try{
           var detail = await downloadJsonById(fileId);
-          // Shallow merge, detail wins
-          for(var k in detail){ if(detail.hasOwnProperty(k)) c[k] = detail[k]; }
+          // Shallow merge (detail wins)
+          for(var k in detail){ if(Object.prototype.hasOwnProperty.call(detail,k)) c[k] = detail[k]; }
         }catch(e){ console.warn('contact hydrate失敗', c.id, e); }
       }
     }
   }
-  // Build/merge meetings map
+
+  // Build or augment meetings map from per-contact meeting files
+  if(!meetingsMap || typeof meetingsMap !== 'object') meetingsMap = {};
   if(meetingsFolderId){
-    if(!meetingsMap || typeof meetingsMap !== 'object') meetingsMap = {};
-    for(var i=0;i<contactsArr.length;i++){
-      var cid = contactsArr[i] && contactsArr[i].id;
+    for(var j=0;j<(contactsArr||[]).length;j++){
+      var cid = contactsArr[j] && contactsArr[j].id;
       if(!cid) continue;
       var fname2 = 'contact-' + pad6(cid) + '-meetings.json';
       var mid = meetingFiles[fname2.toLowerCase()];
@@ -453,6 +454,8 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
       }
     }
   }
-  return { contacts: contactsArr, meetingsByContact: meetingsMap };
+
+  return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
+;
 })(window);
