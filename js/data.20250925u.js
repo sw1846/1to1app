@@ -2,7 +2,7 @@
    - FedCM 有効 / gapi・GIS 自動ローダー
    - 二重初期化/同時要求ガード
    - Drive helpers（ensureFolderStructureByName 等）
-   - ★ 成否イベント発火：document へ 'gis:token' / 'gis:error'
+   - ☆ 成否イベント発火：document へ 'gis:token' / 'gis:error'
 */
 (function(global){
   'use strict';
@@ -248,22 +248,20 @@ async function driveFindChildByName(parentId, name, mimeType){
   const files = await driveListChildren(parentId, { });
   const lower = String(name||'').toLowerCase().trim();
   function accepts(f){
-    if (!mimeType) return true; // no constraint
+    if (!mimeType) return true;
     if (mimeType === 'application/json'){
-      // JSONは実体が text/plain や application/octet-stream の場合もある
+      // sometimes JSONs are uploaded as text/plain or application/octet-stream
       return (f.mimeType === 'application/json' || f.mimeType === 'text/plain' || f.mimeType === 'application/octet-stream');
     }
-    // それ以外（例：フォルダ）は厳密一致
+    // Folders or other types -> strict match
     return f.mimeType === mimeType;
   }
-  // exact match
   let exact = files.filter(f => accepts(f) && String(f.name||'').toLowerCase().trim() === lower);
   if (exact.length){
     exact.sort((a,b)=> new Date(b.modifiedTime||0) - new Date(a.modifiedTime||0));
     return exact[0].id;
   }
-  // contains match（サブ名一致を許容）
-  let partial = files.filter(f => accepts(f) && String(f.name||'').toLowerCase().indexOf(lower) >= 0);
+  let partial = files.filter(f => accepts(f) && String(f.name||'').toLowerCase().includes(lower));
   if (partial.length){
     partial.sort((a,b)=> new Date(b.modifiedTime||0) - new Date(a.modifiedTime||0));
     return partial[0].id;
@@ -271,6 +269,154 @@ async function driveFindChildByName(parentId, name, mimeType){
   return null;
 }
 
+// ======== Missing functions implementation ========
+
+async function downloadJsonById(fileId){
+  _ensureReady();
+  try {
+    const response = await gapi.client.drive.files.get({
+      fileId: fileId,
+      alt: 'media'
+    });
+    return JSON.parse(response.body);
+  } catch (error) {
+    console.warn('downloadJsonById failed for', fileId, error);
+    return null;
+  }
+}
+
+async function resolveMigratedStructure(rootFolderId){
+  _ensureReady();
+  console.log('[data] resolving migrated structure from folder:', rootFolderId);
+  
+  try {
+    // Look for required folders: index, contacts, meetings, attachments
+    const children = await driveListChildren(rootFolderId);
+    const folders = children.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+    
+    const structure = {};
+    
+    // Find index folder
+    const indexFolder = folders.find(f => f.name.toLowerCase() === 'index');
+    if (indexFolder) {
+      structure.index = indexFolder.id;
+    }
+    
+    // Find contacts folder
+    const contactsFolder = folders.find(f => f.name.toLowerCase() === 'contacts');
+    if (contactsFolder) {
+      structure.contacts = contactsFolder.id;
+    }
+    
+    // Find meetings folder
+    const meetingsFolder = folders.find(f => f.name.toLowerCase() === 'meetings');
+    if (meetingsFolder) {
+      structure.meetings = meetingsFolder.id;
+    }
+    
+    // Find attachments folder
+    const attachmentsFolder = folders.find(f => f.name.toLowerCase() === 'attachments');
+    if (attachmentsFolder) {
+      structure.attachments = attachmentsFolder.id;
+      
+      // Look for attachments subfolders
+      const attachmentChildren = await driveListChildren(attachmentsFolder.id);
+      const attachmentSubfolders = attachmentChildren.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+      
+      const contactsAttachFolder = attachmentSubfolders.find(f => f.name.toLowerCase() === 'contacts');
+      if (contactsAttachFolder) {
+        structure.attachmentsContacts = contactsAttachFolder.id;
+      }
+      
+      const meetingsAttachFolder = attachmentSubfolders.find(f => f.name.toLowerCase() === 'meetings');
+      if (meetingsAttachFolder) {
+        structure.attachmentsMeetings = meetingsAttachFolder.id;
+      }
+    }
+    
+    console.log('[data] resolved structure:', structure);
+    return structure;
+  } catch (error) {
+    console.error('[data] resolveMigratedStructure error:', error);
+    return null;
+  }
+}
+
+async function loadIndexes(indexFolderId){
+  _ensureReady();
+  console.log('[data] loading indexes from folder:', indexFolderId);
+  
+  try {
+    const result = {
+      contacts: [],
+      meetings: {},
+      meetingsByContact: {},
+      options: {},
+      metadata: {},
+      indexes: {},
+      structure: null
+    };
+    
+    // Get all files in index folder
+    const indexFiles = await driveListChildren(indexFolderId);
+    console.log('[data] found index files:', indexFiles.map(f => f.name));
+    
+    // Load contacts-index.json
+    const contactsIndexFile = indexFiles.find(f => f.name.toLowerCase().includes('contacts-index'));
+    if (contactsIndexFile) {
+      const contactsIndex = await downloadJsonById(contactsIndexFile.id);
+      if (contactsIndex && Array.isArray(contactsIndex)) {
+        result.contacts = contactsIndex;
+        result.indexes.contacts = contactsIndex;
+      }
+    }
+    
+    // Load meetings-index.json
+    const meetingsIndexFile = indexFiles.find(f => f.name.toLowerCase().includes('meetings-index'));
+    if (meetingsIndexFile) {
+      const meetingsIndex = await downloadJsonById(meetingsIndexFile.id);
+      if (meetingsIndex) {
+        result.meetings = meetingsIndex;
+        result.indexes.meetings = meetingsIndex;
+      }
+    }
+    
+    // Load search-index.json
+    const searchIndexFile = indexFiles.find(f => f.name.toLowerCase().includes('search-index'));
+    if (searchIndexFile) {
+      const searchIndex = await downloadJsonById(searchIndexFile.id);
+      if (searchIndex) {
+        result.indexes.search = searchIndex;
+      }
+    }
+    
+    // Load metadata.json
+    const metadataFile = indexFiles.find(f => f.name.toLowerCase().includes('metadata'));
+    if (metadataFile) {
+      const metadata = await downloadJsonById(metadataFile.id);
+      if (metadata) {
+        result.metadata = metadata;
+        // Extract options from metadata if available
+        if (metadata.options) {
+          result.options = metadata.options;
+        }
+      }
+    }
+    
+    console.log('[data] loaded indexes - contacts:', result.contacts.length, 'meetings:', Object.keys(result.meetings).length);
+    return result;
+  } catch (error) {
+    console.error('[data] loadIndexes error:', error);
+    return {
+      contacts: [],
+      meetings: {},
+      meetingsByContact: {},
+      options: {},
+      metadata: {},
+      indexes: {}
+    };
+  }
+}
 
 // === Export minimal AppData API for main.js ===
 global.AppData = global.AppData || {};
@@ -314,6 +460,8 @@ global.AppData.loadAllFromMigrated = async function(rootFolderId){
   var st = await resolveMigratedStructure(rootFolderId);
   if(!st || !st.index){ throw new Error('index フォルダが見つかりません'); }
   var all = await loadIndexes(st.index);
+  // Add structure info to result
+  all.structure = st;
   return all;
 };
 
@@ -415,8 +563,7 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
     }
   }catch(e){ console.warn('normalize model error', e); }
 
-  console.log('[data] BP6: meetings loaded per contact:', Object.keys(meetingsMap||{}).length);
+  console.log('[data] BP7: meetings loaded per contact:', Object.keys(meetingsMap||{}).length);
   return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
-;
-})(window);
+;})(window);
