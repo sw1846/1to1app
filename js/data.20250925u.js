@@ -419,7 +419,8 @@ async function loadIndexes(indexFolderId){
 }
 
 // === Export minimal AppData API for main.js ===
-global.AppData = global.AppData || {};
+var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
+__root.AppData = __root.AppData || {};
 global.AppData.setProgressHandler = function(fn){
   if (typeof fn === 'function'){ STATE.progress = fn; }
 };
@@ -682,5 +683,6 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
 }
 
 // Export new fast hydrator (non-breaking)
-global.AppData = global.AppData || {};
-global.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;
+var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
+__root.AppData = __root.AppData || {};
+__root.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;

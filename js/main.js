@@ -162,7 +162,7 @@
   }
 
   // 既存データ読み込みパイプライン
-  async 
+
 async function loadFromFolderId(folderId){
     // フォルダ内の最近のファイル一覧（デバッグ用）
     try{
