@@ -410,6 +410,48 @@ function deleteImage(type) {
 
 // ファイルを開く
 async function openFile(dataUrlOrPath, fileName, fileType) {
+    // --- Drive file handling (added) ---
+    try{
+        if (typeof dataUrlOrPath === 'string' && dataUrlOrPath.startsWith('drive:')) {
+            const fileId = dataUrlOrPath.split(':')[1];
+            const token = (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken) ? (gapi.client.getToken() && gapi.client.getToken().access_token) : null;
+            if (!token) { alert('Google Driveの認証が必要です'); return; }
+            const resp = await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!resp.ok) { throw new Error('Drive fetch error '+resp.status); }
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            // PDFは新規タブで表示、それ以外はダウンロード（または新規タブで開く）
+            if (fileType === 'application/pdf') {
+                window.open(blobUrl, '_blank');
+            } else {
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = fileName || 'download';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
+            return;
+        }
+    }catch(e){ console.warn('openFile drive handling error', e); }
+    // Fallback: non-data plain path -> fetch as blob
+    if (typeof dataUrlOrPath === 'string' && !dataUrlOrPath.startsWith('data:')) {
+        try {
+            const resp = await fetch(dataUrlOrPath);
+            if (resp && resp.ok) {
+                const blob = await resp.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                if (fileType === 'application/pdf') { window.open(blobUrl, '_blank'); }
+                else {
+                  const link = document.createElement('a'); link.href = blobUrl; link.download = fileName || 'download'; document.body.appendChild(link); link.click(); link.remove();
+                }
+                return;
+            }
+        } catch(e){ console.warn('openFile path fetch error', e); }
+    }
+
     let dataUrl = dataUrlOrPath;
     
     if (!dataUrl.startsWith('data:') && typeof loadAttachmentFromFileSystem === 'function') {

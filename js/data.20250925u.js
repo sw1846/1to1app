@@ -455,6 +455,44 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
     }
   }
 
+
+  // === Injected: normalize model for photoRef/businessCardRef and attachment refs ===
+  try{
+    // Helper to map file ref {name, path, driveFileId, mimeType} -> {name, data, type, path}
+    function mapAttachmentRef(a){
+      if(!a) return null;
+      var data = (a.driveFileId ? ('drive:' + a.driveFileId) : (a.path || ''));
+      return { name: a.name || '', data: data, type: a.mimeType || '', path: a.path || '' };
+    }
+    // Contacts
+    if (Array.isArray(contactsArr)){
+      contactsArr.forEach(function(c){
+        if (c && c.photoRef){
+          c.photo = c.photoRef.driveFileId ? ('drive:' + c.photoRef.driveFileId) : (c.photoRef.path || c.photo || '');
+        }
+        if (c && c.businessCardRef){
+          c.businessCard = c.businessCardRef.driveFileId ? ('drive:' + c.businessCardRef.driveFileId) : (c.businessCardRef.path || c.businessCard || '');
+        }
+        if (Array.isArray(c && c.attachments)){
+          c.attachments = c.attachments.map(mapAttachmentRef).filter(Boolean);
+        }
+      });
+    }
+    // Meetings
+    if (meetingsMap && typeof meetingsMap === 'object'){
+      Object.keys(meetingsMap).forEach(function(cid){
+        var arr = meetingsMap[cid];
+        if(Array.isArray(arr)){
+          arr.forEach(function(m){
+            if (Array.isArray(m && m.attachments)){
+              m.attachments = m.attachments.map(mapAttachmentRef).filter(Boolean);
+            }
+          });
+        }
+      });
+    }
+  }catch(e){ console.warn('normalize model error', e); }
+
   return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
 ;
