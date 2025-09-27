@@ -14,7 +14,8 @@
     progress: function(){},
     gisScriptRequested: false,
     gapiScriptRequested: false
-  };
+  } catch(e){ console.error('rebuildIndexes error', e); return false; }
+};
 
   function log(){ try{ console.log.apply(console, ['[data]'].concat([].slice.call(arguments))); }catch(e){} }
   function setStatus(t){ try{ var el=document.getElementById('statusText'); if(el) el.textContent = t; }catch(e){} }
@@ -27,15 +28,15 @@
       var scopes = (__root.APP_CONFIG && APP_CONFIG.SCOPES) || '';
       scopes = sanitizeScopes(scopes);
       return scopes.split(' ').indexOf(needle) >= 0;
-    }catch(e){ return false; }
+    }catch(e){ console.warn('[index] skipped'); return false; }
   }
   function btns(){ return Array.prototype.slice.call(document.querySelectorAll('#googleSignInBtn, [data-role="google-signin"], button[onclick*="handleAuthClick"]')); }
   function setBtnsDisabled(v){ try{ btns().forEach(function(b){ b.disabled=!!v; b.dataset.busy=v?'1':''; }); }catch(e){} }
 
   function ensureGisScript(){
     try{
-      if(__root.google && __root.google.accounts && __root.google.accounts.oauth2) return true;
-      if(STATE.gisScriptRequested) return false;
+      if(__root.google && __root.google.accounts && __root.google.accounts.oauth2) console.log('[index] rebuilt'); return true;
+      if(STATE.gisScriptRequested) console.warn('[index] skipped'); return false;
       var exists = false;
       var scripts = document.getElementsByTagName('script');
       for(var i=0;i<scripts.length;i++){
@@ -51,13 +52,13 @@
         document.head.appendChild(s);
       }
       STATE.gisScriptRequested = true;
-      return false;
-    }catch(e){ return false; }
+      console.warn('[index] skipped'); return false;
+    }catch(e){ console.warn('[index] skipped'); return false; }
   }
   function ensureGapiScript(){
     try{
-      if(__root.gapi && typeof gapi.load === 'function') return true;
-      if(STATE.gapiScriptRequested) return false;
+      if(__root.gapi && typeof gapi.load === 'function') console.log('[index] rebuilt'); return true;
+      if(STATE.gapiScriptRequested) console.warn('[index] skipped'); return false;
       var exists = false;
       var scripts = document.getElementsByTagName('script');
       for(var i=0;i<scripts.length;i++){
@@ -73,8 +74,8 @@
         document.head.appendChild(s);
       }
       STATE.gapiScriptRequested = true;
-      return false;
-    }catch(e){ return false; }
+      console.warn('[index] skipped'); return false;
+    }catch(e){ console.warn('[index] skipped'); return false; }
   }
 
   function ensureGapiClient(){
@@ -112,8 +113,8 @@
   }
 
   function __initTokenClientInternal(){
-    if(STATE.tokenClient){ return true; }
-    if(!(__root.google && google.accounts && google.accounts.oauth2)){ return false; }
+    if(STATE.tokenClient){ console.log('[index] rebuilt'); return true; }
+    if(!(__root.google && google.accounts && google.accounts.oauth2)){ console.warn('[index] skipped'); return false; }
 
     var cid = (__root.APP_CONFIG && APP_CONFIG.GOOGLE_CLIENT_ID) ||
               (__root.DRIVE_CONFIG && DRIVE_CONFIG.CLIENT_ID) || '';
@@ -121,7 +122,7 @@
                  (__root.DRIVE_CONFIG && DRIVE_CONFIG.SCOPES) || '';
 
     scopes = sanitizeScopes(scopes);
-    if (!cid){ console.error('GOOGLE_CLIENT_ID 未設定'); return false; }
+    if (!cid){ console.error('GOOGLE_CLIENT_ID 未設定'); console.warn('[index] skipped'); return false; }
 
     STATE.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: cid.trim(),
@@ -150,7 +151,7 @@
     });
     STATE.gisReady = true;
     log('GIS 初期化完了');
-    return true;
+    console.log('[index] rebuilt'); return true;
   }
   function __initTokenClientWithRetry(cb){
     if(__initTokenClientInternal()){ cb && cb(true); return; }
@@ -248,7 +249,7 @@ async function driveFindChildByName(parentId, name, mimeType){
   const files = await driveListChildren(parentId, { });
   const lower = String(name||'').toLowerCase().trim();
   function accepts(f){
-    if (!mimeType) return true;
+    if (!mimeType) console.log('[index] rebuilt'); return true;
     if (mimeType === 'application/json'){
       // sometimes JSONs are uploaded as text/plain or application/octet-stream
       return (f.mimeType === 'application/json' || f.mimeType === 'text/plain' || f.mimeType === 'application/octet-stream');
@@ -813,22 +814,63 @@ function buildSearchIndex(contacts){
   });
 }
 
-__root.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){
+__root.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){ try{
   
-  // local scope checker to avoid ReferenceError
+  
+  // --- local helpers (self-contained) ---
   function _hasScope(scope){
     try{
       if (typeof hasScope === 'function') return hasScope(scope);
       var token = (typeof gapi!=='undefined' && gapi.client && gapi.client.getToken && gapi.client.getToken()) || null;
       var scopeStr = token && token.scope ? token.scope : ((window.APP_CONFIG && APP_CONFIG.SCOPES) || '');
       return typeof scopeStr === 'string' && scopeStr.indexOf(scope) >= 0;
-    }catch(e){ return false; }
+    }catch(e){ console.warn('[index] skipped'); return false; }
+  }
+  async function upsertJsonInFolder(folderId, name, obj){
+    try{
+      var q = "'" + folderId + "' in parents and trashed=false and name='" + name.replace(/'/g,"\'") + "'";
+      var listResp = await gapi.client.drive.files.list({
+        q: q, fields: "files(id,name)", pageSize: 1,
+        supportsAllDrives: true, includeItemsFromAllDrives: true
+      });
+      var jsonStr = JSON.stringify(obj||{}, null, 0);
+      var mime = "application/json";
+      if(listResp.result && listResp.result.files && listResp.result.files.length){
+        var fileId = listResp.result.files[0].id;
+        return gapi.client.request({
+          path: "/upload/drive/v3/files/" + encodeURIComponent(fileId),
+          method: "PATCH",
+          params: { uploadType: "media", supportsAllDrives: true },
+          headers: { "Content-Type": mime },
+          body: jsonStr
+        });
+      }else{
+        return gapi.client.drive.files.create({
+          resource: { name: name, parents: [folderId], mimeType: mime },
+          media: { mimeType: mime, body: jsonStr },
+          fields: "id,name,parents",
+          supportsAllDrives: true
+        });
+      }
+    }catch(e){
+      console.warn('upsertJsonInFolder error', e);
+      throw e;
+    }
+  }
+// local scope checker to avoid ReferenceError
+  function _hasScope(scope){
+    try{
+      if (typeof hasScope === 'function') return hasScope(scope);
+      var token = (typeof gapi!=='undefined' && gapi.client && gapi.client.getToken && gapi.client.getToken()) || null;
+      var scopeStr = token && token.scope ? token.scope : ((window.APP_CONFIG && APP_CONFIG.SCOPES) || '');
+      return typeof scopeStr === 'string' && scopeStr.indexOf(scope) >= 0;
+    }catch(e){ console.warn('[index] skipped'); return false; }
   }
 try{
-    if(!structure || !structure.index){ console.warn('rebuildIndexes: index folder missing'); return false; }
+    if(!structure || !structure.index){ console.warn('rebuildIndexes: index folder missing'); console.warn('[index] skipped'); return false; }
     if(!_hasScope("https://www.googleapis.com/auth/drive.file")){
       console.warn('rebuildIndexes: insufficient scope (drive.file required)'); 
-      return false;
+      console.warn('[index] skipped'); return false;
     }
     var idxFolder = structure.index;
     var cidx = buildContactsIndex(contacts);
@@ -836,9 +878,9 @@ try{
     await upsertJsonInFolder(idxFolder, "contacts-index.json", cidx);
     await upsertJsonInFolder(idxFolder, "search-index.json", sidx);
     // meetings-index は既存を尊重（必要であれば同様に upsert 可能）
-    return true;
+    console.log('[index] rebuilt'); return true;
   }catch(e){
     console.error('rebuildIndexes error', e);
-    return false;
+    console.warn('[index] skipped'); return false;
   }
 };
