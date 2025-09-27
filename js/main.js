@@ -604,3 +604,66 @@
     try{ localStorage.clear(); sessionStorage.clear(); }catch(_){}
     location.reload();
   };
+
+// ====== DnD inputs for photo, business card, attachments ======
+function initDnDInputs(){
+  function wire(zoneId, accept, multiple, onFiles){
+    var zone = document.getElementById(zoneId);
+    if(!zone) return;
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = accept || ''; input.multiple = !!multiple; input.style.display = 'none';
+    zone.tabIndex = 0;
+    zone.addEventListener('click', function(){ input.click(); });
+    zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function(e){ zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e){
+      e.preventDefault(); zone.classList.remove('drag-over');
+      var files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+      onFiles(files);
+    });
+    input.addEventListener('change', function(e){
+      var files = Array.from(input.files || []);
+      onFiles(files);
+      input.value = '';
+    });
+    zone.parentElement && zone.parentElement.appendChild(input);
+  }
+
+  function readAsDataURL(file){ return new Promise(function(res, rej){ var r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
+
+  wire('photoDropZone', 'image/*', false, async function(files){
+    if(!files.length) return;
+    var url = await readAsDataURL(files[0]);
+    var prev = document.getElementById('photoPreview');
+    var cont = document.getElementById('photoPreviewContainer');
+    if(prev){ prev.src = url; }
+    if(cont){ cont.style.display = 'block'; }
+  });
+
+  wire('businessCardDropZone', 'image/*,application/pdf', false, async function(files){
+    if(!files.length) return;
+    var url = await readAsDataURL(files[0]);
+    var prev = document.getElementById('businessCardPreview');
+    var cont = document.getElementById('businessCardPreviewContainer');
+    if(prev){ prev.src = url; }
+    if(cont){ cont.style.display = 'block'; }
+  });
+
+  wire('attachmentDropZone', '', true, async function(files){
+    var list = document.getElementById('attachmentList');
+    if(!list) return;
+    for(const f of files){
+      var url = await readAsDataURL(f);
+      var div = document.createElement('div');
+      div.className = 'file-item';
+      div.dataset.fileName = f.name;
+      div.dataset.fileData = url;
+      div.dataset.fileType = f.type || '';
+      div.innerHTML = '📎 <span>' + (f.name || 'file') + '</span> <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>';
+      list.appendChild(div);
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', function(){
+  try{ initDnDInputs(); }catch(e){ console.warn('initDnDInputs error', e); }
+});

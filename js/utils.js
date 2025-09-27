@@ -1200,3 +1200,208 @@ async function loadDriveFileAsObjectURL(ref){
         return null;
     }
 }
+
+
+// ======= Added helpers: Drive upload & JSON save & attachments =======
+(function(global){
+  'use strict';
+
+  function _hasDriveFileScope(){
+    try{
+      var t = (global.gapi && gapi.client && gapi.client.getToken && gapi.client.getToken()) || {};
+      // scope presence cannot be read easily; rely on presence of token
+      return !!t && !!t.access_token;
+    }catch(e){ return false; }
+  }
+
+  async function getFileIdInFolder(name, folderId){
+    if(!name || !folderId) return null;
+    try{
+      var q = "name = '" + name.replace(/'/g,"\\'") + "' and '" + folderId + "' in parents and trashed = false";
+      var resp = await gapi.client.drive.files.list({
+        q: q,
+        fields: 'files(id,name,parents)',
+        pageSize: 10,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+      var files = (resp.result && resp.result.files) || [];
+      if(files.length){ return files[0].id; }
+      return null;
+    }catch(e){ console.warn('getFileIdInFolder error', e); return null; }
+  }
+  global.getFileIdInFolder = global.getFileIdInFolder || getFileIdInFolder;
+
+  async function ensureSubfolder(parentId, name){
+    try{
+      var q = "mimeType = 'application/vnd.google-apps.folder' and name = '" + name.replace(/'/g,"\\'") + "' and '" + parentId + "' in parents and trashed = false";
+      var resp = await gapi.client.drive.files.list({
+        q: q,
+        fields: 'files(id,name)',
+        pageSize: 10,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+      var files = (resp.result && resp.result.files) || [];
+      if(files.length){ return files[0].id; }
+      var meta = { name: name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] };
+      var cre = await gapi.client.drive.files.create({ resource: meta, fields: 'id', supportsAllDrives: true });
+      return (cre.result && cre.result.id) || null;
+    }catch(e){ console.warn('ensureSubfolder error', e); return null; }
+  }
+
+  function _dataUrlInfo(dataUrl){
+    if(typeof dataUrl !== 'string') return { mime: 'application/octet-stream', base64:'' };
+    var m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+    if(!m){ return { mime: 'application/octet-stream', base64: '' }; }
+    return { mime: m[1], base64: m[2] };
+  }
+
+  async function uploadDataUrlToFolder(fileName, dataUrl, parentFolderId){
+    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
+    var info = _dataUrlInfo(dataUrl);
+    var boundary = '-------1to1app' + String(Date.now());
+    var delimiter = "\r\n--" + boundary + "\r\n";
+    var closeDelim = "\r\n--" + boundary + "--";
+
+    var metadata = { name: fileName, mimeType: info.mime, parents: [parentFolderId] };
+    var multipartBody = delimiter +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      JSON.stringify(metadata) + delimiter +
+      "Content-Type: " + info.mime + "\r\n" +
+      "Content-Transfer-Encoding: base64\r\n\r\n" +
+      info.base64 + closeDelim;
+
+    var req = await gapi.client.request({
+      path: '/upload/drive/v3/files',
+      method: 'POST',
+      params: { uploadType: 'multipart', supportsAllDrives: true },
+      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body: multipartBody
+    });
+    return (req.result && req.result.id) || null;
+  }
+
+  async function updateFileWithDataUrl(fileId, dataUrl){
+    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
+    var info = _dataUrlInfo(dataUrl);
+    var req = await gapi.client.request({
+      path: '/upload/drive/v3/files/' + fileId,
+      method: 'PATCH',
+      params: { uploadType: 'media', supportsAllDrives: true },
+      headers: { 'Content-Type': info.mime },
+      body: atob(info.base64)  // raw bytes; Drive accepts binary body
+    });
+    return (req.result && req.result.id) || fileId;
+  }
+
+  async function putJsonFile(folderId, name, obj){
+    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
+    var json = JSON.stringify(obj || {}, null, 2);
+    var fid = await getFileIdInFolder(name, folderId);
+    if(!fid){
+      var meta = { name: name, mimeType: 'application/json', parents: [folderId] };
+      var req = await gapi.client.request({
+        path: '/upload/drive/v3/files',
+        method: 'POST',
+        params: { uploadType: 'multipart', supportsAllDrives: true },
+        headers: { 'Content-Type': 'multipart/related; boundary=1to1json' },
+        body:
+          "--1to1json\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" +
+          JSON.stringify(meta) + "\r\n--1to1json\r\nContent-Type: application/json\r\n\r\n" +
+          json + "\r\n--1to1json--"
+      });
+      return (req.result && req.result.id) || null;
+    }else{
+      var up = await gapi.client.request({
+        path: '/upload/drive/v3/files/' + fid,
+        method: 'PATCH',
+        params: { uploadType: 'media', supportsAllDrives: true },
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: json
+      });
+      return (up.result && up.result.id) || fid;
+    }
+  }
+  global.putJsonFile = global.putJsonFile || putJsonFile;
+
+  // Save all: write contacts-index.json (+search-index.json if present) minimal
+  async function saveAllData(){
+    try{
+      if(!global.folderStructure || !global.folderStructure.index){ throw new Error('index folder not resolved'); }
+      var indexId = global.folderStructure.index;
+      var contactsArr = Array.isArray(global.contacts)? global.contacts : [];
+      // Build lightweight index: keep only essential fields for list
+      var idx = {};
+      contactsArr.forEach(function(c){
+        if(!c || !c.id) return;
+        idx[c.id] = {
+          id: c.id, name: c.name || '', furigana: c.furigana || '',
+          company: c.company || '', status: c.status || '新規',
+          photoPath: c.photoPath || null, businessCardPath: c.businessCardPath || null,
+          types: c.types || [], affiliations: c.affiliations || [], industryInterests: c.industryInterests || []
+        };
+      });
+      await putJsonFile(indexId, 'contacts-index.json', idx);
+      if(global.indexes && global.indexes.search){
+        await putJsonFile(indexId, 'search-index.json', global.indexes.search);
+      }
+      if(global.indexes && global.indexes.meetings){
+        await putJsonFile(indexId, 'meetings-index.json', global.indexes.meetings);
+      }
+      if(typeof global.showNotification === 'function'){
+        showNotification('保存しました', 'success');
+      }
+    }catch(e){
+      console.error('saveAllData error', e);
+      if(typeof global.showNotification === 'function'){
+        showNotification('保存に失敗しました: ' + (e && e.message), 'error');
+      }
+      throw e;
+    }
+  }
+  global.saveAllData = global.saveAllData || saveAllData;
+
+  function _sanitizeName(s){
+    return String(s||'').trim().replace(/[\\/:*?"<>|#\[\]@]/g,'_').slice(0,128);
+  }
+
+  // Save attachments for Contacts
+  async function saveAttachmentToFileSystem(fileName, dataUrl, contactName){
+    if(!global.folderStructure || !(global.folderStructure.attachmentsContacts || global.folderStructure.attachments)){
+      throw new Error('attachments folder not ready');
+    }
+    var parent = global.folderStructure.attachmentsContacts || global.folderStructure.attachments;
+    var sub = await ensureSubfolder(parent, _sanitizeName(contactName||'contact'));
+    var safe = _sanitizeName(fileName || 'file');
+    var existingId = await getFileIdInFolder(safe, sub);
+    var id;
+    if(existingId){
+      id = await updateFileWithDataUrl(existingId, dataUrl);
+    }else{
+      id = await uploadDataUrlToFolder(safe, dataUrl, sub);
+    }
+    return 'drive:' + id;
+  }
+  global.saveAttachmentToFileSystem = global.saveAttachmentToFileSystem || saveAttachmentToFileSystem;
+
+  // Save attachments for Meetings
+  async function saveAttachmentToMeetingFileSystem(fileName, dataUrl, meetingId){
+    if(!global.folderStructure || !(global.folderStructure.attachmentsMeetings || global.folderStructure.attachments)){
+      throw new Error('attachments folder not ready');
+    }
+    var parent = global.folderStructure.attachmentsMeetings || global.folderStructure.attachments;
+    var sub = await ensureSubfolder(parent, _sanitizeName(String(meetingId||'meeting')));
+    var safe = _sanitizeName(fileName || 'file');
+    var existingId = await getFileIdInFolder(safe, sub);
+    var id;
+    if(existingId){
+      id = await updateFileWithDataUrl(existingId, dataUrl);
+    }else{
+      id = await uploadDataUrlToFolder(safe, dataUrl, sub);
+    }
+    return 'drive:' + id;
+  }
+  global.saveAttachmentToMeetingFileSystem = global.saveAttachmentToMeetingFileSystem || saveAttachmentToMeetingFileSystem;
+
+})(window);
