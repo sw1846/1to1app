@@ -205,6 +205,11 @@ async function loadFromFolderId(folderId){
     var hydrated = await hydrator(window.folderStructure, window.contacts, window.meetingsByContact, {concurrency: 12, onBatch});
     // 最終描画
     if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
+    try{
+      if(AppData && typeof AppData.rebuildIndexes==='function'){
+        AppData.rebuildIndexes(window.folderStructure, window.contacts, window.meetingsByContact);
+      }
+    }catch(_e){}
     setStatus('読み込み完了');
     return hydrated;
 }

@@ -846,3 +846,87 @@ turn { contacts: contactsArr, meetingsByContact: meetingsMap };
 var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
 __root.AppData = __root.AppData || {};
 __root.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;
+
+
+// === Rebuild indexes utilities ===
+function _hasScope(s){
+  try{
+    if(typeof hasScope === 'function') return hasScope(s);
+    // Fallback: check token scopes via STATE or window scope string
+    var sc = (window.APP_CONFIG && APP_CONFIG.SCOPES) || '';
+    return sc.indexOf(s) >= 0;
+  }catch(_e){ return false; }
+}
+
+async function upsertJsonInFolder(folderId, name, obj){
+  var q = "'" + folderId + "' in parents and trashed=false and name='" + name.replace(/'/g,"\\'") + "'";
+  var listResp = await gapi.client.drive.files.list({
+    q: q, fields: "files(id,name)", pageSize: 1,
+    supportsAllDrives: true, includeItemsFromAllDrives: true
+  });
+  var jsonStr = JSON.stringify(obj||{}, null, 0);
+  var mime = "application/json";
+
+  if(listResp.result && listResp.result.files && listResp.result.files.length){
+    var fileId = listResp.result.files[0].id;
+    // update (media only)
+    return gapi.client.request({
+      path: "/upload/drive/v3/files/" + encodeURIComponent(fileId),
+      method: "PATCH",
+      params: { uploadType: "media", supportsAllDrives: true },
+      headers: { "Content-Type": mime },
+      body: jsonStr
+    });
+  }else{
+    // create
+    return gapi.client.drive.files.create({
+      resource: { name: name, parents: [folderId], mimeType: mime },
+      media: { mimeType: mime, body: jsonStr },
+      fields: "id,name,parents",
+      supportsAllDrives: true
+    });
+  }
+}
+
+function buildContactsIndex(contacts){
+  contacts = Array.isArray(contacts) ? contacts : [];
+  return contacts.map(function(c){
+    return {
+      id: c.id || "",
+      name: c.name || "",
+      company: c.company || "",
+      furigana: c.furigana || "",
+      status: c.status || c.currentStatus || "",
+      tags: c.tags || c.labels || [],
+      updatedAt: c.updatedAt || c.modifiedTime || ""
+    };
+  });
+}
+
+function buildSearchIndex(contacts){
+  contacts = Array.isArray(contacts) ? contacts : [];
+  return contacts.map(function(c){
+    var t = [c.name, c.company, c.furigana].filter(Boolean).join(" ").toLowerCase();
+    return { id: c.id||"", t: t };
+  });
+}
+
+global.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){
+  try{
+    if(!structure || !structure.index){ console.warn('rebuildIndexes: index folder missing'); return false; }
+    if(!_hasScope("https://www.googleapis.com/auth/drive.file")){
+      console.warn('rebuildIndexes: insufficient scope (drive.file required)'); 
+      return false;
+    }
+    var idxFolder = structure.index;
+    var cidx = buildContactsIndex(contacts);
+    var sidx = buildSearchIndex(contacts);
+    await upsertJsonInFolder(idxFolder, "contacts-index.json", cidx);
+    await upsertJsonInFolder(idxFolder, "search-index.json", sidx);
+    // meetings-index は既存を尊重（必要であれば同様に upsert 可能）
+    return true;
+  }catch(e){
+    console.error('rebuildIndexes error', e);
+    return false;
+  }
+};
