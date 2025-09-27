@@ -243,128 +243,34 @@
     return (resp.result && resp.result.files) || [];
   }
 
-  async function driveFindChildByName(parentId, name, mimeType){
-    var files = await driveListChildren(parentId, { });
-    var lower = String(name).toLowerCase();
-    function isJsonLike(mt){ return !mt || mt === 'application/json' || mt === 'text/plain' || mt === 'application/octet-stream'; }
-    // exact matches first
-    var exact = files.filter(function(f){
-      if(mimeType && !isJsonLike(f.mimeType)) return false;
-      return String(f.name||'').toLowerCase() === lower;
-    });
-    if(exact.length){
-      exact.sort(function(a,b){
-        var ta = Date.parse(a.modifiedTime||0)||0, tb = Date.parse(b.modifiedTime||0)||0;
-        return tb - ta;
-      });
-      return exact[0].id;
+  
+async function driveFindChildByName(parentId, name, mimeType){
+  const files = await driveListChildren(parentId, { });
+  const lower = String(name||'').toLowerCase().trim();
+  function accepts(f){
+    if (!mimeType) return true; // no constraint
+    if (mimeType === 'application/json'){
+      // JSONは実体が text/plain や application/octet-stream の場合もある
+      return (f.mimeType === 'application/json' || f.mimeType === 'text/plain' || f.mimeType === 'application/octet-stream');
     }
-    // then contains
-    var partial = files.filter(function(f){
-      if(mimeType && !isJsonLike(f.mimeType)) return false;
-      return String(f.name||'').toLowerCase().indexOf(lower) >= 0;
-    });
-    if(partial.length){
-      partial.sort(function(a,b){
-        var ta = Date.parse(a.modifiedTime||0)||0, tb = Date.parse(b.modifiedTime||0)||0;
-        return tb - ta;
-      });
-      return partial[0].id;
-    }
-    return null;
+    // それ以外（例：フォルダ）は厳密一致
+    return f.mimeType === mimeType;
   }
-
-  async function downloadJsonById(fileId){
-    var token = gapi.client.getToken && gapi.client.getToken().access_token;
-    if(!token) throw new Error('アクセストークン未取得');
-    var res = await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media', {
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    if(!res.ok){ throw new Error('JSON取得失敗: ' + res.status); }
-    // robust parse (text/plain 対応 / BOM 除去)
-    var text = await res.text();
-    try{
-      // Remove BOM if present
-      if(text.charCodeAt(0) === 0xFEFF){ text = text.slice(1); }
-      return JSON.parse(text);
-    }catch(e){
-      console.error('JSON parse失敗', fileId, e, text && text.slice(0,200));
-      throw e;
-    }
+  // exact match
+  let exact = files.filter(f => accepts(f) && String(f.name||'').toLowerCase().trim() === lower);
+  if (exact.length){
+    exact.sort((a,b)=> new Date(b.modifiedTime||0) - new Date(a.modifiedTime||0));
+    return exact[0].id;
   }
-
-  async function readJsonByNameInFolder(folderId, name){
-    var id = await driveFindChildByName(folderId, name, 'application/json');
-    if(!id){ id = await driveFindChildByName(folderId, name, null); }
-    if(!id) return null;
-    return await downloadJsonById(id);
+  // contains match（サブ名一致を許容）
+  let partial = files.filter(f => accepts(f) && String(f.name||'').toLowerCase().indexOf(lower) >= 0);
+  if (partial.length){
+    partial.sort((a,b)=> new Date(b.modifiedTime||0) - new Date(a.modifiedTime||0));
+    return partial[0].id;
   }
-
-  async function resolveMigratedStructure(rootFolderId){
-    var MIME_FOLDER = 'application/vnd.google-apps.folder';
-    var indexId = await driveFindChildByName(rootFolderId, 'index', MIME_FOLDER);
-    var contactsId = await driveFindChildByName(rootFolderId, 'contacts', MIME_FOLDER);
-    var meetingsId = await driveFindChildByName(rootFolderId, 'meetings', MIME_FOLDER);
-    var attachmentsId = await driveFindChildByName(rootFolderId, 'attachments', MIME_FOLDER);
-
-    // attachments subfolders (optional)
-    var attachmentsContactsId = null, attachmentsMeetingsId = null;
-    if(attachmentsId){
-      attachmentsContactsId = await driveFindChildByName(attachmentsId, 'contacts', MIME_FOLDER);
-      attachmentsMeetingsId = await driveFindChildByName(attachmentsId, 'meetings', MIME_FOLDER);
-    }
-
-    return {
-      root: rootFolderId,
-      index: indexId,
-      contacts: contactsId,
-      meetings: meetingsId,
-      attachments: attachmentsId,
-      attachmentsContacts: attachmentsContactsId,
-      attachmentsMeetings: attachmentsMeetingsId
-    };
-  }
-
-  async function loadIndexes(indexFolderId){
-  var out = {contacts:[], meetings:{}, search:{}, metadata:{}};
-  // contacts-index
-  try{
-    var f = await driveFindChildByName(indexFolderId, 'contacts-index.json');
-    if(f){
-      var cj = await downloadJsonById(f);
-      // allow array or {contacts:[...]}
-      out.contacts = Array.isArray(cj) ? cj : (Array.isArray(cj && cj.contacts) ? cj.contacts : (Array.isArray(cj && cj.items) ? cj.items : (Array.isArray(cj && cj.list) ? cj.list : (Array.isArray(cj && cj.data) ? cj.data : []))));
-    }
-  }catch(e){ console.warn('contacts-index 読込失敗', e); }
-  // meetings-index
-  try{
-    var mf = await driveFindChildByName(indexFolderId, 'meetings-index.json');
-    if(mf){
-      var mj = await downloadJsonById(mf);
-      out.meetings = (mj && mj.items) ? mj.items : (mj || {});
-    }
-  }catch(e){ console.warn('meetings-index 読込失敗', e); }
-  // search-index
-  try{
-    var sf = await driveFindChildByName(indexFolderId, 'search-index.json');
-    if(sf){
-      var sj = await downloadJsonById(sf);
-      // allow array of {id,text} or object map
-      if(Array.isArray(sj)){
-        var map = {}; sj.forEach(function(r){ if(r && r.id) map[r.id] = r.text || ''; });
-        out.search = map;
-      }else{
-        out.search = sj || {};
-      }
-    }
-  }catch(e){ console.warn('search-index 読込失敗', e); }
-  // metadata
-  try{
-    var mt = await driveFindChildByName(indexFolderId, 'metadata.json');
-    if(mt){ out.metadata = await downloadJsonById(mt); }
-  }catch(e){ console.warn('metadata 読込失敗', e); }
-  return out;
+  return null;
 }
+
 
 // === Export minimal AppData API for main.js ===
 global.AppData = global.AppData || {};
@@ -509,6 +415,7 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
     }
   }catch(e){ console.warn('normalize model error', e); }
 
+  console.log('[data] BP6: meetings loaded per contact:', Object.keys(meetingsMap||{}).length);
   return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
 ;
