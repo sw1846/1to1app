@@ -575,9 +575,7 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
   opts = opts || {};
   var onBatch = typeof opts.onBatch === 'function' ? opts.onBatch : function(){};
   var concurrency = typeof opts.concurrency === 'number' ? Math.max(2, Math.min(24, opts.concurrency)) : hydratorConcurrency;
-
-  await ensureGapiClient();
-  contactsArr = Array.isArray(contactsArr) ? contactsArr : [];
+contactsArr = Array.isArray(contactsArr) ? contactsArr : [];
   meetingsMap = (meetingsMap && typeof meetingsMap === 'object') ? meetingsMap : {};
 
   if(!structure) return { contacts: contactsArr, meetingsByContact: meetingsMap };
