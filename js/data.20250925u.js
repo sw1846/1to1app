@@ -24,7 +24,7 @@
   }
   function hasScope(needle){
     try{
-      var scopes = (global.APP_CONFIG && APP_CONFIG.SCOPES) || '';
+      var scopes = (__root.APP_CONFIG && APP_CONFIG.SCOPES) || '';
       scopes = sanitizeScopes(scopes);
       return scopes.split(' ').indexOf(needle) >= 0;
     }catch(e){ return false; }
@@ -34,7 +34,7 @@
 
   function ensureGisScript(){
     try{
-      if(global.google && global.google.accounts && global.google.accounts.oauth2) return true;
+      if(__root.google && __root.google.accounts && __root.google.accounts.oauth2) return true;
       if(STATE.gisScriptRequested) return false;
       var exists = false;
       var scripts = document.getElementsByTagName('script');
@@ -56,7 +56,7 @@
   }
   function ensureGapiScript(){
     try{
-      if(global.gapi && typeof gapi.load === 'function') return true;
+      if(__root.gapi && typeof gapi.load === 'function') return true;
       if(STATE.gapiScriptRequested) return false;
       var exists = false;
       var scripts = document.getElementsByTagName('script');
@@ -81,11 +81,11 @@
     return new Promise(function(resolve){
       STATE.progress('gapi:init:start');
       if (STATE.gapiReady){ STATE.progress('gapi:init:cached'); return resolve(); }
-      if (!(global.gapi && gapi.load)){
+      if (!(__root.gapi && gapi.load)){
         ensureGapiScript();
         var tries=0, max=30;
         (function waitGapi(){
-          if(global.gapi && gapi.load){ return ensureGapiClient().then(resolve); }
+          if(__root.gapi && gapi.load){ return ensureGapiClient().then(resolve); }
           if(++tries>=max){ STATE.progress('gapi:init:skip'); return resolve(); }
           setTimeout(waitGapi, 100);
         })();
@@ -113,12 +113,12 @@
 
   function __initTokenClientInternal(){
     if(STATE.tokenClient){ return true; }
-    if(!(global.google && google.accounts && google.accounts.oauth2)){ return false; }
+    if(!(__root.google && google.accounts && google.accounts.oauth2)){ return false; }
 
-    var cid = (global.APP_CONFIG && APP_CONFIG.GOOGLE_CLIENT_ID) ||
-              (global.DRIVE_CONFIG && DRIVE_CONFIG.CLIENT_ID) || '';
-    var scopes = (global.APP_CONFIG && APP_CONFIG.SCOPES) ||
-                 (global.DRIVE_CONFIG && DRIVE_CONFIG.SCOPES) || '';
+    var cid = (__root.APP_CONFIG && APP_CONFIG.GOOGLE_CLIENT_ID) ||
+              (__root.DRIVE_CONFIG && DRIVE_CONFIG.CLIENT_ID) || '';
+    var scopes = (__root.APP_CONFIG && APP_CONFIG.SCOPES) ||
+                 (__root.DRIVE_CONFIG && DRIVE_CONFIG.SCOPES) || '';
 
     scopes = sanitizeScopes(scopes);
     if (!cid){ console.error('GOOGLE_CLIENT_ID 未設定'); return false; }
@@ -131,7 +131,7 @@
         STATE.tokenInFlight = false;
         log('token resp', resp);
         try{
-          if (resp && resp.access_token && global.gapi && gapi.client){
+          if (resp && resp.access_token && __root.gapi && gapi.client){
             gapi.client.setToken({ access_token: resp.access_token });
           }
           setStatus('サインイン済み');
@@ -164,7 +164,7 @@
   }
 
   function _ensureReady(){
-    if(!(global.gapi && gapi.client && STATE.gapiReady)){
+    if(!(__root.gapi && gapi.client && STATE.gapiReady)){
       throw new Error('gapi client not ready');
     }
   }
@@ -421,11 +421,11 @@ async function loadIndexes(indexFolderId){
 // === Export minimal AppData API for main.js ===
 var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
 __root.AppData = __root.AppData || {};
-global.AppData.setProgressHandler = function(fn){
+__root.AppData.setProgressHandler = function(fn){
   if (typeof fn === 'function'){ STATE.progress = fn; }
 };
-global.AppData.ensureFolderStructureByName = ensureFolderStructureByName;
-global.AppData.signin = function(){
+__root.AppData.ensureFolderStructureByName = ensureFolderStructureByName;
+__root.AppData.signin = function(){
   try{
     setBtnsDisabled(true);
   }catch(e){}
@@ -456,7 +456,7 @@ global.AppData.signin = function(){
 
 
 // Load all indexes from migrated folder structure root
-global.AppData.loadAllFromMigrated = async function(rootFolderId){
+__root.AppData.loadAllFromMigrated = async function(rootFolderId){
   await ensureGapiClient();
   var st = await resolveMigratedStructure(rootFolderId);
   if(!st || !st.index){ throw new Error('index フォルダが見つかりません'); }
@@ -470,7 +470,7 @@ global.AppData.loadAllFromMigrated = async function(rootFolderId){
 
 // Hydrate missing contact and meeting details by reading per-contact JSON files
 
-global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, meetingsMap){
+__root.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, meetingsMap){
   await ensureGapiClient();
   if(!structure) return { contacts: contactsArr||[], meetingsByContact: meetingsMap||{} };
   var contactFolderId = structure.contacts;
@@ -638,6 +638,20 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
     }catch(e){ console.warn('meetingsフォルダ一覧失敗(parallel)', e); }
   }
 
+  
+  // --- If index is empty, create lightweight stubs from filenames (no JSON download yet) ---
+  try{
+    if(!(Array.isArray(contactsArr) && contactsArr.length)){
+      var keys = Object.keys(contactFiles);
+      if(keys.length){
+        contactsArr = keys.map(function(_name){
+          var m = _name.match(/contact-(\d+)\.json/i);
+          var id = m ? m[1] : _name;
+          return { id: id, name: '', company: '', _stub: true };
+        });
+      }
+    }
+  }catch(_e){}
   // --- Bootstrap contacts when index is empty ---
   try{
     if(!(Array.isArray(contactsArr) && contactsArr.length)){
@@ -764,7 +778,7 @@ function buildSearchIndex(contacts){
   });
 }
 
-global.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){
+__root.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){
   try{
     if(!structure || !structure.index){ console.warn('rebuildIndexes: index folder missing'); return false; }
     if(!_hasScope("https://www.googleapis.com/auth/drive.file")){
