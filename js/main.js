@@ -162,8 +162,9 @@
   }
 
   // 既存データ読み込みパイプライン
-  async function loadFromFolderId(folderId){
-    // 上部に簡易一覧も表示（デバッグ/確認用）
+  async 
+async function loadFromFolderId(folderId){
+    // フォルダ内の最近のファイル一覧（デバッグ用）
     try{
       var files = await listFilesInFolder(folderId, 20);
       renderDataPanel(files, localStorage.getItem(LS_KEY_PATH)||'(指定ID)');
@@ -172,85 +173,42 @@
     if(!(window.AppData && typeof AppData.loadAllFromMigrated === 'function')){
       throw new Error('AppData.loadAllFromMigrated not available');
     }
+
+    // 1) インデックスのみ先に取得して即時表示
     setStatus('インデックスを読み込み中...');
     var payload = await AppData.loadAllFromMigrated(folderId);
+    var idxContacts = Array.isArray(payload && payload.contacts) ? payload.contacts : [];
+    window.contacts = idxContacts;                 // まずはインデックスの素データ
+    window.meetingsByContact = payload && payload.meetingsByContact ? payload.meetingsByContact : {};
+    window.options = payload && payload.options ? payload.options : (window.options||{});
+    window.folderStructure = payload && payload.structure ? payload.structure : null;
 
-        try{
-      if(payload && payload.structure && typeof AppData.hydrateMissingFromFiles==='function'){
-        setStatus('詳細データを読込中...');
-        var hydrated = await AppData.hydrateMissingFromFiles(payload.structure, (payload.contacts||[]), (payload.meetings||payload.meetingsByContact||{}));
-        if(hydrated){
-          payload.contacts = hydrated.contacts || payload.contacts;
-          payload.meetingsByContact = hydrated.meetingsByContact || payload.meetingsByContact;
-        }
-      }
-    }catch(e){ console.warn('hydrate 失敗', e); }
-// 取得したペイロードをグローバルに反映（堅牢化）
-    window.contacts = Array.isArray(payload.contacts) ? payload.contacts
-      : (Array.isArray(payload.contacts && payload.contacts.items) ? payload.contacts.items
-      : (Array.isArray(payload.contacts && payload.contacts.list) ? payload.contacts.list
-      : (Array.isArray(payload.contacts && payload.contacts.data) ? payload.contacts.data : [])));
-    window.meetingsByContact = payload.meetings || payload.meetingsByContact || {};
-    window.meetings = [];
-    Object.keys(window.meetingsByContact).forEach(function(cid){
-      var arr = window.meetingsByContact[cid] || [];
-      for (var i=0; i<arr.length; i++) window.meetings.push(arr[i]);
-    });
-    window.searchIndex = payload.search || payload.searchIndex || {};
-    window.metadata = payload.metadata || {};
-    window.options = (window.metadata && window.metadata.options) ? window.metadata.options : (payload.options || {});
-    // ---- ensure options defaults even if metadata.options exists but partial ----
-    (function(){
-      var DEF = {
-        types: ['顧客候補', '顧客', '取次店・販売店', 'パートナー', 'その他'],
-        affiliations: ['商工会議所', '青年会議所', 'BNI', 'その他団体'],
-        industryInterests: ['IT・技術', 'コンサルティング', '製造業', '小売業', 'サービス業', 'その他'],
-        statuses: ['新規', '商談中', '成約', '保留', '終了']
-      };
-      window.options = window.options || {};
-      Object.keys(DEF).forEach(function(k){
-        if(!Array.isArray(window.options[k])) window.options[k] = DEF[k].slice();
-      });
-    })();
+    // 即時描画（プログレッシブ）
+    if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
+    setStatus('詳細データを並列で読込中...');
 
-    // フォルダ構造を公開（保存/削除時に利用）
-    window.folderStructure = payload.structure || {};
-    if(window.folderStructure){
-      // 後方互換のためのエイリアス
-      if(!window.folderStructure.attachmentsContacts && payload.structure && payload.structure.attachmentsContacts){
-        window.folderStructure.attachmentsContacts = payload.structure.attachmentsContacts;
+    // 2) 詳細データの並列・遅延読み込み（プログレッシブ更新）
+    var useFast = AppData && typeof AppData.hydrateMissingFromFilesParallel === 'function';
+    var hydrator = useFast ? AppData.hydrateMissingFromFilesParallel : AppData.hydrateMissingFromFiles;
+
+    // バッチ更新（UIスレッシング抑制）
+    var lastRender = 0;
+    function onBatch(info){
+      var now = performance.now();
+      if(now - lastRender > 200){ // 200ms以上経過したら再描画
+        try{ if(typeof window.renderContacts === 'function') window.renderContacts(); }catch(e){}
+        lastRender = now;
       }
-      if(!window.folderStructure.attachmentsMeetings && payload.structure && payload.structure.attachmentsMeetings){
-        window.folderStructure.attachmentsMeetings = payload.structure.attachmentsMeetings;
-      }
+      try{ setStatus('詳細データ読み込み中...'); }catch(_e){}
     }
-    // データをグローバルに反映
-    console.log('[main] contacts in payload:', window.contacts && window.contacts.length);
-    try{ if(typeof updateFilters==='function') updateFilters(); }catch(e){ console.warn('updateFilters warn', e); }
-    try{ if(typeof renderContacts==='function') renderContacts(); }catch(e){ console.warn('renderContacts warn', e); }
-    try{ if(typeof selectTab==='function') selectTab('contacts'); }catch(e){}
-    // meetingsは配列で保持（UIでの集計が楽）
-    window.meetings = [];
-    if(payload.meetingsByContact){
-      Object.keys(payload.meetingsByContact).forEach(function(cid){
-        var arr = payload.meetingsByContact[cid] || [];
-        for(var i=0;i<arr.length;i++){ window.meetings.push(arr[i]); }
-      });
-    }
-    window.options = payload.options || {};
-    window.metadata = payload.metadata || {};
-    window.indexes = payload.indexes || {};
 
-    // UI 更新（既存関数を尊重）
-    try{ if(typeof window.renderContacts === 'function') window.renderContacts(window.contacts); }catch(e){ console.warn('renderContacts失敗', e); }
-    try{ if(typeof window.updateFilters === 'function') window.updateFilters(); }catch(e){ console.warn('updateFilters失敗', e); }
-    try{ if(typeof window.setupMultiSelect === 'function') window.setupMultiSelect(); }catch(e){ console.warn('setupMultiSelect失敗', e); }
+    var hydrated = await hydrator(window.folderStructure, window.contacts, window.meetingsByContact, {concurrency: 12, onBatch});
+    // 最終描画
+    if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
+    setStatus('読み込み完了');
+    return hydrated;
+}
 
-    setStatus('データ読み込み完了');
-    hideSignin();
-    showAppInterface();
-    return true;
-  }
 
   // 念のためグローバルにも公開（他モジュールから直接呼びたい場合に備える）
   window.loadFromFolderId = loadFromFolderId;

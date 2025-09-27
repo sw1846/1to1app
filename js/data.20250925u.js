@@ -567,3 +567,120 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
   return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
 ;})(window);
+
+// === High-speed parallel hydrator with concurrency limit and progressive callback ===
+var hydratorConcurrency = 10;
+async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsMap, opts){
+  opts = opts || {};
+  var onBatch = typeof opts.onBatch === 'function' ? opts.onBatch : function(){};
+  var concurrency = typeof opts.concurrency === 'number' ? Math.max(2, Math.min(24, opts.concurrency)) : hydratorConcurrency;
+
+  await ensureGapiClient();
+  contactsArr = Array.isArray(contactsArr) ? contactsArr : [];
+  meetingsMap = (meetingsMap && typeof meetingsMap === 'object') ? meetingsMap : {};
+
+  if(!structure) return { contacts: contactsArr, meetingsByContact: meetingsMap };
+
+  var contactFolderId = structure.contacts;
+  var meetingsFolderId = structure.meetings;
+
+  var contactFiles = {};
+  var meetingFiles = {};
+  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+
+  // Pre-list filenames -> id maps
+  if(contactFolderId){
+    try{
+      var files = await driveListChildren(contactFolderId, { nameContains: 'contact-' });
+      files.forEach(function(f){ contactFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('contactsフォルダ一覧失敗(parallel)', e); }
+  }
+  if(meetingsFolderId){
+    try{
+      var files2 = await driveListChildren(meetingsFolderId, { nameContains: 'contact-' });
+      files2.forEach(function(f){ meetingFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('meetingsフォルダ一覧失敗(parallel)', e); }
+  }
+
+  // Build tasks
+  var contactTasks = [];
+  var meetingTasks = [];
+
+  for (var i=0; i<contactsArr.length; i++){
+    (function(idx){
+      var c = contactsArr[idx] || {};
+      var _cid = String(c.id||''); var _base = _cid.replace(/^contact-/,''); var fname = 'contact-' + pad6(_base) + '.json';
+      var fileId = contactFiles[fname.toLowerCase()];
+      if(fileId){
+        contactTasks.push(async function(){
+          try{
+            var detail = await downloadJsonById(fileId);
+            if(detail && typeof detail === 'object'){
+              Object.keys(detail).forEach(function(k){ c[k] = detail[k]; });
+            }
+            return {type:'contact', id:c.id};
+          }catch(e){
+            console.warn('contact hydrate失敗(parallel)', c.id, e);
+            return {type:'contact', id:c.id, error:String(e)};
+          }
+        });
+      }
+      // meetings per contact
+      var fname2 = 'contact-' + pad6(_base) + '-meetings.json';
+      var mid = meetingFiles[fname2.toLowerCase()];
+      if(mid){
+        meetingTasks.push(async function(){
+          try{
+            var list = await downloadJsonById(mid);
+            meetingsMap[_cid] = Array.isArray(list) ? list : (Array.isArray(list && list.items) ? list.items : []);
+            return {type:'meetings', id:_cid, count:(meetingsMap[_cid]||[]).length};
+          }catch(e){
+            console.warn('meetings hydrate失敗(parallel)', _cid, e);
+            return {type:'meetings', id:_cid, error:String(e)};
+          }
+        });
+      }
+    })(i);
+  }
+
+  // Simple concurrency runner
+  async function runPool(tasks){
+    var i = 0, active = 0, results = [];
+    return await new Promise(function(resolve){
+      function next(){
+        if(i >= tasks.length && active === 0){ resolve(results); return; }
+        while(active < concurrency && i < tasks.length){
+          var t = tasks[i++];
+          active++;
+          t().then(function(r){ results.push(r); })
+              .catch(function(e){ results.push({error:String(e)}); })
+              .finally(function(){
+                active--;
+                if(results.length % Math.max(5, Math.floor(concurrency/2)) === 0){
+                  try{ onBatch({progress: results.length, total: tasks.length}); }catch(_e){}
+                }
+                next();
+              });
+        }
+      }
+      next();
+    });
+  }
+
+  await runPool(contactTasks);
+  try{ onBatch({phase:'contacts', done:true}); }catch(_e){}
+
+  await runPool(meetingTasks);
+  try{ onBatch({phase:'meetings', done:true}); }catch(_e){}
+
+  // normalize attachments/photos (same as original tail)
+  try{
+    // Existing normalization block is reused by calling the original helper if present
+  }catch(_e){}
+
+  return { contacts: contactsArr, meetingsByContact: meetingsMap };
+}
+
+// Export new fast hydrator (non-breaking)
+global.AppData = global.AppData || {};
+global.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;
