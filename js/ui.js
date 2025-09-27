@@ -589,7 +589,7 @@ function renderKanbanView(container, contactList) {
     const board = document.createElement('div');
     board.className = 'kanban-board';
 
-    options.statuses.forEach(status => {
+    (Array.isArray(window.options && window.options.statuses) ? window.options.statuses : ['新規','商談中','成約','保留','終了']).forEach(status => { /* guard statuses */
         const column = createKanbanColumn(status, contactList);
         board.appendChild(column);
     });

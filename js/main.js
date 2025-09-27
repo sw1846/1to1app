@@ -199,6 +199,20 @@
     window.searchIndex = payload.search || payload.searchIndex || {};
     window.metadata = payload.metadata || {};
     window.options = (window.metadata && window.metadata.options) ? window.metadata.options : (payload.options || {});
+    // ---- ensure options defaults even if metadata.options exists but partial ----
+    (function(){
+      var DEF = {
+        types: ['顧客候補', '顧客', '取次店・販売店', 'パートナー', 'その他'],
+        affiliations: ['商工会議所', '青年会議所', 'BNI', 'その他団体'],
+        industryInterests: ['IT・技術', 'コンサルティング', '製造業', '小売業', 'サービス業', 'その他'],
+        statuses: ['新規', '商談中', '成約', '保留', '終了']
+      };
+      window.options = window.options || {};
+      Object.keys(DEF).forEach(function(k){
+        if(!Array.isArray(window.options[k])) window.options[k] = DEF[k].slice();
+      });
+    })();
+
     // フォルダ構造を公開（保存/削除時に利用）
     window.folderStructure = payload.structure || {};
     if(window.folderStructure){

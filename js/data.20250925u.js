@@ -426,7 +426,7 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
   if(Array.isArray(contactsArr) && contactFolderId){
     for(var i=0;i<contactsArr.length;i++){
       var c = contactsArr[i] || {};
-      var fname = 'contact-' + pad6(c.id) + '.json';
+      var _cid2 = String(c.id||''); var _base2 = _cid2.replace(/^contact-/,''); var fname = 'contact-' + pad6(_base2) + '.json';
       var fileId = contactFiles[fname.toLowerCase()];
       if(fileId){
         try{
@@ -444,7 +444,7 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
     for(var j=0;j<(contactsArr||[]).length;j++){
       var cid = contactsArr[j] && contactsArr[j].id;
       if(!cid) continue;
-      var fname2 = 'contact-' + pad6(cid) + '-meetings.json';
+      var _cid = String(cid||''); var _base = _cid.replace(/^contact-/,''); var fname2 = 'contact-' + pad6(_base) + '-meetings.json';
       var mid = meetingFiles[fname2.toLowerCase()];
       if(mid){
         try{
