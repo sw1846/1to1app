@@ -571,14 +571,176 @@ global.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
 
 // === High-speed parallel hydrator with concurrency limit and progressive callback ===
 var hydratorConcurrency = 10;
+
+// === High-speed parallel hydrator with concurrency limit and progressive callback (self-contained) ===
+var hydratorConcurrency = 10;
 async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsMap, opts){
   opts = opts || {};
   var onBatch = typeof opts.onBatch === 'function' ? opts.onBatch : function(){};
   var concurrency = typeof opts.concurrency === 'number' ? Math.max(2, Math.min(24, opts.concurrency)) : hydratorConcurrency;
-contactsArr = Array.isArray(contactsArr) ? contactsArr : [];
+
+  // Local helpers (avoid relying on IIFE-scoped functions)
+  async function localDriveListChildren(parentId, opt){
+    opt = opt || {};
+    var q = ["'" + parentId + "' in parents", "trashed=false"];
+    if(opt.nameContains){ q.push("name contains '" + String(opt.nameContains).replace(/'/g,"\\'") + "'"); }
+    if(opt.mimeType){ q.push("mimeType='" + opt.mimeType + "'"); }
+    var params = {
+      q: q.join(" and "),
+      fields: "files(id,name,mimeType,modifiedTime)",
+      pageSize: typeof opt.pageSize==='number' ? opt.pageSize : 1000,
+      orderBy: "name",
+      spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    };
+    try{
+      var resp = await gapi.client.drive.files.list(params);
+      return (resp.result && resp.result.files) || [];
+    }catch(e){
+      console.warn('[parallel] localDriveListChildren 失敗', e);
+      return [];
+    }
+  }
+  async function localDownloadJsonById(fileId){
+    try{
+      var response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
+      return JSON.parse(response.body);
+    }catch(e){
+      console.warn('[parallel] localDownloadJsonById 失敗', fileId, e);
+      return null;
+    }
+  }
+
+  contactsArr = Array.isArray(contactsArr) ? contactsArr : [];
   meetingsMap = (meetingsMap && typeof meetingsMap === 'object') ? meetingsMap : {};
 
   if(!structure) return { contacts: contactsArr, meetingsByContact: meetingsMap };
+
+  var contactFolderId = structure.contacts;
+  var meetingsFolderId = structure.meetings;
+
+  var contactFiles = {};
+  var meetingFiles = {};
+  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+
+  // Pre-list filenames -> id maps
+  if(contactFolderId){
+    try{
+      var files = await localDriveListChildren(contactFolderId, { nameContains: 'contact-' });
+      files.forEach(function(f){ contactFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('contactsフォルダ一覧失敗(parallel)', e); }
+  }
+  if(meetingsFolderId){
+    try{
+      var files2 = await localDriveListChildren(meetingsFolderId, { nameContains: 'contact-' });
+      files2.forEach(function(f){ meetingFiles[String(f.name||'').toLowerCase()] = f.id; });
+    }catch(e){ console.warn('meetingsフォルダ一覧失敗(parallel)', e); }
+  }
+
+  // --- Bootstrap contacts when index is empty ---
+  try{
+    if(!(Array.isArray(contactsArr) && contactsArr.length)){
+      var keys = Object.keys(contactFiles);
+      var bootContacts = [];
+      for(var ki=0; ki<keys.length; ki++){
+        var _name = keys[ki];
+        var fid = contactFiles[_name];
+        if(!fid) continue;
+        try{
+          var minimal = await localDownloadJsonById(fid);
+          if(minimal && typeof minimal==='object'){
+            if(!minimal.id){
+              var m = _name.match(/contact-(\d+)\.json/i);
+              minimal.id = m ? m[1] : _name;
+            }
+            bootContacts.push(minimal);
+          }
+        }catch(_e){}
+      }
+      if(bootContacts.length){ contactsArr = bootContacts; }
+    }
+  }catch(_e){}
+
+  // Build tasks
+  var contactTasks = [];
+  var meetingTasks = [];
+
+  for (var i=0; i<contactsArr.length; i++){
+    (function(idx){
+      var c = contactsArr[idx] || {};
+      var _cid = String(c.id||''); var _base = _cid.replace(/^contact-/,''); var fname = 'contact-' + pad6(_base) + '.json';
+      var fileId = contactFiles[fname.toLowerCase()];
+      if(fileId){
+        contactTasks.push(async function(){
+          try{
+            var detail = await localDownloadJsonById(fileId);
+            if(detail && typeof detail === 'object'){
+              Object.keys(detail).forEach(function(k){ c[k] = detail[k]; });
+            }
+            return {type:'contact', id:c.id};
+          }catch(e){
+            console.warn('contact hydrate失敗(parallel)', c.id, e);
+            return {type:'contact', id:c.id, error:String(e)};
+          }
+        });
+      }
+      // meetings per contact
+      var fname2 = 'contact-' + pad6(_base) + '-meetings.json';
+      var mid = meetingFiles[fname2.toLowerCase()];
+      if(mid){
+        meetingTasks.push(async function(){
+          try{
+            var list = await localDownloadJsonById(mid);
+            meetingsMap[_cid] = Array.isArray(list) ? list : (Array.isArray(list && list.items) ? list.items : []);
+            return {type:'meetings', id:_cid, count:(meetingsMap[_cid]||[]).length};
+          }catch(e){
+            console.warn('meetings hydrate失敗(parallel)', _cid, e);
+            return {type:'meetings', id:_cid, error:String(e)};
+          }
+        });
+      }
+    })(i);
+  }
+
+  // Simple concurrency runner
+  async function runPool(tasks){
+    var i = 0, active = 0, results = [];
+    return await new Promise(function(resolve){
+      function next(){
+        if(i >= tasks.length && active === 0){ resolve(results); return; }
+        while(active < concurrency && i < tasks.length){
+          var t = tasks[i++];
+          active++;
+          t().then(function(r){ results.push(r); })
+              .catch(function(e){ results.push({error:String(e)}); })
+              .finally(function(){
+                active--;
+                if(results.length % Math.max(5, Math.floor(concurrency/2)) === 0){
+                  try{ onBatch({progress: results.length, total: tasks.length}); }catch(_e){}
+                }
+                next();
+              });
+        }
+      }
+      next();
+    });
+  }
+
+  await runPool(contactTasks);
+  try{ onBatch({phase:'contacts', done:true}); }catch(_e){}
+
+  await runPool(meetingTasks);
+  try{ onBatch({phase:'meetings', done:true}); }catch(_e){}
+
+  return { contacts: contactsArr, meetingsByContact: meetingsMap };
+}
+
+// Export new fast hydrator (non-breaking)
+var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
+__root.AppData = __root.AppData || {};
+__root.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;
+turn { contacts: contactsArr, meetingsByContact: meetingsMap };
 
   var contactFolderId = structure.contacts;
   var meetingsFolderId = structure.meetings;
