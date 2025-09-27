@@ -639,20 +639,25 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
   }
 
   
+  
   // --- If index is empty, create lightweight stubs from filenames (no JSON download yet) ---
   try{
     if(!(Array.isArray(contactsArr) && contactsArr.length)){
       var keys = Object.keys(contactFiles);
       if(keys.length){
-        contactsArr = keys.map(function(_name){
+        var stubs = keys.map(function(_name){
           var m = _name.match(/contact-(\d+)\.json/i);
           var id = m ? m[1] : _name;
-          return { id: id, name: '', company: '', _stub: true };
+          return { id: id, name: 'ID ' + id, company: '', _stub: true };
         });
+        // mutate the original array to reflect changes to window.contacts
+        Array.prototype.push.apply(contactsArr, stubs);
+        try{ onBatch({phase:'stubs', count: contactsArr.length}); }catch(_e){}
       }
     }
   }catch(_e){}
   // --- Bootstrap contacts when index is empty ---
+
   try{
     if(!(Array.isArray(contactsArr) && contactsArr.length)){
       var keys = Object.keys(contactFiles);
