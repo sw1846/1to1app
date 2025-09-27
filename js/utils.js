@@ -1178,3 +1178,25 @@ async function loadImageFromGoogleDrive(ref){
 }
 
 // （任意）添付保存のDrive実装が必要な場合は後日実装。未定義チェックでフォールバックします。
+
+
+// ========= Drive 汎用ファイル読み込みユーティリティ =========
+async function loadDriveFileAsObjectURL(ref){
+    try{
+        if(!ref) return null;
+        if(ref.startsWith('data:')) return ref; // そのまま
+        let fileId = ref;
+        if(ref.startsWith('drive:')) fileId = ref.split(':')[1];
+        const token = (typeof AppData !== 'undefined' && AppData.token) || (gapi.client.getToken() && gapi.client.getToken().access_token);
+        if(!token) throw new Error('アクセストークン未取得');
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if(!res.ok) throw new Error('Drive fetch失敗: ' + res.status);
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+    }catch(e){
+        console.warn('loadDriveFileAsObjectURL エラー:', e);
+        return null;
+    }
+}

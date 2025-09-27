@@ -952,7 +952,10 @@ function showContactDetail(contactId) {
 
     content.innerHTML = headerHtml + contactInfoHtml + detailsHtml + meetingsHtml;
 
-    // 折りたたみ機能を初期化
+    
+    // 添付ファイルのプレビューを描画
+    if (typeof renderAttachmentsInDetail === "function") { renderAttachmentsInDetail(contact); }
+// 折りたたみ機能を初期化
     setTimeout(() => {
         if (typeof initializeCollapsibles === 'function') {
             initializeCollapsibles();
@@ -961,4 +964,45 @@ function showContactDetail(contactId) {
 
     modal.classList.add('active');
     modal.querySelector('.modal-content').scrollTop = 0;
+}
+
+// ========= 連絡先詳細: 添付ファイルの表示（画像/PDF対応） =========
+async function renderAttachmentsInDetail(contact){
+    try{
+        if(!contact || !Array.isArray(contact.attachments) || contact.attachments.length===0) return;
+        const content = document.getElementById('contactDetailContent');
+        if(!content) return;
+        const section = document.createElement('section');
+        section.style.marginTop = '1.5rem';
+        section.innerHTML = `<h3>添付ファイル</h3><div class="attachment-previews" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>`;
+        const grid = section.querySelector('.attachment-previews');
+        for(const file of contact.attachments){
+            const card = document.createElement('div');
+            card.className = 'attachment-card';
+            card.style.cssText = 'border:1px solid var(--border-color);border-radius:10px;padding:10px;background:var(--bg-secondary);';
+            const name = (file && (file.name || file.fileName)) || 'ファイル';
+            const ref = (file && (file.path || file.data || file.fileId || file.id)) || '';
+            const type = (file && (file.type || file.mimeType)) || '';
+            if(type.startsWith('image/')){
+                const url = await (typeof loadDriveFileAsObjectURL==='function' ? loadDriveFileAsObjectURL(ref) : Promise.resolve(ref));
+                if(url){
+                    card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;"><img src="${url}" alt="${name}" style="width:100%;height:100%;object-fit:cover"></div><div style="margin-top:6px;word-break:break-all;">${escapeHtml(name)}</div>`;
+                }else{
+                    card.innerHTML = `<div>画像を読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
+                }
+            }else if(type==='application/pdf' || (name||'').toLowerCase().endswith('.pdf')){
+                const url = await (typeof loadDriveFileAsObjectURL==='function' ? loadDriveFileAsObjectURL(ref) : Promise.resolve(ref));
+                if(url){
+                    card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;">PDF</div><div style="margin-top:6px;word-break:break-all;"><a href="${url}" target="_blank" rel="noopener">📄 ${escapeHtml(name)}</a></div>`;
+                }else{
+                    card.innerHTML = `<div>PDFを読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
+                }
+            }else{
+                const url = await (typeof loadDriveFileAsObjectURL==='function' ? loadDriveFileAsObjectURL(ref) : Promise.resolve(ref));
+                card.innerHTML = `<div style="margin:6px 0;word-break:break-all;"><a href="${url||'#'}" target="_blank" rel="noopener">📎 ${escapeHtml(name)}</a></div>`;
+            }
+            grid.appendChild(card);
+        }
+        content.appendChild(section);
+    }catch(e){ console.warn('renderAttachmentsInDetail error', e); }
 }

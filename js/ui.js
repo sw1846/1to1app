@@ -1,3 +1,19 @@
+
+// === 画像srcが 'drive:{fileId}' の場合にトークン付きAPIでDataURLへ変換して差し込む共通処理 ===
+async function hydrateDriveImage(imgEl){
+    try{
+        if(!imgEl) return;
+        const ref = imgEl.getAttribute('src') || imgEl.dataset.src || '';
+        if(ref && ref.startsWith('drive:')){
+            imgEl.removeAttribute('src'); // いったん空に
+            if(typeof loadImageFromGoogleDrive === 'function'){
+                const dataUrl = await loadImageFromGoogleDrive(ref);
+                if(dataUrl){ imgEl.src = dataUrl; }
+            }
+        }
+    }catch(e){ console.warn('hydrateDriveImage error', e); }
+}
+
 // ui.js - UI操作・表示機能（完全版）
 
 // タブ切替
@@ -235,7 +251,13 @@ function createContactCard(contact) {
         </div>
     `;
 
-    return card;
+    
+    // drive:画像の解決
+    (function(){
+      var el = (typeof card!=='undefined'?card:typeof item!=='undefined'?item:null);
+      if(el){ var img = el.querySelector('img.contact-photo'); if(img) hydrateDriveImage(img); }
+    })();
+return card;
 }
 
 // リストアイテム作成
@@ -260,7 +282,13 @@ function createContactListItem(contact) {
         </div>
     `;
 
-    return item;
+    
+    // drive:画像の解決
+    (function(){
+      var el = (typeof card!=='undefined'?card:typeof item!=='undefined'?item:null);
+      if(el){ var img = el.querySelector('img.list-photo'); if(img) hydrateDriveImage(img); }
+    })();
+return item;
 }
 
 // ツリービュー
@@ -656,7 +684,13 @@ function createKanbanCard(contact) {
         </div>
     `;
 
-    return card;
+    
+    // drive:画像の解決
+    (function(){
+      var el = (typeof card!=='undefined'?card:typeof item!=='undefined'?item:null);
+      if(el){ var img = el.querySelector('img.kanban-card-photo'); if(img) hydrateDriveImage(img); }
+    })();
+return card;
 }
 
 // ドラッグ&ドロップハンドラー
