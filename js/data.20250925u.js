@@ -619,6 +619,7 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
 
   var contactFolderId = structure.contacts;
   var meetingsFolderId = structure.meetings;
+  var attachmentsContactsFolderId = structure.attachmentsContacts;
 
   var contactFiles = {};
   var meetingFiles = {};
@@ -640,6 +641,20 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
 
   
   
+  
+  // Pre-list candidate photo files
+  var photoFiles = {};
+  if(attachmentsContactsFolderId){
+    try{
+      var imgs = await localDriveListChildren(attachmentsContactsFolderId, { nameContains: 'contact-' });
+      imgs.forEach(function(f){
+        if(String(f.mimeType||'').indexOf('image/')===0){
+          photoFiles[String(f.name||'').toLowerCase()] = f.id;
+        }
+      });
+    }catch(e){ console.warn('attachmentsContacts一覧失敗(parallel)', e); }
+  }
+
   // --- If index is empty, create lightweight stubs from filenames (no JSON download yet) ---
   try{
     if(!(Array.isArray(contactsArr) && contactsArr.length)){
@@ -690,6 +705,21 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
       var c = contactsArr[idx] || {};
       var _cid = String(c.id||''); var _base = _cid.replace(/^contact-/,''); var fname = 'contact-' + pad6(_base) + '.json';
       var fileId = contactFiles[fname.toLowerCase()];
+
+      // photo per contact (best-effort)
+      if(!c.photo && attachmentsContactsFolderId){
+        var cand = [
+          'contact-' + pad6(_base) + '-photo.jpg',
+          'contact-' + pad6(_base) + '-photo.png',
+          'contact-' + pad6(_base) + '.jpg',
+          'contact-' + pad6(_base) + '.png'
+        ];
+        for(var ci=0; ci<cand.length; ci++){
+          var pid = photoFiles[cand[ci].toLowerCase()];
+          if(pid){ c.photo = 'drive:' + pid; break; }
+        }
+      }
+
       if(fileId){
         contactTasks.push(async function(){
           try{
@@ -784,7 +814,17 @@ function buildSearchIndex(contacts){
 }
 
 __root.AppData.rebuildIndexes = async function(structure, contacts, meetingsByContact){
-  try{
+  
+  // local scope checker to avoid ReferenceError
+  function _hasScope(scope){
+    try{
+      if (typeof hasScope === 'function') return hasScope(scope);
+      var token = (typeof gapi!=='undefined' && gapi.client && gapi.client.getToken && gapi.client.getToken()) || null;
+      var scopeStr = token && token.scope ? token.scope : ((window.APP_CONFIG && APP_CONFIG.SCOPES) || '');
+      return typeof scopeStr === 'string' && scopeStr.indexOf(scope) >= 0;
+    }catch(e){ return false; }
+  }
+try{
     if(!structure || !structure.index){ console.warn('rebuildIndexes: index folder missing'); return false; }
     if(!_hasScope("https://www.googleapis.com/auth/drive.file")){
       console.warn('rebuildIndexes: insufficient scope (drive.file required)'); 
