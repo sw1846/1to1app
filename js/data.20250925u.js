@@ -246,17 +246,32 @@
   async function driveFindChildByName(parentId, name, mimeType){
     var files = await driveListChildren(parentId, { });
     var lower = String(name).toLowerCase();
-    var found = files.find(function(f){
-      if(mimeType && f.mimeType !== mimeType) return false;
+    function isJsonLike(mt){ return !mt || mt === 'application/json' || mt === 'text/plain' || mt === 'application/octet-stream'; }
+    // exact matches first
+    var exact = files.filter(function(f){
+      if(mimeType && !isJsonLike(f.mimeType)) return false;
       return String(f.name||'').toLowerCase() === lower;
     });
-    if(found) return found.id;
-    // try contains for safety
-    found = files.find(function(f){
-      if(mimeType && f.mimeType !== mimeType) return false;
+    if(exact.length){
+      exact.sort(function(a,b){
+        var ta = Date.parse(a.modifiedTime||0)||0, tb = Date.parse(b.modifiedTime||0)||0;
+        return tb - ta;
+      });
+      return exact[0].id;
+    }
+    // then contains
+    var partial = files.filter(function(f){
+      if(mimeType && !isJsonLike(f.mimeType)) return false;
       return String(f.name||'').toLowerCase().indexOf(lower) >= 0;
     });
-    return found ? found.id : null;
+    if(partial.length){
+      partial.sort(function(a,b){
+        var ta = Date.parse(a.modifiedTime||0)||0, tb = Date.parse(b.modifiedTime||0)||0;
+        return tb - ta;
+      });
+      return partial[0].id;
+    }
+    return null;
   }
 
   async function downloadJsonById(fileId){
@@ -280,6 +295,7 @@
 
   async function readJsonByNameInFolder(folderId, name){
     var id = await driveFindChildByName(folderId, name, 'application/json');
+    if(!id){ id = await driveFindChildByName(folderId, name, null); }
     if(!id) return null;
     return await downloadJsonById(id);
   }
