@@ -740,7 +740,6 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
 var __root = (typeof window!=='undefined'?window:(typeof self!=='undefined'?self:globalThis));
 __root.AppData = __root.AppData || {};
 __root.AppData.hydrateMissingFromFilesParallel = hydrateMissingFromFilesParallel;
-}
 
 function buildContactsIndex(contacts){
   contacts = Array.isArray(contacts) ? contacts : [];
