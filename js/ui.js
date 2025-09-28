@@ -54,6 +54,189 @@ function closeModal(modalId) {
     }
 }
 
+// [MULTI-SELECT FIX] 複数選択ドロップダウンの実装
+function toggleMultiSelectDropdown(type) {
+    const dropdown = document.getElementById(type + 'Dropdown');
+    if (!dropdown) return;
+    
+    // 他のドロップダウンを閉じる
+    document.querySelectorAll('.multi-select-dropdown').forEach(dd => {
+        if (dd.id !== type + 'Dropdown') {
+            dd.classList.remove('show');
+        }
+    });
+    
+    dropdown.classList.toggle('show');
+    
+    if (dropdown.classList.contains('show')) {
+        updateMultiSelectOptions(type);
+    }
+}
+
+// [MULTI-SELECT FIX] 複数選択オプションの更新
+function updateMultiSelectOptions(type) {
+    if (!type) {
+        // 全種類を更新
+        updateMultiSelectOptions('type');
+        updateMultiSelectOptions('affiliation');
+        updateMultiSelectOptions('industryInterests');
+        return;
+    }
+    
+    const optionsContainer = document.getElementById(type + 'Options');
+    if (!optionsContainer) return;
+    
+    let optionsList = [];
+    if (window.options && window.options[type + 's']) {
+        optionsList = window.options[type + 's'];
+    } else if (window.options && window.options[type]) {
+        optionsList = window.options[type];
+    }
+    
+    // 既存データから選択肢を収集
+    if (window.contacts && Array.isArray(window.contacts)) {
+        const fieldName = type === 'type' ? 'types' : (type + 's');
+        const collected = new Set();
+        
+        window.contacts.forEach(contact => {
+            if (contact[fieldName] && Array.isArray(contact[fieldName])) {
+                contact[fieldName].forEach(item => {
+                    if (item && typeof item === 'string') {
+                        collected.add(item.trim());
+                    }
+                });
+            }
+        });
+        
+        const collectedArray = Array.from(collected).sort();
+        optionsList = [...new Set([...optionsList, ...collectedArray])].sort();
+    }
+    
+    optionsContainer.innerHTML = '';
+    
+    if (optionsList.length === 0) {
+        optionsContainer.innerHTML = '<div class="multi-select-no-results">選択肢がありません</div>';
+        return;
+    }
+    
+    optionsList.forEach(option => {
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'multi-select-option';
+        
+        const selected = window.selectedOptions && window.selectedOptions[type] && 
+                         window.selectedOptions[type].includes(option);
+        
+        optionDiv.innerHTML = `
+            <input type="checkbox" ${selected ? 'checked' : ''} 
+                   onchange="toggleMultiSelectOption('${type}', '${escapeHtml(option)}', this.checked)">
+            <span>${escapeHtml(option)}</span>
+        `;
+        
+        optionsContainer.appendChild(optionDiv);
+    });
+}
+
+// [MULTI-SELECT FIX] 複数選択オプションの切り替え
+function toggleMultiSelectOption(type, option, checked) {
+    if (!window.selectedOptions) {
+        window.selectedOptions = {
+            type: [],
+            affiliation: [],
+            industryInterests: []
+        };
+    }
+    
+    if (!window.selectedOptions[type]) {
+        window.selectedOptions[type] = [];
+    }
+    
+    if (checked) {
+        if (!window.selectedOptions[type].includes(option)) {
+            window.selectedOptions[type].push(option);
+        }
+    } else {
+        window.selectedOptions[type] = window.selectedOptions[type].filter(item => item !== option);
+    }
+    
+    updateMultiSelectTags(type);
+}
+
+// [MULTI-SELECT FIX] 複数選択タグの表示更新
+function updateMultiSelectTags(type) {
+    const tagsContainer = document.getElementById(type + 'Tags');
+    if (!tagsContainer) return;
+    
+    const selected = window.selectedOptions && window.selectedOptions[type] ? window.selectedOptions[type] : [];
+    
+    if (selected.length === 0) {
+        tagsContainer.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">選択してください...</span>';
+        return;
+    }
+    
+    tagsContainer.innerHTML = selected.map(option => `
+        <span class="multi-select-tag">
+            ${escapeHtml(option)}
+            <button type="button" onclick="removeMultiSelectTag('${type}', '${escapeHtml(option)}')">&times;</button>
+        </span>
+    `).join('');
+}
+
+// [MULTI-SELECT FIX] 複数選択タグの削除
+function removeMultiSelectTag(type, option) {
+    if (window.selectedOptions && window.selectedOptions[type]) {
+        window.selectedOptions[type] = window.selectedOptions[type].filter(item => item !== option);
+        updateMultiSelectTags(type);
+        updateMultiSelectOptions(type);
+    }
+}
+
+// [MULTI-SELECT FIX] 複数選択オプションのフィルタリング
+function filterMultiSelectOptions(type, query) {
+    const optionsContainer = document.getElementById(type + 'Options');
+    if (!optionsContainer) return;
+    
+    const options = optionsContainer.querySelectorAll('.multi-select-option');
+    const lowerQuery = query.toLowerCase();
+    
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        if (text.includes(lowerQuery)) {
+            option.classList.remove('hidden');
+        } else {
+            option.classList.add('hidden');
+        }
+    });
+}
+
+// [MULTI-SELECT FIX] 複数選択の初期化
+function setupMultiSelect() {
+    // グローバル関数として設定
+    window.toggleMultiSelectDropdown = toggleMultiSelectDropdown;
+    window.updateMultiSelectOptions = updateMultiSelectOptions;
+    window.toggleMultiSelectOption = toggleMultiSelectOption;
+    window.updateMultiSelectTags = updateMultiSelectTags;
+    window.removeMultiSelectTag = removeMultiSelectTag;
+    window.filterMultiSelectOptions = filterMultiSelectOptions;
+    
+    // 選択状態の初期化
+    if (!window.selectedOptions) {
+        window.selectedOptions = {
+            type: [],
+            affiliation: [],
+            industryInterests: []
+        };
+    }
+    
+    // ドロップダウン外クリックで閉じる
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.multi-select-container')) {
+            document.querySelectorAll('.multi-select-dropdown').forEach(dd => {
+                dd.classList.remove('show');
+            });
+        }
+    });
+}
+
 // [FILTER FIX] 完全なフィルタリング機能
 function getFilteredContacts() {
     console.log('[ui] getFilteredContacts called, total contacts:', (window.contacts || []).length);
@@ -329,6 +512,32 @@ function resolveImageUrl(contact, type = 'photo') {
     return sanitized;
 }
 
+// [IMAGE FIX] 安全な画像読み込み
+async function loadImageSafely(imgElement, url) {
+    if (!imgElement || !url) return;
+    
+    try {
+        if (url.startsWith('drive:')) {
+            const dataUrl = await loadImageFromGoogleDrive(url);
+            if (dataUrl) {
+                imgElement.src = dataUrl;
+            } else {
+                imgElement.src = generatePlaceholderImage();
+            }
+        } else {
+            imgElement.src = url;
+        }
+    } catch (error) {
+        console.warn('[image] Failed to load image:', error);
+        imgElement.src = generatePlaceholderImage();
+    }
+}
+
+// [IMAGE FIX] プレースホルダー画像生成
+function generatePlaceholderImage() {
+    return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjZGRkZGRkIi8+PHRleHQgeD0iMzIiIHk9IjM2IiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5Ij7jgZPjgpPjga7jgZk8L3RleHQ+PC9zdmc+";
+}
+
 // カード作成
 function createContactCard(contact) {
     const card = document.createElement('div');
@@ -349,7 +558,7 @@ function createContactCard(contact) {
     // [IMAGE FIX] 画像URL解決とサニタイズ
     const photoUrl = resolveImageUrl(contact, 'photo');
     const photoHtml = photoUrl 
-        ? `<img data-src="${photoUrl}" class="contact-photo lazy-avatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjZGRkZGRkIi8+PHRleHQgeD0iMzIiIHk9IjM2IiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5Ij7jgZPjgpPjga7jgZk8L3RleHQ+PC9zdmc+">`
+        ? `<img class="contact-photo" src="${generatePlaceholderImage()}" data-src="${photoUrl}" data-contact-id="${contact.id}">`
         : '<div class="contact-photo"></div>';
 
     card.innerHTML = `
@@ -369,10 +578,12 @@ function createContactCard(contact) {
         </div>
     `;
 
-    // drive:画像の解決
+    // [IMAGE FIX] 画像の非同期読み込み
     setTimeout(() => {
-        const img = card.querySelector('img.contact-photo');
-        if (img) hydrateDriveImage(img);
+        const img = card.querySelector('img.contact-photo[data-src]');
+        if (img && img.dataset.src) {
+            loadImageSafely(img, img.dataset.src);
+        }
     }, 0);
     
     return card;
@@ -395,7 +606,7 @@ function createContactListItem(contact) {
     // [IMAGE FIX] 画像URL解決とサニタイズ
     const photoUrl = resolveImageUrl(contact, 'photo');
     const photoHtml = photoUrl 
-        ? `<img data-src="${photoUrl}" class="list-photo lazy-avatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjZGRkZGRkIi8+PHRleHQgeD0iMzIiIHk9IjM2IiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5Ij7jgZPjgpPjga7jgZk8L3RleHQ+PC9zdmc+">`
+        ? `<img class="list-photo" src="${generatePlaceholderImage()}" data-src="${photoUrl}" data-contact-id="${contact.id}">`
         : '<div class="list-photo"></div>';
 
     item.innerHTML = `
@@ -406,10 +617,12 @@ function createContactListItem(contact) {
         </div>
     `;
 
-    // drive:画像の解決
+    // [IMAGE FIX] 画像の非同期読み込み
     setTimeout(() => {
-        const img = item.querySelector('img.list-photo');
-        if (img) hydrateDriveImage(img);
+        const img = item.querySelector('img.list-photo[data-src]');
+        if (img && img.dataset.src) {
+            loadImageSafely(img, img.dataset.src);
+        }
     }, 0);
     
     return item;
@@ -452,7 +665,7 @@ function createTreeNode(contact, allContacts, level = 0) {
     // [IMAGE FIX] 画像URL解決とサニタイズ
     const photoUrl = resolveImageUrl(contact, 'photo');
     const photoHtml = photoUrl 
-        ? `<img src="${photoUrl}" class="list-photo" style="width: 30px; height: 30px;">`
+        ? `<img class="list-photo" src="${generatePlaceholderImage()}" style="width: 30px; height: 30px;" data-src="${photoUrl}" data-contact-id="${contact.id}">`
         : '<div class="list-photo" style="width: 30px; height: 30px;"></div>';
 
     item.innerHTML = `
@@ -478,6 +691,14 @@ function createTreeNode(contact, allContacts, level = 0) {
         });
         node.appendChild(childContainer);
     }
+
+    // [IMAGE FIX] 画像の非同期読み込み
+    setTimeout(() => {
+        const img = item.querySelector('img.list-photo[data-src]');
+        if (img && img.dataset.src) {
+            loadImageSafely(img, img.dataset.src);
+        }
+    }, 0);
 
     return node;
 }
@@ -816,7 +1037,7 @@ function createKanbanCard(contact) {
 
     // [IMAGE FIX] 画像URL解決とサニタイズ
     const photoUrl = resolveImageUrl(contact, 'photo');
-    const photoHtml = photoUrl ? `<img src="${photoUrl}" class="kanban-card-photo">` : '';
+    const photoHtml = photoUrl ? `<img class="kanban-card-photo" src="${generatePlaceholderImage()}" data-src="${photoUrl}" data-contact-id="${contact.id}">` : '';
 
     card.innerHTML = `
         <div class="kanban-card-content" onclick="showContactDetail('${contact.id}')">
@@ -830,10 +1051,12 @@ function createKanbanCard(contact) {
         </div>
     `;
 
-    // drive:画像の解決
+    // [IMAGE FIX] 画像の非同期読み込み
     setTimeout(() => {
-        const img = card.querySelector('img.kanban-card-photo');
-        if (img) hydrateDriveImage(img);
+        const img = card.querySelector('img.kanban-card-photo[data-src]');
+        if (img && img.dataset.src) {
+            loadImageSafely(img, img.dataset.src);
+        }
     }, 0);
     
     return card;
@@ -1128,9 +1351,9 @@ async function saveStatuses() {
               console.log('[fix][avatar] resolving contact image, url=', ref);
               var url = await loadImageFromGoogleDrive(ref);
               if(url){ img.src = url; console.log('[fix][avatar] resolved url='+url); }
-              else { console.warn('[warn][avatar] resolve failed for '+ref); }
+              else { console.warn('[warn][avatar] resolve failed for '+ref); img.src = generatePlaceholderImage(); }
             }
-          }catch(e){ console.warn('[warn][avatar] error', e); }
+          }catch(e){ console.warn('[warn][avatar] error', e); img.src = generatePlaceholderImage(); }
         }
       }
     }, { rootMargin: '200px' });
@@ -1140,9 +1363,46 @@ async function saveStatuses() {
   window.renderContacts = function(){
     if(typeof _origRender === 'function') _origRender.apply(this, arguments);
     try{
-      var els = document.querySelectorAll('img.lazy-avatar');
+      var els = document.querySelectorAll('img[data-src]');
       var obs = ensureIO();
       els.forEach(function(el){ obs.observe(el); });
     }catch(e){}
   };
 })();
+
+// Markdown表示切替機能
+function switchMarkdownView(fieldName, mode) {
+    const editorContainer = document.querySelector(`#${fieldName}Input`).closest('.markdown-editor-container');
+    if (!editorContainer) return;
+    
+    const tabs = editorContainer.querySelectorAll('.markdown-editor-tab');
+    const textarea = editorContainer.querySelector(`#${fieldName}Input`);
+    const preview = editorContainer.querySelector(`#${fieldName}Preview`);
+    
+    tabs.forEach(tab => {
+        tab.classList.toggle('active', 
+            (mode === 'edit' && tab.textContent.includes('編集')) ||
+            (mode === 'preview' && tab.textContent.includes('プレビュー'))
+        );
+    });
+    
+    if (mode === 'edit') {
+        textarea.style.display = 'block';
+        if (preview) preview.style.display = 'none';
+    } else {
+        textarea.style.display = 'none';
+        if (preview) {
+            preview.style.display = 'block';
+            if (typeof renderMarkdown === 'function') {
+                preview.innerHTML = renderMarkdown(textarea.value);
+            } else {
+                preview.innerHTML = escapeHtml(textarea.value);
+            }
+        }
+    }
+}
+
+// グローバル関数として公開
+window.setupMultiSelect = setupMultiSelect;
+window.switchMarkdownView = switchMarkdownView;
+window.clearSearchAndFilters = clearSearchAndFilters;

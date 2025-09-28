@@ -50,6 +50,11 @@ function openContactModal(contactId = null) {
         }
     });
 
+    // [FIX] マルチセレクトオプションを確実に初期化
+    if (typeof updateMultiSelectOptions === 'function') {
+        updateMultiSelectOptions();
+    }
+
     modal.classList.add('active');
     modal.querySelector('.modal-content').scrollTop = 0;
 }
@@ -111,56 +116,27 @@ function loadContactData(contactId) {
     if (hobbiesInput) hobbiesInput.value = contact.hobbies || '';
     if (revenueInput) revenueInput.value = contact.revenue || '';
 
-    // [CLAUDE FIX] 画像表示の修正 - resolveAttachmentUrl関数を使用
-    const photoPreview = document.getElementById('photoPreview');
-    const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-    if (contact.photo && photoPreview && photoPreviewContainer) {
-        resolveAttachmentUrl(contact.id, 'photo').then(url => {
-            if (url) {
-                photoPreview.src = url;
-                photoPreviewContainer.style.display = 'block';
-            }
-        }).catch(err => {
-            console.warn('[fix][photo] resolve failed:', err);
-            photoPreview.src = '';
-            photoPreviewContainer.style.display = 'none';
-        });
-    } else if (photoPreview && photoPreviewContainer) {
-        photoPreview.src = '';
-        photoPreview.removeAttribute('src');
-        photoPreviewContainer.style.display = 'none';
-    }
+    // [CLAUDE FIX] 画像表示の修正 - 確実な画像URL解決
+    loadContactImages(contact);
     
-    // 名刺画像
-    const businessCardPreview = document.getElementById('businessCardPreview');
-    const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
-    if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
-        resolveAttachmentUrl(contact.id, 'businessCard').then(url => {
-            if (url) {
-                businessCardPreview.src = url;
-                businessCardPreviewContainer.style.display = 'block';
-            }
-        }).catch(err => {
-            console.warn('[fix][businessCard] resolve failed:', err);
-            businessCardPreview.src = '';
-            businessCardPreviewContainer.style.display = 'none';
-        });
-    } else if (businessCardPreview && businessCardPreviewContainer) {
-        businessCardPreview.src = '';
-        businessCardPreview.removeAttribute('src');
-        businessCardPreviewContainer.style.display = 'none';
-    }
-
-    // 複数選択項目
+    // [FIX] 複数選択項目の確実な読み込み
     selectedOptions.type = Array.isArray(contact.types) ? [...contact.types] : [];
     selectedOptions.affiliation = Array.isArray(contact.affiliations) ? [...contact.affiliations] : [];
     selectedOptions.industryInterests = Array.isArray(contact.industryInterests) ? [...contact.industryInterests] : [];
     
-    if (typeof updateMultiSelectTags === 'function') {
-        updateMultiSelectTags('type');
-        updateMultiSelectTags('affiliation');
-        updateMultiSelectTags('industryInterests');
-    }
+    // マルチセレクトオプションとタグを更新
+    setTimeout(() => {
+        if (typeof updateMultiSelectOptions === 'function') {
+            updateMultiSelectOptions('type');
+            updateMultiSelectOptions('affiliation');
+            updateMultiSelectOptions('industryInterests');
+        }
+        if (typeof updateMultiSelectTags === 'function') {
+            updateMultiSelectTags('type');
+            updateMultiSelectTags('affiliation');
+            updateMultiSelectTags('industryInterests');
+        }
+    }, 100);
 
     // メールアドレス
     const emailContainer = document.getElementById('emailContainer');
@@ -210,6 +186,59 @@ function loadContactData(contactId) {
     // 添付ファイル
     if (contact.attachments && typeof displayAttachments === 'function') {
         displayAttachments(contact.attachments, 'attachmentList');
+    }
+}
+
+// [CLAUDE FIX] 画像読み込み関数の追加
+async function loadContactImages(contact) {
+    try {
+        // 顔写真の処理
+        const photoPreview = document.getElementById('photoPreview');
+        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
+        if (contact.photo && photoPreview && photoPreviewContainer) {
+            if (typeof resolveAttachmentUrl === 'function') {
+                const url = await resolveAttachmentUrl(contact.id, 'photo');
+                if (url) {
+                    photoPreview.src = url;
+                    photoPreviewContainer.style.display = 'block';
+                } else {
+                    photoPreview.src = '';
+                    photoPreviewContainer.style.display = 'none';
+                }
+            } else {
+                console.warn('[fix][photo] resolveAttachmentUrl not available');
+                photoPreview.src = '';
+                photoPreviewContainer.style.display = 'none';
+            }
+        } else if (photoPreview && photoPreviewContainer) {
+            photoPreview.src = '';
+            photoPreviewContainer.style.display = 'none';
+        }
+        
+        // 名刺画像の処理
+        const businessCardPreview = document.getElementById('businessCardPreview');
+        const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
+        if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
+            if (typeof resolveAttachmentUrl === 'function') {
+                const url = await resolveAttachmentUrl(contact.id, 'businessCard');
+                if (url) {
+                    businessCardPreview.src = url;
+                    businessCardPreviewContainer.style.display = 'block';
+                } else {
+                    businessCardPreview.src = '';
+                    businessCardPreviewContainer.style.display = 'none';
+                }
+            } else {
+                console.warn('[fix][businessCard] resolveAttachmentUrl not available');
+                businessCardPreview.src = '';
+                businessCardPreviewContainer.style.display = 'none';
+            }
+        } else if (businessCardPreview && businessCardPreviewContainer) {
+            businessCardPreview.src = '';
+            businessCardPreviewContainer.style.display = 'none';
+        }
+    } catch (error) {
+        console.warn('[fix][images] loadContactImages error:', error);
     }
 }
 
@@ -427,9 +456,9 @@ async function saveContact() {
             residence: residenceInput ? residenceInput.value : '',
             hobbies: hobbiesInput ? hobbiesInput.value : '',
             revenue: revenueInput ? (parseFloat(revenueInput.value) || 0) : 0,
-            types: selectedOptions.type,
-            affiliations: selectedOptions.affiliation,
-            industryInterests: selectedOptions.industryInterests,
+            types: selectedOptions.type || [],
+            affiliations: selectedOptions.affiliation || [],
+            industryInterests: selectedOptions.industryInterests || [],
             status: currentContactId ? (contacts.find(c => c.id === currentContactId)?.status || '新規') : '新規',
             photo: photoPath,
             businessCard: businessCardPath,
@@ -441,9 +470,9 @@ async function saveContact() {
         // [CLAUDE FIX] オプションを安全に更新
         try {
             if (typeof updateOptionIfNew === 'function') {
-                selectedOptions.type.forEach(type => updateOptionIfNew('types', type));
-                selectedOptions.affiliation.forEach(aff => updateOptionIfNew('affiliations', aff));
-                selectedOptions.industryInterests.forEach(ii => updateOptionIfNew('industryInterests', ii));
+                (selectedOptions.type || []).forEach(type => updateOptionIfNew('types', type));
+                (selectedOptions.affiliation || []).forEach(aff => updateOptionIfNew('affiliations', aff));
+                (selectedOptions.industryInterests || []).forEach(ii => updateOptionIfNew('industryInterests', ii));
             }
         } catch (optError) {
             console.warn('[fix][options] updateOptionIfNew failed:', optError);
@@ -719,12 +748,12 @@ function showContactDetail(contactId) {
     if (contact.photo) {
         photoHtml = `<div id="photoPlaceholder" style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
         // 非同期で画像を読み込み
-        resolveAttachmentUrl(contactId, 'photo').then(url => {
-            if (url) {
-                const placeholder = document.getElementById('photoPlaceholder');
-                if (placeholder) {
-                    placeholder.outerHTML = `<img src="${url}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${url}', '顔写真')" title="クリックで拡大">`;
-                }
+        resolveContactImage(contactId, 'photo').then(url => {
+            const placeholder = document.getElementById('photoPlaceholder');
+            if (placeholder && url) {
+                placeholder.outerHTML = `<img src="${url}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${url}', '顔写真')" title="クリックで拡大">`;
+            } else if (placeholder) {
+                placeholder.outerHTML = `<div style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">写真なし</div>`;
             }
         }).catch(err => {
             console.warn('[fix][photo] resolve failed in detail:', err);
@@ -739,12 +768,12 @@ function showContactDetail(contactId) {
     if (contact.businessCard) {
         businessCardHtml = `<div id="businessCardPlaceholder" style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
         // 非同期で画像を読み込み
-        resolveAttachmentUrl(contactId, 'businessCard').then(url => {
-            if (url) {
-                const placeholder = document.getElementById('businessCardPlaceholder');
-                if (placeholder) {
-                    placeholder.outerHTML = `<img src="${url}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${url}', '名刺画像')" title="クリックで拡大">`;
-                }
+        resolveContactImage(contactId, 'businessCard').then(url => {
+            const placeholder = document.getElementById('businessCardPlaceholder');
+            if (placeholder && url) {
+                placeholder.outerHTML = `<img src="${url}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${url}', '名刺画像')" title="クリックで拡大">`;
+            } else if (placeholder) {
+                placeholder.outerHTML = `<div style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">名刺なし</div>`;
             }
         }).catch(err => {
             console.warn('[fix][businessCard] resolve failed in detail:', err);
@@ -998,8 +1027,8 @@ function showContactDetail(contactId) {
     console.log('[fix][contacts] showed detail for:', contactId);
 }
 
-// [CLAUDE FIX] 画像URL解決関数
-async function resolveAttachmentUrl(contactId, type, fallback = null) {
+// [CLAUDE FIX] 画像URL解決関数（改善版）
+async function resolveContactImage(contactId, type, fallback = null) {
     try {
         if (!contactId || !type) return fallback;
         
