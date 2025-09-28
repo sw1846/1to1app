@@ -1,4 +1,6 @@
-// utils.js - 分散ファイル構造対応のユーティリティ関数
+// utils.js - 分散ファイル構造対応のユーティリティ関数（修正版）
+
+// [CLAUDE FIX] 重複排除・正規化・エラーハンドリング強化
 
 // ユニークIDを生成
 function generateId() {
@@ -16,110 +18,159 @@ function escapeHtml(text) {
 // 日付フォーマット
 function formatDate(dateString) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString('ja-JP', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        console.warn('[fix][utils] formatDate error:', error);
+        return dateString;
+    }
+}
+
+// [CLAUDE FIX] 文字列正規化関数（全角半角・大小文字・空白統一）
+function normalizeString(text) {
+    if (!text || typeof text !== 'string') return '';
+    
+    try {
+        return text
+            .trim()
+            .replace(/\s+/g, ' ')  // 連続空白を1つに
+            .normalize('NFKC')     // 全角半角正規化
+            .toLowerCase();        // 小文字統一
+    } catch (error) {
+        console.warn('[fix][utils] normalizeString error:', error);
+        return text.trim().toLowerCase();
+    }
+}
+
+// [CLAUDE FIX] 配列の重複排除・日本語ソート
+function uniqueSortedJa(array) {
+    if (!Array.isArray(array)) return [];
+    
+    try {
+        const normalized = array
+            .filter(item => item && typeof item === 'string')
+            .map(item => item.trim())
+            .filter(item => item !== '');
+        
+        const unique = [...new Set(normalized)];
+        return unique.sort((a, b) => a.localeCompare(b, 'ja', { numeric: true, caseFirst: 'lower' }));
+    } catch (error) {
+        console.warn('[fix][utils] uniqueSortedJa error:', error);
+        return array.filter(Boolean);
+    }
 }
 
 // URLとメールアドレスをリンク化
 function linkifyText(text) {
     if (!text) return '';
     
-    const urlPattern = /(https?:\/\/[^\s<]+)/g;
-    const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
-    
-    text = text.replace(urlPattern, '<a href="$1" target="_blank">$1</a>');
-    text = text.replace(emailPattern, '<a href="mailto:$1">$1</a>');
-    
-    return text;
+    try {
+        const urlPattern = /(https?:\/\/[^\s<]+)/g;
+        const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+        
+        text = text.replace(urlPattern, '<a href="$1" target="_blank">$1</a>');
+        text = text.replace(emailPattern, '<a href="mailto:$1">$1</a>');
+        
+        return text;
+    } catch (error) {
+        console.warn('[fix][utils] linkifyText error:', error);
+        return text;
+    }
 }
 
 // Markdownレンダリング
 function renderMarkdown(text) {
     if (!text) return '';
     
-    let html = escapeHtml(text);
-    
-    // コードブロック
-    const codeBlocks = [];
-    html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
-        const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
-        codeBlocks.push(`<pre><code>${code.trim()}</code></pre>`);
-        return placeholder;
-    });
-    
-    // インラインコード
-    const inlineCodes = [];
-    html = html.replace(/`([^`]+)`/g, (match, code) => {
-        const placeholder = `__INLINE_CODE_${inlineCodes.length}__`;
-        inlineCodes.push(`<code>${code}</code>`);
-        return placeholder;
-    });
-    
-    // 見出し
-    html = html.replace(/^##### (.+)$/gm, '<h5>$1</h5>');
-    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    
-    // 太字とイタリック
-    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/___(.+?)___/g, '<strong><em>$1</em></strong>');
-    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-    
-    // 取り消し線
-    html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
-    
-    // リンク
-    html = html.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
-    
-    // 画像
-    html = html.replace(/!\[(.+?)\]\((.+?)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;">');
-    
-    // リスト
-    html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/^• (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-    
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-        const isOrdered = match.includes('<li>') && /^\d+\./.test(match);
-        return isOrdered ? `<ol>${match}</ol>` : `<ul>${match}</ul>`;
-    });
-    
-    // 引用
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-    
-    // 水平線
-    html = html.replace(/^---$/gm, '<hr>');
-    html = html.replace(/^\*\*\*$/gm, '<hr>');
-    
-    // URLとメールアドレスのリンク化
-    html = linkifyText(html);
-    
-    // 改行
-    html = html.replace(/\n/g, '<br>');
-    
-    // インラインコードを復元
-    inlineCodes.forEach((code, index) => {
-        html = html.replace(`__INLINE_CODE_${index}__`, code);
-    });
-    
-    // コードブロックを復元
-    codeBlocks.forEach((code, index) => {
-        html = html.replace(`__CODE_BLOCK_${index}__`, code);
-    });
-    
-    return html;
+    try {
+        let html = escapeHtml(text);
+        
+        // コードブロック
+        const codeBlocks = [];
+        html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
+            const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+            codeBlocks.push(`<pre><code>${code.trim()}</code></pre>`);
+            return placeholder;
+        });
+        
+        // インラインコード
+        const inlineCodes = [];
+        html = html.replace(/`([^`]+)`/g, (match, code) => {
+            const placeholder = `__INLINE_CODE_${inlineCodes.length}__`;
+            inlineCodes.push(`<code>${code}</code>`);
+            return placeholder;
+        });
+        
+        // 見出し
+        html = html.replace(/^##### (.+)$/gm, '<h5>$1</h5>');
+        html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        
+        // 太字とイタリック
+        html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        html = html.replace(/___(.+?)___/g, '<strong><em>$1</em></strong>');
+        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+        html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+        
+        // 取り消し線
+        html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+        
+        // リンク
+        html = html.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
+        
+        // 画像
+        html = html.replace(/!\[(.+?)\]\((.+?)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;">');
+        
+        // リスト
+        html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/^• (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+        
+        html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
+            const isOrdered = match.includes('<li>') && /^\d+\./.test(match);
+            return isOrdered ? `<ol>${match}</ol>` : `<ul>${match}</ul>`;
+        });
+        
+        // 引用
+        html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+        
+        // 水平線
+        html = html.replace(/^---$/gm, '<hr>');
+        html = html.replace(/^\*\*\*$/gm, '<hr>');
+        
+        // URLとメールアドレスのリンク化
+        html = linkifyText(html);
+        
+        // 改行
+        html = html.replace(/\n/g, '<br>');
+        
+        // インラインコードを復元
+        inlineCodes.forEach((code, index) => {
+            html = html.replace(`__INLINE_CODE_${index}__`, code);
+        });
+        
+        // コードブロックを復元
+        codeBlocks.forEach((code, index) => {
+            html = html.replace(`__CODE_BLOCK_${index}__`, code);
+        });
+        
+        return html;
+    } catch (error) {
+        console.warn('[fix][utils] renderMarkdown error:', error);
+        return escapeHtml(text);
+    }
 }
 
 // CSVエスケープ
@@ -135,75 +186,90 @@ function unescapeCSV(text) {
 
 // CSVパース
 function parseCSV(text) {
-    const rows = [];
-    const lines = text.split('\n');
-    
-    for (let i = 0; i < lines.length; i++) {
-        const row = [];
-        let cell = '';
-        let inQuotes = false;
+    try {
+        const rows = [];
+        const lines = text.split('\n');
         
-        for (let j = 0; j < lines[i].length; j++) {
-            const char = lines[i][j];
-            const nextChar = lines[i][j + 1];
+        for (let i = 0; i < lines.length; i++) {
+            const row = [];
+            let cell = '';
+            let inQuotes = false;
             
-            if (char === '"') {
-                if (inQuotes && nextChar === '"') {
-                    cell += '"';
-                    j++;
+            for (let j = 0; j < lines[i].length; j++) {
+                const char = lines[i][j];
+                const nextChar = lines[i][j + 1];
+                
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        cell += '"';
+                        j++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    row.push(cell);
+                    cell = '';
                 } else {
-                    inQuotes = !inQuotes;
+                    cell += char;
                 }
-            } else if (char === ',' && !inQuotes) {
-                row.push(cell);
-                cell = '';
-            } else {
-                cell += char;
+            }
+            
+            row.push(cell);
+            if (row.length > 1 || row[0]) {
+                rows.push(row);
             }
         }
         
-        row.push(cell);
-        if (row.length > 1 || row[0]) {
-            rows.push(row);
-        }
+        return rows;
+    } catch (error) {
+        console.error('[fix][utils] parseCSV error:', error);
+        return [];
     }
-    
-    return rows;
 }
 
 // 添付ファイルパース
 function parseAttachments(attachmentsStr) {
     if (!attachmentsStr) return [];
     
-    return attachmentsStr.split(';').filter(a => a).map(attachmentStr => {
-        const [name, pathOrData] = attachmentStr.split(':');
-        return {
-            name: name,
-            path: pathOrData,
-            data: pathOrData.startsWith('data:') ? pathOrData : '',
-            type: ''
-        };
-    });
+    try {
+        return attachmentsStr.split(';').filter(a => a).map(attachmentStr => {
+            const [name, pathOrData] = attachmentStr.split(':');
+            return {
+                name: name,
+                path: pathOrData,
+                data: pathOrData.startsWith('data:') ? pathOrData : '',
+                type: ''
+            };
+        });
+    } catch (error) {
+        console.warn('[fix][utils] parseAttachments error:', error);
+        return [];
+    }
 }
 
 // ToDoパース（分散ファイル構造対応）
 function parseTodos(todosStr) {
     if (!todosStr) return [];
     
-    return todosStr.split('|').filter(t => t).map(todoStr => {
-        const completed = /^[✓✔]/.test(todoStr);
-        const match = todoStr.match(/[☐✓✔]\s*(.+?)(?:\s*\(期限:(.+?)\))?$/);
-        
-        if (match) {
-            return {
-                text: match[1],
-                completed: completed,
-                dueDate: match[2] || null
-            };
-        }
-        
-        return null;
-    }).filter(t => t);
+    try {
+        return todosStr.split('|').filter(t => t).map(todoStr => {
+            const completed = /^[✓✔]/.test(todoStr);
+            const match = todoStr.match(/[☐✓✔]\s*(.+?)(?:\s*\(期限:(.+?)\))?$/);
+            
+            if (match) {
+                return {
+                    text: match[1],
+                    completed: completed,
+                    dueDate: match[2] || null
+                };
+            }
+            
+            return null;
+        }).filter(t => t);
+    } catch (error) {
+        console.warn('[fix][utils] parseTodos error:', error);
+        return [];
+    }
 }
 
 // ローディング表示
@@ -230,1178 +296,693 @@ function showLoading(show = true) {
 function showNotification(message, type = 'info') {
     const notificationArea = document.getElementById('notificationArea');
     if (!notificationArea) {
-        console.warn('Notification area not found');
+        console.warn('[fix][utils] notification area not found, using console:', message);
+        console.info(`[notification] ${type}: ${message}`);
         return;
     }
     
-    const notification = document.createElement('div');
-    notification.className = `notification ${type} show`;
-    notification.innerHTML = `
-        <span>${message}</span>
-        <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>
-    `;
-    
-    notificationArea.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentElement) {
-            notification.remove();
-        }
-    }, 5000);
-}
-
-// オプションの更新
-function updateOptionIfNew(optionKey, value) {
-    if (value && !options[optionKey].includes(value)) {
-        options[optionKey].push(value);
-        options[optionKey].sort();
+    try {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type} show`;
+        notification.innerHTML = `
+            <span>${escapeHtml(message)}</span>
+            <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>
+        `;
+        
+        notificationArea.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+        
+        console.log(`[fix][utils] notification shown: ${type} - ${message}`);
+    } catch (error) {
+        console.error('[fix][utils] showNotification error:', error);
+        console.info(`[notification fallback] ${type}: ${message}`);
     }
 }
 
-// CSVダウンロード
+// [CLAUDE FIX] オプションの安全な更新（エラー修正版）
+function updateOptionIfNew(optionKey, value) {
+    try {
+        if (!value || typeof value !== 'string') return;
+        
+        const normalizedValue = normalizeString(value);
+        if (!normalizedValue) return;
+        
+        // グローバルオプションの初期化保証
+        if (typeof window.options !== 'object' || !window.options) {
+            window.options = {};
+        }
+        
+        // 指定キーの配列初期化保証
+        if (!Array.isArray(window.options[optionKey])) {
+            window.options[optionKey] = [];
+            console.log(`[fix][options] initialized ${optionKey} array`);
+        }
+        
+        // 既存の値を正規化して比較
+        const existingNormalized = window.options[optionKey].map(item => normalizeString(item));
+        
+        // 重複チェック（正規化ベース）
+        if (!existingNormalized.includes(normalizedValue)) {
+            window.options[optionKey].push(value);  // 元の値で保存
+            window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
+            console.log(`[fix][options] added "${value}" to ${optionKey}`);
+        }
+    } catch (error) {
+        console.error(`[fix][options] updateOptionIfNew error for ${optionKey}:`, error);
+        // エラーが発生してもアプリケーションを停止しない
+    }
+}
+
+// CSV ダウンロード
 function downloadCSV(csv, filename) {
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    try {
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        console.log('[fix][utils] CSV downloaded:', filename);
+    } catch (error) {
+        console.error('[fix][utils] downloadCSV error:', error);
+        if (typeof showNotification === 'function') {
+            showNotification('CSVダウンロードに失敗しました', 'error');
+        }
+    }
 }
 
 // ======= 分散ファイル構造対応の新機能 =======
 
 // 検索インデックスの構築
-function buildSearchIndex() {
-    searchIndex = {};
-    
-    contacts.forEach(contact => {
-        const searchText = [
-            contact.name,
-            contact.furigana,
-            contact.company,
-            ...(contact.types || []),
-            ...(contact.affiliations || []),
-            ...(contact.businesses || []),
-            contact.business,
-            contact.strengths,
-            contact.approach,
-            contact.history,
-            contact.priorInfo,
-            contact.activityArea,
-            contact.residence,
-            contact.hobbies
-        ].filter(text => text).join(' ').toLowerCase();
+function buildSearchIndex(contacts = []) {
+    try {
+        if (!Array.isArray(contacts)) return {};
         
-        searchIndex[contact.id] = searchText;
-    });
+        const searchIndex = {};
+        
+        contacts.forEach(contact => {
+            if (!contact || !contact.id) return;
+            
+            const searchText = [
+                contact.name,
+                contact.furigana,
+                contact.company,
+                ...(contact.types || []),
+                ...(contact.affiliations || []),
+                ...(contact.businesses || []),
+                contact.business,
+                contact.strengths,
+                contact.approach,
+                contact.history,
+                contact.priorInfo,
+                contact.activityArea,
+                contact.residence,
+                contact.hobbies
+            ].filter(text => text).join(' ').toLowerCase();
+            
+            searchIndex[contact.id] = searchText;
+        });
+        
+        console.log('[fix][utils] built search index for', Object.keys(searchIndex).length, 'contacts');
+        return searchIndex;
+    } catch (error) {
+        console.error('[fix][utils] buildSearchIndex error:', error);
+        return {};
+    }
 }
 
-// 高速検索機能
-function fastSearch(query, options = {}) {
-    if (!query || query.trim() === '') return contacts;
-    
-    const lowerQuery = query.toLowerCase();
-    const words = lowerQuery.split(/\s+/).filter(w => w.length > 0);
-    
-    // 検索インデックスが空の場合は構築
-    if (Object.keys(searchIndex).length === 0) {
-        buildSearchIndex();
-    }
-    
-    return contacts.filter(contact => {
-        const indexText = searchIndex[contact.id] || '';
+// [CLAUDE FIX] 高速検索機能（副作用なし）
+function fastSearch(query, contacts = [], searchIndex = {}) {
+    try {
+        if (!query || query.trim() === '') return contacts;
+        if (!Array.isArray(contacts)) return [];
         
-        // 全ての単語が含まれているかチェック
-        return words.every(word => indexText.includes(word));
-    });
+        const lowerQuery = normalizeString(query);
+        const words = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+        
+        if (words.length === 0) return contacts;
+        
+        return contacts.filter(contact => {
+            if (!contact || !contact.id) return false;
+            
+            const indexText = searchIndex[contact.id] || '';
+            
+            // 全ての単語が含まれているかチェック
+            return words.every(word => indexText.includes(word));
+        });
+    } catch (error) {
+        console.error('[fix][utils] fastSearch error:', error);
+        return contacts;
+    }
+}
+
+// [CLAUDE FIX] フィルター適用（純関数版）
+function applyFilters(contacts, filters) {
+    try {
+        if (!Array.isArray(contacts)) return [];
+        if (!filters || typeof filters !== 'object') return contacts;
+        
+        return contacts.filter(contact => {
+            if (!contact) return false;
+            
+            // 種別フィルター（OR条件）
+            if (filters.types && filters.types.length > 0) {
+                const contactTypes = Array.isArray(contact.types) ? contact.types : [];
+                const hasMatchingType = filters.types.some(filterType => 
+                    contactTypes.some(contactType => 
+                        normalizeString(contactType) === normalizeString(filterType)
+                    )
+                );
+                if (!hasMatchingType) return false;
+            }
+            
+            // 所属フィルター
+            if (filters.affiliation) {
+                const normalizedFilter = normalizeString(filters.affiliation);
+                const contactAffiliations = Array.isArray(contact.affiliations) ? contact.affiliations : [];
+                const hasMatchingAffiliation = contactAffiliations.some(affiliation => 
+                    normalizeString(affiliation).includes(normalizedFilter)
+                );
+                if (!hasMatchingAffiliation) return false;
+            }
+            
+            // 事業内容フィルター
+            if (filters.business) {
+                const normalizedFilter = normalizeString(filters.business);
+                const contactBusinesses = Array.isArray(contact.businesses) ? contact.businesses : [];
+                const businessText = [
+                    ...contactBusinesses,
+                    contact.business || ''
+                ].join(' ');
+                if (!normalizeString(businessText).includes(normalizedFilter)) return false;
+            }
+            
+            // 業種関心フィルター
+            if (filters.industryInterests) {
+                const normalizedFilter = normalizeString(filters.industryInterests);
+                const contactInterests = Array.isArray(contact.industryInterests) ? contact.industryInterests : [];
+                const hasMatchingInterest = contactInterests.some(interest => 
+                    normalizeString(interest).includes(normalizedFilter)
+                );
+                if (!hasMatchingInterest) return false;
+            }
+            
+            // 居住地フィルター
+            if (filters.residence) {
+                const normalizedFilter = normalizeString(filters.residence);
+                const contactResidence = normalizeString(contact.residence || '');
+                if (!contactResidence.includes(normalizedFilter)) return false;
+            }
+            
+            // 検索クエリフィルター
+            if (filters.query) {
+                const searchableText = [
+                    contact.name,
+                    contact.furigana,
+                    contact.company,
+                    contact.business,
+                    ...(contact.businesses || [])
+                ].filter(Boolean).join(' ');
+                
+                const normalizedQuery = normalizeString(filters.query);
+                if (!normalizeString(searchableText).includes(normalizedQuery)) return false;
+            }
+            
+            return true;
+        });
+    } catch (error) {
+        console.error('[fix][utils] applyFilters error:', error);
+        return contacts;
+    }
 }
 
 // 連絡先インデックスの更新
-function updateContactIndex(contact) {
-    if (!contact || !contact.id) return;
-    
-    contactsIndex[contact.id] = {
-        id: contact.id,
-        name: contact.name,
-        company: contact.company || '',
-        lastUpdated: new Date().toISOString(),
-        status: contact.status || '新規',
-        types: contact.types || [],
-        createdAt: contact.createdAt || new Date().toISOString()
-    };
-    
-    // 検索インデックスも更新
-    const searchText = [
-        contact.name,
-        contact.furigana,
-        contact.company,
-        ...(contact.types || []),
-        ...(contact.affiliations || []),
-        ...(contact.businesses || []),
-        contact.business,
-        contact.strengths,
-        contact.approach,
-        contact.history,
-        contact.priorInfo
-    ].filter(text => text).join(' ').toLowerCase();
-    
-    searchIndex[contact.id] = searchText;
+function updateContactIndex(contact, contactsIndex = {}) {
+    try {
+        if (!contact || !contact.id) return contactsIndex;
+        
+        contactsIndex[contact.id] = {
+            id: contact.id,
+            name: contact.name || '',
+            company: contact.company || '',
+            lastUpdated: new Date().toISOString(),
+            status: contact.status || '新規',
+            types: Array.isArray(contact.types) ? contact.types : [],
+            createdAt: contact.createdAt || new Date().toISOString()
+        };
+        
+        return contactsIndex;
+    } catch (error) {
+        console.error('[fix][utils] updateContactIndex error:', error);
+        return contactsIndex;
+    }
 }
 
 // ミーティングインデックスの更新
-function updateMeetingIndex(contactId) {
-    if (!contactId) return;
-    
-    const contactMeetings = meetings.filter(m => m.contactId === contactId);
-    
-    meetingsIndex[contactId] = {
-        contactId: contactId,
-        meetingCount: contactMeetings.length,
-        lastMeetingDate: contactMeetings.length > 0 ? 
-            Math.max(...contactMeetings.map(m => new Date(m.date || 0).getTime())) : null,
-        lastUpdated: new Date().toISOString(),
-        totalTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.length || 0), 0),
-        completedTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => t.completed).length || 0), 0)
-    };
+function updateMeetingIndex(contactId, meetings = [], meetingsIndex = {}) {
+    try {
+        if (!contactId) return meetingsIndex;
+        
+        const contactMeetings = meetings.filter(m => m.contactId === contactId);
+        
+        meetingsIndex[contactId] = {
+            contactId: contactId,
+            meetingCount: contactMeetings.length,
+            lastMeetingDate: contactMeetings.length > 0 ? 
+                Math.max(...contactMeetings.map(m => new Date(m.date || 0).getTime())) : null,
+            lastUpdated: new Date().toISOString(),
+            totalTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.length || 0), 0),
+            completedTodos: contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => t.completed).length || 0), 0)
+        };
+        
+        return meetingsIndex;
+    } catch (error) {
+        console.error('[fix][utils] updateMeetingIndex error:', error);
+        return meetingsIndex;
+    }
 }
 
-// インデックスの再構築
-async function rebuildIndexes() {
-    console.log('インデックス再構築開始...');
-    
+// [CLAUDE FIX] インデックスの再構築（安全版）
+function rebuildIndexes(contacts = [], meetings = [], metadata = {}) {
     try {
+        console.log('[fix][utils] rebuilding indexes...');
+        
+        if (!Array.isArray(contacts)) contacts = [];
+        if (!Array.isArray(meetings)) meetings = [];
+        
         // 連絡先インデックス
-        contactsIndex = {};
+        let contactsIndex = {};
         contacts.forEach(contact => {
-            updateContactIndex(contact);
+            contactsIndex = updateContactIndex(contact, contactsIndex);
         });
         
         // ミーティングインデックス
-        meetingsIndex = {};
-        const contactIds = [...new Set(meetings.map(m => m.contactId))];
+        let meetingsIndex = {};
+        const contactIds = [...new Set(meetings.map(m => m.contactId).filter(Boolean))];
         contactIds.forEach(contactId => {
-            updateMeetingIndex(contactId);
+            meetingsIndex = updateMeetingIndex(contactId, meetings, meetingsIndex);
         });
         
         // 検索インデックス
-        buildSearchIndex();
+        const searchIndex = buildSearchIndex(contacts);
         
         // メタデータ更新
-        if (metadata) {
-            metadata.totalContacts = contacts.length;
-            metadata.totalMeetings = meetings.length;
-            metadata.lastUpdated = new Date().toISOString();
-        }
+        const updatedMetadata = {
+            ...metadata,
+            totalContacts: contacts.length,
+            totalMeetings: meetings.length,
+            lastUpdated: new Date().toISOString(),
+            version: '2.0'
+        };
         
-        console.log('インデックス再構築完了');
+        console.log('[fix][utils] indexes rebuilt - contacts:', Object.keys(contactsIndex).length, 'meetings:', Object.keys(meetingsIndex).length);
         
+        return {
+            contactsIndex,
+            meetingsIndex,
+            searchIndex,
+            metadata: updatedMetadata
+        };
     } catch (error) {
-        console.error('インデックス再構築エラー:', error);
-        throw error;
+        console.error('[fix][utils] rebuildIndexes error:', error);
+        return {
+            contactsIndex: {},
+            meetingsIndex: {},
+            searchIndex: {},
+            metadata: {}
+        };
     }
 }
 
 // データマイグレーション（レガシー形式から分散構造へ）
 function migrateFromLegacyFormat(legacyContacts, legacyMeetings, legacyOptions) {
-    console.log('レガシーデータのマイグレーション開始...');
-    
-    // 連絡先データの変換
-    const migratedContacts = legacyContacts.map((contact, index) => {
-        // IDが存在しない場合は生成
-        if (!contact.id) {
-            contact.id = String(index + 1).padStart(6, '0');
-        }
+    try {
+        console.log('[fix][utils] migrating legacy data...');
         
-        // データ形式の正規化
-        return normalizeContactData(contact);
-    });
-    
-    // ミーティングデータの変換
-    const migratedMeetings = legacyMeetings.map((meeting, index) => {
-        if (!meeting.id) {
-            meeting.id = String(index + 1).padStart(6, '0');
-        }
-        return meeting;
-    });
-    
-    // メタデータの設定
-    const migratedMetadata = {
-        version: '2.0',
-        migrationFrom: 'legacy',
-        migrationDate: new Date().toISOString(),
-        totalContacts: migratedContacts.length,
-        totalMeetings: migratedMeetings.length,
-        nextContactId: migratedContacts.length + 1,
-        nextMeetingId: migratedMeetings.length + 1
-    };
-    
-    console.log('マイグレーション完了');
-    
-    return {
-        contacts: migratedContacts,
-        meetings: migratedMeetings,
-        options: legacyOptions || options,
-        metadata: migratedMetadata
-    };
+        // 連絡先データの変換
+        const migratedContacts = (legacyContacts || []).map((contact, index) => {
+            // IDが存在しない場合は生成
+            if (!contact.id) {
+                contact.id = String(index + 1).padStart(6, '0');
+            }
+            
+            // データ形式の正規化
+            return normalizeContactData(contact);
+        });
+        
+        // ミーティングデータの変換
+        const migratedMeetings = (legacyMeetings || []).map((meeting, index) => {
+            if (!meeting.id) {
+                meeting.id = String(index + 1).padStart(6, '0');
+            }
+            return meeting;
+        });
+        
+        // メタデータの設定
+        const migratedMetadata = {
+            version: '2.0',
+            migrationFrom: 'legacy',
+            migrationDate: new Date().toISOString(),
+            totalContacts: migratedContacts.length,
+            totalMeetings: migratedMeetings.length,
+            nextContactId: migratedContacts.length + 1,
+            nextMeetingId: migratedMeetings.length + 1
+        };
+        
+        console.log('[fix][utils] migration completed');
+        
+        return {
+            contacts: migratedContacts,
+            meetings: migratedMeetings,
+            options: legacyOptions || {},
+            metadata: migratedMetadata
+        };
+    } catch (error) {
+        console.error('[fix][utils] migrateFromLegacyFormat error:', error);
+        return {
+            contacts: legacyContacts || [],
+            meetings: legacyMeetings || [],
+            options: legacyOptions || {},
+            metadata: {}
+        };
+    }
 }
 
 // 連絡先データの正規化
 function normalizeContactData(contact) {
-    // レガシー形式の変換
-    if (contact.referrer && !contact.contactMethod) {
-        contact.contactMethod = 'referral';
-    } else if (!contact.contactMethod) {
-        contact.contactMethod = 'direct';
-        contact.directContact = '所属が同じ';
+    try {
+        if (!contact) return contact;
+        
+        // レガシー形式の変換
+        if (contact.referrer && !contact.contactMethod) {
+            contact.contactMethod = 'referral';
+        } else if (!contact.contactMethod) {
+            contact.contactMethod = 'direct';
+            contact.directContact = '所属が同じ';
+        }
+        
+        // 文字列から配列への変換
+        if (typeof contact.type === 'string') {
+            contact.types = contact.type ? [contact.type] : [];
+            delete contact.type;
+        }
+        if (typeof contact.affiliation === 'string') {
+            contact.affiliations = contact.affiliation ? [contact.affiliation] : [];
+            delete contact.affiliation;
+        }
+        
+        // 必須フィールドの確保
+        contact.types = contact.types || [];
+        contact.affiliations = contact.affiliations || [];
+        contact.industryInterests = contact.industryInterests || [];
+        contact.businesses = contact.businesses || [];
+        contact.emails = contact.emails || [];
+        contact.phones = contact.phones || [];
+        contact.priorInfo = contact.priorInfo || '';
+        contact.status = contact.status || '新規';
+        
+        // タイムスタンプの追加
+        if (!contact.createdAt) {
+            contact.createdAt = new Date().toISOString();
+        }
+        if (!contact.updatedAt) {
+            contact.updatedAt = new Date().toISOString();
+        }
+        
+        return contact;
+    } catch (error) {
+        console.error('[fix][utils] normalizeContactData error:', error);
+        return contact;
     }
-    
-    // 文字列から配列への変換
-    if (typeof contact.type === 'string') {
-        contact.types = contact.type ? [contact.type] : [];
-        delete contact.type;
-    }
-    if (typeof contact.affiliation === 'string') {
-        contact.affiliations = contact.affiliation ? [contact.affiliation] : [];
-        delete contact.affiliation;
-    }
-    
-    // 必須フィールドの確保
-    contact.types = contact.types || [];
-    contact.affiliations = contact.affiliations || [];
-    contact.industryInterests = contact.industryInterests || [];
-    contact.businesses = contact.businesses || [];
-    contact.emails = contact.emails || [];
-    contact.phones = contact.phones || [];
-    contact.priorInfo = contact.priorInfo || '';
-    contact.status = contact.status || '新規';
-    
-    // タイムスタンプの追加
-    if (!contact.createdAt) {
-        contact.createdAt = new Date().toISOString();
-    }
-    if (!contact.updatedAt) {
-        contact.updatedAt = new Date().toISOString();
-    }
-    
-    return contact;
 }
 
 // バッチ処理用のユーティリティ
 async function batchProcess(items, processor, batchSize = 50) {
-    const results = [];
-    
-    for (let i = 0; i < items.length; i += batchSize) {
-        const batch = items.slice(i, i + batchSize);
-        const batchResults = await Promise.all(batch.map(processor));
-        results.push(...batchResults);
+    try {
+        const results = [];
         
-        // UI の応答性を保つため、小さな遅延を入れる
-        if (i + batchSize < items.length) {
-            await new Promise(resolve => setTimeout(resolve, 10));
+        for (let i = 0; i < items.length; i += batchSize) {
+            const batch = items.slice(i, i + batchSize);
+            const batchResults = await Promise.all(batch.map(processor));
+            results.push(...batchResults);
+            
+            // UI の応答性を保つため、小さな遅延を入れる
+            if (i + batchSize < items.length) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
         }
+        
+        return results;
+    } catch (error) {
+        console.error('[fix][utils] batchProcess error:', error);
+        return [];
     }
-    
-    return results;
 }
 
 // ファイルサイズの計算
 function calculateDataSize(data) {
-    return new Blob([JSON.stringify(data)]).size;
+    try {
+        return new Blob([JSON.stringify(data)]).size;
+    } catch (error) {
+        console.warn('[fix][utils] calculateDataSize error:', error);
+        return 0;
+    }
 }
 
 // データの圧縮（シンプルな最適化）
 function compressData(data) {
-    // 不要なフィールドの削除
-    const compressed = JSON.parse(JSON.stringify(data));
-    
-    // 空の配列や文字列を削除
-    function removeEmpty(obj) {
-        if (Array.isArray(obj)) {
-            return obj.filter(item => item !== null && item !== undefined && item !== '');
-        } else if (obj && typeof obj === 'object') {
-            const cleaned = {};
-            for (const [key, value] of Object.entries(obj)) {
-                const cleanedValue = removeEmpty(value);
-                if (cleanedValue !== null && cleanedValue !== undefined && cleanedValue !== '' && 
-                    !(Array.isArray(cleanedValue) && cleanedValue.length === 0)) {
-                    cleaned[key] = cleanedValue;
+    try {
+        // 不要なフィールドの削除
+        const compressed = JSON.parse(JSON.stringify(data));
+        
+        // 空の配列や文字列を削除
+        function removeEmpty(obj) {
+            if (Array.isArray(obj)) {
+                return obj.filter(item => item !== null && item !== undefined && item !== '');
+            } else if (obj && typeof obj === 'object') {
+                const cleaned = {};
+                for (const [key, value] of Object.entries(obj)) {
+                    const cleanedValue = removeEmpty(value);
+                    if (cleanedValue !== null && cleanedValue !== undefined && cleanedValue !== '' && 
+                        !(Array.isArray(cleanedValue) && cleanedValue.length === 0)) {
+                        cleaned[key] = cleanedValue;
+                    }
                 }
+                return cleaned;
             }
-            return cleaned;
+            return obj;
         }
-        return obj;
+        
+        return removeEmpty(compressed);
+    } catch (error) {
+        console.warn('[fix][utils] compressData error:', error);
+        return data;
     }
-    
-    return removeEmpty(compressed);
 }
 
 // パフォーマンス測定
 function measurePerformance(name, func) {
-    const start = performance.now();
-    const result = func();
-    const end = performance.now();
-    console.log(`${name}: ${(end - start).toFixed(2)}ms`);
-    return result;
+    try {
+        const start = performance.now();
+        const result = func();
+        const end = performance.now();
+        console.log(`[fix][perf] ${name}: ${(end - start).toFixed(2)}ms`);
+        return result;
+    } catch (error) {
+        console.error(`[fix][perf] ${name} error:`, error);
+        return null;
+    }
 }
 
 // 非同期パフォーマンス測定
 async function measureAsyncPerformance(name, func) {
-    const start = performance.now();
-    const result = await func();
-    const end = performance.now();
-    console.log(`${name}: ${(end - start).toFixed(2)}ms`);
-    return result;
+    try {
+        const start = performance.now();
+        const result = await func();
+        const end = performance.now();
+        console.log(`[fix][perf] ${name}: ${(end - start).toFixed(2)}ms`);
+        return result;
+    } catch (error) {
+        console.error(`[fix][perf] ${name} error:`, error);
+        return null;
+    }
 }
 
 // データ整合性チェック
-function validateDataIntegrity() {
-    const issues = [];
-    
-    // 連絡先の整合性チェック
-    contacts.forEach(contact => {
-        if (!contact.id) {
-            issues.push(`連絡先「${contact.name}」にIDがありません`);
-        }
-        if (!contact.name) {
-            issues.push(`ID「${contact.id}」の連絡先に名前がありません`);
-        }
-        if (contact.referrer) {
-            const referrerExists = contacts.some(c => c.name === contact.referrer);
-            if (!referrerExists) {
-                issues.push(`連絡先「${contact.name}」の紹介者「${contact.referrer}」が見つかりません`);
-            }
-        }
-    });
-    
-    // ミーティングの整合性チェック
-    meetings.forEach(meeting => {
-        if (!meeting.id) {
-            issues.push(`ミーティングにIDがありません`);
-        }
-        if (!meeting.contactId) {
-            issues.push(`ミーティング「${meeting.id}」に連絡先IDがありません`);
-        } else {
-            const contactExists = contacts.some(c => c.id === meeting.contactId);
-            if (!contactExists) {
-                issues.push(`ミーティング「${meeting.id}」の連絡先「${meeting.contactId}」が見つかりません`);
-            }
-        }
-    });
-    
-    // インデックスの整合性チェック
-    Object.keys(contactsIndex).forEach(contactId => {
-        const contactExists = contacts.some(c => c.id === contactId);
-        if (!contactExists) {
-            issues.push(`連絡先インデックスに存在しない連絡先ID「${contactId}」があります`);
-        }
-    });
-    
-    Object.keys(meetingsIndex).forEach(contactId => {
-        const contactExists = contacts.some(c => c.id === contactId);
-        if (!contactExists) {
-            issues.push(`ミーティングインデックスに存在しない連絡先ID「${contactId}」があります`);
-        }
-    });
-    
-    return issues;
-}
-
-// ======= 既存機能の拡張 =======
-
-// ドロップゾーンの設定
-function setupDropZone(dropZoneId, targetType, isImage = false) {
-    const dropZone = document.getElementById(dropZoneId);
-    if (!dropZone) return;
-
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.style.display = 'none';
-    fileInput.accept = isImage ? 'image/*' : '*/*';
-    fileInput.multiple = !isImage;
-    
-    dropZone.appendChild(fileInput);
-
-    dropZone.addEventListener('click', () => {
-        fileInput.click();
-    });
-
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        handleFiles(e.dataTransfer.files, targetType, isImage);
-    });
-
-    fileInput.addEventListener('change', (e) => {
-        handleFiles(e.target.files, targetType, isImage);
-    });
-}
-
-// ファイル処理
-function handleFiles(files, targetType, isImage) {
-    Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            if (isImage) {
-                handleImageFile(e.result, targetType);
-            } else {
-                handleAttachmentFile(file.name, e.result, file.type, targetType);
-            }
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
-// 画像ファイル処理
-function handleImageFile(dataUrl, targetType) {
-    if (targetType === 'photo') {
-        const preview = document.getElementById('photoPreview');
-        const container = document.getElementById('photoPreviewContainer');
-        if (preview && container) {
-            preview.src = dataUrl;
-            container.style.display = 'block';
-        }
-    } else if (targetType === 'businessCard') {
-        const preview = document.getElementById('businessCardPreview');
-        const container = document.getElementById('businessCardPreviewContainer');
-        if (preview && container) {
-            preview.src = dataUrl;
-            container.style.display = 'block';
-        }
-    }
-}
-
-// 添付ファイル処理
-function handleAttachmentFile(fileName, dataUrl, fileType, targetListId) {
-    const fileList = document.getElementById(targetListId);
-    if (!fileList) return;
-    
-    const fileItem = document.createElement('div');
-    fileItem.className = 'file-item';
-    fileItem.innerHTML = `
-        📎 <span>${escapeHtml(fileName)}</span>
-        <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>
-    `;
-    fileItem.dataset.fileName = fileName;
-    fileItem.dataset.fileData = dataUrl;
-    fileItem.dataset.fileType = fileType;
-    fileList.appendChild(fileItem);
-}
-
-// 複数選択の設定
-function setupMultiSelect() {
-    updateMultiSelectOptions();
-}
-
-// 複数選択オプション更新
-function updateMultiSelectOptions() {
-    updateMultiSelectOption('type', options.types);
-    updateMultiSelectOption('affiliation', options.affiliations);
-    updateMultiSelectOption('industryInterests', options.industryInterests);
-}
-
-function updateMultiSelectOption(type, optionList) {
-    if (!Array.isArray(optionList)) { optionList = []; }
-    const container = document.getElementById(`${type}Options`);
-    if (!container) return;
-
-    container.innerHTML = '';
-    
-    const sortedOptions = [...optionList].sort();
-    sortedOptions.forEach(option => {
-        const optionDiv = document.createElement('div');
-        optionDiv.className = 'multi-select-option';
-        optionDiv.innerHTML = `
-            <input type="checkbox" value="${escapeHtml(option)}" 
-                   ${selectedOptions[type].includes(option) ? 'checked' : ''}
-                   onchange="toggleMultiSelectOption('${type}', '${escapeHtml(option)}')">
-            <label>${escapeHtml(option)}</label>
-        `;
-        container.appendChild(optionDiv);
-    });
-
-    const addNewDiv = document.createElement('div');
-    addNewDiv.className = 'multi-select-option';
-    addNewDiv.innerHTML = `
-        <input type="text" placeholder="新規追加..." 
-               onkeypress="if(event.key==='Enter') addNewOption('${type}', this.value, this)">
-    `;
-    container.appendChild(addNewDiv);
-}
-
-// 複数選択トグル
-function toggleMultiSelectDropdown(type) {
-    const dropdown = document.getElementById(`${type}Dropdown`);
-    if (!dropdown) return;
-    
-    const isVisible = dropdown.classList.contains('show');
-    
-    document.querySelectorAll('.multi-select-dropdown').forEach(d => {
-        d.classList.remove('show');
-    });
-    
-    if (!isVisible) {
-        dropdown.classList.add('show');
-    }
-}
-
-// 複数選択オプション切り替え
-function toggleMultiSelectOption(type, value) {
-    const index = selectedOptions[type].indexOf(value);
-    if (index > -1) {
-        selectedOptions[type].splice(index, 1);
-    } else {
-        selectedOptions[type].push(value);
-    }
-    updateMultiSelectTags(type);
-}
-
-// 複数選択タグ更新
-function updateMultiSelectTags(type) {
-    const container = document.getElementById(`${type}Tags`);
-    if (!container) return;
-
-    if (selectedOptions[type].length === 0) {
-        container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.875rem;">選択してください...</span>';
-        return;
-    }
-
-    container.innerHTML = selectedOptions[type].map(option => `
-        <span class="multi-select-tag">
-            ${escapeHtml(option)}
-            <button onclick="removeMultiSelectTag('${type}', '${escapeHtml(option)}')">×</button>
-        </span>
-    `).join('');
-}
-
-// 複数選択タグ削除
-function removeMultiSelectTag(type, value) {
-    const index = selectedOptions[type].indexOf(value);
-    if (index > -1) {
-        selectedOptions[type].splice(index, 1);
-        updateMultiSelectTags(type);
-        updateMultiSelectOptions();
-    }
-}
-
-// 新規オプション追加
-function addNewOption(type, value, inputElement) {
-    if (!value || value.trim() === '') return;
-    
-    const trimmedValue = value.trim();
-    if (!options[type].includes(trimmedValue)) {
-        options[type].push(trimmedValue);
-        options[type].sort();
-    }
-    
-    if (!selectedOptions[type].includes(trimmedValue)) {
-        selectedOptions[type].push(trimmedValue);
-    }
-    
-    updateMultiSelectTags(type);
-    updateMultiSelectOptions();
-    inputElement.value = '';
-}
-
-// 複数選択フィルタリング
-function filterMultiSelectOptions(type, query) {
-    multiSelectSearchQueries[type] = query.toLowerCase();
-    const container = document.getElementById(`${type}Options`);
-    if (!container) return;
-    
-    const options = container.querySelectorAll('.multi-select-option');
-    
-    options.forEach(option => {
-        const label = option.querySelector('label');
-        if (label) {
-            const text = label.textContent.toLowerCase();
-            option.style.display = text.includes(query.toLowerCase()) ? 'block' : 'none';
-        }
-    });
-}
-
-// 紹介者オートコンプリート設定
-function setupReferrerAutocomplete() {
-    const input = document.getElementById('referrerInput');
-    const dropdown = document.getElementById('referrerDropdown');
-    
-    if (!input || !dropdown) return;
-
-    input.addEventListener('input', () => {
-        const query = input.value.toLowerCase();
-        if (query.length < 2) {
-            dropdown.classList.remove('show');
-            return;
-        }
-
-        const matches = contacts
-            .filter(c => c.name.toLowerCase().includes(query))
-            .slice(0, 10);
-
-        if (matches.length === 0) {
-            dropdown.classList.remove('show');
-            return;
-        }
-
-        dropdown.innerHTML = matches.map(contact => `
-            <div class="autocomplete-item" onclick="selectReferrer('${escapeHtml(contact.name)}')">
-                ${escapeHtml(contact.name)}${contact.company ? ` (${escapeHtml(contact.company)})` : ''}
-            </div>
-        `).join('');
-
-        dropdown.classList.add('show');
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-            dropdown.classList.remove('show');
-        }
-    });
-}
-
-// 紹介者選択
-function selectReferrer(name) {
-    const input = document.getElementById('referrerInput');
-    const dropdown = document.getElementById('referrerDropdown');
-    if (input && dropdown) {
-        input.value = name;
-        dropdown.classList.remove('show');
-    }
-}
-
-// Markdownエディタ設定
-function setupMarkdownEditors() {
-    const fields = ['business', 'strengths', 'approach', 'history', 'priorInfo'];
-    fields.forEach(field => {
-        const textarea = document.getElementById(`${field}Input`);
-        if (textarea) {
-            textarea.addEventListener('input', () => {
-                updateMarkdownPreview(field);
-            });
-        }
-    });
-}
-
-// Markdownビュー切り替え
-function switchMarkdownView(field, view) {
-    const textarea = document.getElementById(`${field}Input`);
-    const preview = document.getElementById(`${field}Preview`);
-    if (!textarea || !preview) return;
-    
-    const tabs = textarea.closest('.markdown-editor-container')?.querySelectorAll('.markdown-editor-tab') || [];
-
-    tabs.forEach(tab => tab.classList.remove('active'));
-    
-    if (view === 'edit') {
-        textarea.style.display = 'block';
-        preview.style.display = 'none';
-        if (tabs[0]) tabs[0].classList.add('active');
-    } else {
-        textarea.style.display = 'none';
-        preview.style.display = 'block';
-        updateMarkdownPreview(field);
-        if (tabs[1]) tabs[1].classList.add('active');
-    }
-}
-
-// Markdownプレビュー更新
-function updateMarkdownPreview(field) {
-    const textarea = document.getElementById(`${field}Input`);
-    const preview = document.getElementById(`${field}Preview`);
-    if (textarea && preview) {
-        preview.innerHTML = renderMarkdown(textarea.value);
-    }
-}
-
-// モーダル外クリック設定
-function setupModalClose() {
-    document.addEventListener('mousedown', (e) => {
-        modalMouseDownTarget = e.target;
-    });
-
-    document.addEventListener('click', (e) => {
-        if (modalMouseDownTarget === e.target && e.target.classList.contains('modal')) {
-            closeModal(e.target.id);
-        }
-    });
-}
-
-// 接触方法切り替え
-function handleContactMethodChange() {
-    const directChecked = document.getElementById('contactMethodDirect')?.checked;
-    const directSection = document.getElementById('directContactSection');
-    const referralSection = document.getElementById('referralContactSection');
-    
-    if (directSection && referralSection) {
-        if (directChecked) {
-            directSection.style.display = 'block';
-            referralSection.style.display = 'none';
-        } else {
-            directSection.style.display = 'none';
-            referralSection.style.display = 'block';
-        }
-    }
-}
-
-// メール入力追加
-function addEmailInput(value = '') {
-    const container = document.getElementById('emailContainer');
-    if (!container) return;
-    
-    const inputDiv = document.createElement('div');
-    inputDiv.className = 'multi-input-item';
-    inputDiv.innerHTML = `
-        <input type="email" class="form-input" value="${escapeHtml(value)}" placeholder="メールアドレス">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">削除</button>
-    `;
-    container.appendChild(inputDiv);
-}
-
-// 電話番号入力追加
-function addPhoneInput(value = '') {
-    const container = document.getElementById('phoneContainer');
-    if (!container) return;
-    
-    const inputDiv = document.createElement('div');
-    inputDiv.className = 'multi-input-item';
-    inputDiv.innerHTML = `
-        <input type="tel" class="form-input" value="${escapeHtml(value)}" placeholder="電話番号">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">削除</button>
-    `;
-    container.appendChild(inputDiv);
-}
-
-// 事業内容入力追加
-function addBusinessInput(value = '') {
-    const container = document.getElementById('businessContainer');
-    if (!container) return;
-    
-    const inputDiv = document.createElement('div');
-    inputDiv.className = 'multi-input-item';
-    inputDiv.innerHTML = `
-        <input type="text" class="form-input" value="${escapeHtml(value)}" placeholder="事業内容">
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">削除</button>
-    `;
-    container.appendChild(inputDiv);
-}
-
-// 複数入力値取得
-function getMultiInputValues(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return [];
-    
-    const inputs = container.querySelectorAll('input');
-    return Array.from(inputs).map(input => input.value.trim()).filter(value => value !== '');
-}
-
-// CSVエクスポート機能
-function exportToCSV() {
-    if (contacts.length === 0) {
-        showNotification('エクスポートするデータがありません', 'warning');
-        return;
-    }
-
-    const headers = [
-        '名前', 'ふりがな', '会社・組織', 'メールアドレス', '電話番号', 'ホームページ',
-        '事業内容', '種別', '所属', '会いたい業種等', '接触方法', '紹介者',
-        '事業内容詳細', '強み', '切り出し方', '過去の経歴', '事前情報',
-        '活動エリア', '居住地', '趣味・興味', '売上', '作成日時', '更新日時'
-    ];
-
-    const csvData = contacts.map(contact => {
-        return [
-            contact.name || '',
-            contact.furigana || '',
-            contact.company || '',
-            (contact.emails || []).join(';'),
-            (contact.phones || []).join(';'),
-            contact.website || '',
-            (contact.businesses || []).join(';'),
-            (contact.types || []).join(';'),
-            (contact.affiliations || []).join(';'),
-            (contact.industryInterests || []).join(';'),
-            contact.contactMethod || '',
-            contact.referrer || '',
-            escapeCSV(contact.business || ''),
-            escapeCSV(contact.strengths || ''),
-            escapeCSV(contact.approach || ''),
-            escapeCSV(contact.history || ''),
-            escapeCSV(contact.priorInfo || ''),
-            contact.activityArea || '',
-            contact.residence || '',
-            contact.hobbies || '',
-            contact.revenue || '',
-            contact.createdAt || '',
-            contact.updatedAt || ''
-        ].map(field => `"${String(field).replace(/"/g, '""')}"`);
-    });
-
-    const csv = [headers.map(h => `"${h}"`), ...csvData].map(row => row.join(',')).join('\n');
-    const filename = `contacts_${new Date().toISOString().slice(0, 10)}.csv`;
-    
-    downloadCSV(csv, filename);
-    showNotification('CSVファイルをエクスポートしました', 'success');
-}
-
-// CSVインポート機能
-function importFromCSV() {
-    const input = document.getElementById('csvFileInput');
-    if (input) {
-        input.click();
-    }
-}
-
-function handleCSVImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const csv = e.target.result;
-            const rows = parseCSV(csv);
-            
-            if (rows.length < 2) {
-                showNotification('CSVファイルが正しくありません', 'error');
-                return;
-            }
-
-            const importedContacts = rows.slice(1).map((row, index) => {
-                const contact = {
-                    id: generateContactId(),
-                    name: row[0] || '',
-                    furigana: row[1] || '',
-                    company: row[2] || '',
-                    emails: row[3] ? row[3].split(';').filter(e => e) : [],
-                    phones: row[4] ? row[4].split(';').filter(p => p) : [],
-                    website: row[5] || '',
-                    businesses: row[6] ? row[6].split(';').filter(b => b) : [],
-                    types: row[7] ? row[7].split(';').filter(t => t) : [],
-                    affiliations: row[8] ? row[8].split(';').filter(a => a) : [],
-                    industryInterests: row[9] ? row[9].split(';').filter(i => i) : [],
-                    contactMethod: row[10] || 'direct',
-                    referrer: row[11] || '',
-                    business: unescapeCSV(row[12] || ''),
-                    strengths: unescapeCSV(row[13] || ''),
-                    approach: unescapeCSV(row[14] || ''),
-                    history: unescapeCSV(row[15] || ''),
-                    priorInfo: unescapeCSV(row[16] || ''),
-                    activityArea: row[17] || '',
-                    residence: row[18] || '',
-                    hobbies: row[19] || '',
-                    revenue: parseFloat(row[20]) || 0,
-                    status: '新規',
-                    createdAt: row[21] || new Date().toISOString(),
-                    updatedAt: row[22] || new Date().toISOString()
-                };
-                
-                return normalizeContactData(contact);
-            }).filter(contact => contact.name);
-
-            if (importedContacts.length === 0) {
-                showNotification('インポートできるデータがありませんでした', 'warning');
-                return;
-            }
-
-            contacts.push(...importedContacts);
-            
-            // オプションを更新
-            importedContacts.forEach(contact => {
-                contact.types.forEach(type => updateOptionIfNew('types', type));
-                contact.affiliations.forEach(aff => updateOptionIfNew('affiliations', aff));
-                contact.industryInterests.forEach(ii => updateOptionIfNew('industryInterests', ii));
-            });
-
-            // インデックスを更新
-            importedContacts.forEach(contact => {
-                updateContactIndex(contact);
-            });
-
-            if (typeof calculateReferrerRevenues === 'function') {
-                calculateReferrerRevenues();
-            }
-            if (typeof saveAllData === 'function') {
-                saveAllData();
-            }
-            if (typeof renderContacts === 'function') {
-                renderContacts();
-            }
-            if (typeof updateFilters === 'function') {
-                updateFilters();
-            }
-            updateMultiSelectOptions();
-
-            showNotification(`${importedContacts.length}件の連絡先をインポートしました`, 'success');
-        } catch (error) {
-            console.error('CSVインポートエラー:', error);
-            logError(error, 'CSVインポート');
-            showNotification('CSVファイルの読み込みに失敗しました', 'error');
-        }
-    };
-    reader.readAsText(file, 'utf-8');
-}
-// ========= Google Drive 画像読み込みユーティリティ =========
-async function loadImageFromGoogleDrive(ref){
+function validateDataIntegrity(contacts = [], meetings = []) {
     try {
-        if(!ref) return null;
+        const issues = [];
+        
+        // 連絡先の整合性チェック
+        contacts.forEach(contact => {
+            if (!contact.id) {
+                issues.push(`連絡先「${contact.name}」にIDがありません`);
+            }
+            if (!contact.name) {
+                issues.push(`ID「${contact.id}」の連絡先に名前がありません`);
+            }
+            if (contact.referrer) {
+                const referrerExists = contacts.some(c => c.name === contact.referrer);
+                if (!referrerExists) {
+                    issues.push(`連絡先「${contact.name}」の紹介者「${contact.referrer}」が見つかりません`);
+                }
+            }
+        });
+        
+        // ミーティングの整合性チェック
+        meetings.forEach(meeting => {
+            if (!meeting.id) {
+                issues.push(`ミーティングにIDがありません`);
+            }
+            if (!meeting.contactId) {
+                issues.push(`ミーティング「${meeting.id}」に連絡先IDがありません`);
+            } else {
+                const contactExists = contacts.some(c => c.id === meeting.contactId);
+                if (!contactExists) {
+                    issues.push(`ミーティング「${meeting.id}」の連絡先「${meeting.contactId}」が見つかりません`);
+                }
+            }
+        });
+        
+        if (issues.length > 0) {
+            console.warn('[fix][utils] data integrity issues found:', issues);
+        } else {
+            console.log('[fix][utils] data integrity check passed');
+        }
+        
+        return issues;
+    } catch (error) {
+        console.error('[fix][utils] validateDataIntegrity error:', error);
+        return ['データ整合性チェックでエラーが発生しました'];
+    }
+}
+
+// [CLAUDE FIX] Google Drive 画像読み込みユーティリティ
+async function loadImageFromGoogleDrive(ref) {
+    try {
+        if (!ref) return null;
         if (ref.startsWith('data:')) return ref;
+        
         if (ref.startsWith('drive:')) {
             const fileId = ref.split(':')[1];
-            const token = (typeof AppData !== 'undefined' && AppData.getAccessTokenForFetch) ? await AppData.getAccessTokenForFetch() : (gapi.client.getToken() && gapi.client.getToken().access_token);
-            if(!token) throw new Error('アクセストークン未取得');
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            
+            // トークン取得
+            let token = null;
+            if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken) {
+                const tokenObj = gapi.client.getToken();
+                token = tokenObj && tokenObj.access_token;
+            }
+            
+            if (!token) {
+                console.warn('[fix][utils] no access token for Drive image');
+                return null;
+            }
+            
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if(!res.ok) throw new Error('Drive fetch失敗: ' + res.status);
-            const blob = await res.blob();
-            return await new Promise((resolve)=>{
-                const fr = new FileReader();
-                fr.onload = ()=> resolve(fr.result);
-                fr.readAsDataURL(blob);
+            
+            if (!response.ok) {
+                console.warn('[fix][utils] Drive fetch failed:', response.status);
+                return null;
+            }
+            
+            const blob = await response.blob();
+            return await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
             });
         }
+        
         // それ以外はURLとしてそのまま返す
         return ref;
-    } catch(e){
-        console.warn('loadImageFromGoogleDrive エラー:', e);
+    } catch (error) {
+        console.warn('[fix][utils] loadImageFromGoogleDrive error:', error);
         return null;
     }
 }
 
-// （任意）添付保存のDrive実装が必要な場合は後日実装。未定義チェックでフォールバックします。
-
-
-// ========= Drive 汎用ファイル読み込みユーティリティ =========
-async function loadDriveFileAsObjectURL(ref){
-    try{
-        if(!ref) return null;
-        if(ref.startsWith('data:')) return ref; // そのまま
+// Drive汎用ファイル読み込みユーティリティ
+async function loadDriveFileAsObjectURL(ref) {
+    try {
+        if (!ref) return null;
+        if (ref.startsWith('data:')) return ref; // そのまま
+        
         let fileId = ref;
-        if(ref.startsWith('drive:')) fileId = ref.split(':')[1];
-        const token = (typeof AppData !== 'undefined' && AppData.token) || (gapi.client.getToken() && gapi.client.getToken().access_token);
-        if(!token) throw new Error('アクセストークン未取得');
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        if (ref.startsWith('drive:')) fileId = ref.split(':')[1];
+        
+        let token = null;
+        if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken) {
+            const tokenObj = gapi.client.getToken();
+            token = tokenObj && tokenObj.access_token;
+        }
+        
+        if (!token) {
+            console.warn('[fix][utils] no access token for Drive file');
+            return null;
+        }
+        
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if(!res.ok) throw new Error('Drive fetch失敗: ' + res.status);
-        const blob = await res.blob();
+        
+        if (!response.ok) {
+            console.warn('[fix][utils] Drive file fetch failed:', response.status);
+            return null;
+        }
+        
+        const blob = await response.blob();
         return URL.createObjectURL(blob);
-    }catch(e){
-        console.warn('loadDriveFileAsObjectURL エラー:', e);
+    } catch (error) {
+        console.warn('[fix][utils] loadDriveFileAsObjectURL error:', error);
         return null;
     }
 }
 
-
-// ======= Added helpers: Drive upload & JSON save & attachments =======
-(function(global){
-  'use strict';
-
-  function _hasDriveFileScope(){
-    try{
-      var t = (global.gapi && gapi.client && gapi.client.getToken && gapi.client.getToken()) || {};
-      // scope presence cannot be read easily; rely on presence of token
-      return !!t && !!t.access_token;
-    }catch(e){ return false; }
-  }
-
-  async function getFileIdInFolder(name, folderId){
-    if(!name || !folderId) return null;
-    try{
-      var q = "name = '" + name.replace(/'/g,"\\'") + "' and '" + folderId + "' in parents and trashed = false";
-      var resp = await gapi.client.drive.files.list({
-        q: q,
-        fields: 'files(id,name,parents)',
-        pageSize: 10,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      var files = (resp.result && resp.result.files) || [];
-      if(files.length){ return files[0].id; }
-      return null;
-    }catch(e){ console.warn('getFileIdInFolder error', e); return null; }
-  }
-  global.getFileIdInFolder = global.getFileIdInFolder || getFileIdInFolder;
-
-  async function ensureSubfolder(parentId, name){
-    try{
-      var q = "mimeType = 'application/vnd.google-apps.folder' and name = '" + name.replace(/'/g,"\\'") + "' and '" + parentId + "' in parents and trashed = false";
-      var resp = await gapi.client.drive.files.list({
-        q: q,
-        fields: 'files(id,name)',
-        pageSize: 10,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      var files = (resp.result && resp.result.files) || [];
-      if(files.length){ return files[0].id; }
-      var meta = { name: name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] };
-      var cre = await gapi.client.drive.files.create({ resource: meta, fields: 'id', supportsAllDrives: true });
-      return (cre.result && cre.result.id) || null;
-    }catch(e){ console.warn('ensureSubfolder error', e); return null; }
-  }
-
-  function _dataUrlInfo(dataUrl){
-    if(typeof dataUrl !== 'string') return { mime: 'application/octet-stream', base64:'' };
-    var m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
-    if(!m){ return { mime: 'application/octet-stream', base64: '' }; }
-    return { mime: m[1], base64: m[2] };
-  }
-
-  async function uploadDataUrlToFolder(fileName, dataUrl, parentFolderId){
-    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
-    var info = _dataUrlInfo(dataUrl);
-    var boundary = '-------1to1app' + String(Date.now());
-    var delimiter = "\r\n--" + boundary + "\r\n";
-    var closeDelim = "\r\n--" + boundary + "--";
-
-    var metadata = { name: fileName, mimeType: info.mime, parents: [parentFolderId] };
-    var multipartBody = delimiter +
-      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-      JSON.stringify(metadata) + delimiter +
-      "Content-Type: " + info.mime + "\r\n" +
-      "Content-Transfer-Encoding: base64\r\n\r\n" +
-      info.base64 + closeDelim;
-
-    var req = await gapi.client.request({
-      path: '/upload/drive/v3/files',
-      method: 'POST',
-      params: { uploadType: 'multipart', supportsAllDrives: true },
-      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-      body: multipartBody
-    });
-    return (req.result && req.result.id) || null;
-  }
-
-  async function updateFileWithDataUrl(fileId, dataUrl){
-    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
-    var info = _dataUrlInfo(dataUrl);
-    var req = await gapi.client.request({
-      path: '/upload/drive/v3/files/' + fileId,
-      method: 'PATCH',
-      params: { uploadType: 'media', supportsAllDrives: true },
-      headers: { 'Content-Type': info.mime },
-      body: atob(info.base64)  // raw bytes; Drive accepts binary body
-    });
-    return (req.result && req.result.id) || fileId;
-  }
-
-  async function putJsonFile(folderId, name, obj){
-    if(!_hasDriveFileScope()){ throw new Error('Drive token missing'); }
-    var json = JSON.stringify(obj || {}, null, 2);
-    var fid = await getFileIdInFolder(name, folderId);
-    if(!fid){
-      var meta = { name: name, mimeType: 'application/json', parents: [folderId] };
-      var req = await gapi.client.request({
-        path: '/upload/drive/v3/files',
-        method: 'POST',
-        params: { uploadType: 'multipart', supportsAllDrives: true },
-        headers: { 'Content-Type': 'multipart/related; boundary=1to1json' },
-        body:
-          "--1to1json\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" +
-          JSON.stringify(meta) + "\r\n--1to1json\r\nContent-Type: application/json\r\n\r\n" +
-          json + "\r\n--1to1json--"
-      });
-      return (req.result && req.result.id) || null;
-    }else{
-      var up = await gapi.client.request({
-        path: '/upload/drive/v3/files/' + fid,
-        method: 'PATCH',
-        params: { uploadType: 'media', supportsAllDrives: true },
-        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-        body: json
-      });
-      return (up.result && up.result.id) || fid;
+// [CLAUDE FIX] URL サニタイズ
+function sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    
+    try {
+        // HTML エンコードされた文字列をデコード
+        const decoded = url.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        
+        // %3Ca%20href= のような不正な形式を除去
+        if (decoded.includes('%3Ca') || decoded.includes('<a')) {
+            console.warn('[fix][utils] invalid URL format detected:', url);
+            return '';
+        }
+        
+        // 有効なURLスキームかチェック
+        if (decoded.startsWith('http://') || decoded.startsWith('https://') || decoded.startsWith('data:')) {
+            return decoded;
+        }
+        
+        return url;
+    } catch (error) {
+        console.warn('[fix][utils] sanitizeUrl error:', error);
+        return '';
     }
-  }
-  global.putJsonFile = global.putJsonFile || putJsonFile;
+}
 
-  // Save all: write contacts-index.json (+search-index.json if present) minimal
-  async function saveAllData(){
-    try{
-      if(!global.folderStructure || !global.folderStructure.index){ throw new Error('index folder not resolved'); }
-      var indexId = global.folderStructure.index;
-      var contactsArr = Array.isArray(global.contacts)? global.contacts : [];
-      // Build lightweight index: keep only essential fields for list
-      var idx = {};
-      contactsArr.forEach(function(c){
-        if(!c || !c.id) return;
-        idx[c.id] = {
-          id: c.id, name: c.name || '', furigana: c.furigana || '',
-          company: c.company || '', status: c.status || '新規',
-          photoPath: c.photoPath || null, businessCardPath: c.businessCardPath || null,
-          types: c.types || [], affiliations: c.affiliations || [], industryInterests: c.industryInterests || []
-        };
-      });
-      await putJsonFile(indexId, 'contacts-index.json', idx);
-      if(global.indexes && global.indexes.search){
-        await putJsonFile(indexId, 'search-index.json', global.indexes.search);
-      }
-      if(global.indexes && global.indexes.meetings){
-        await putJsonFile(indexId, 'meetings-index.json', global.indexes.meetings);
-      }
-      if(typeof global.showNotification === 'function'){
-        showNotification('保存しました', 'success');
-      }
-    }catch(e){
-      console.error('saveAllData error', e);
-      if(typeof global.showNotification === 'function'){
-        showNotification('保存に失敗しました: ' + (e && e.message), 'error');
-      }
-      throw e;
+// 名前からイニシャルを生成
+function toInitials(displayName) {
+    if (!displayName || typeof displayName !== 'string') return '?';
+    
+    try {
+        const words = displayName.trim().split(/\s+/);
+        if (words.length === 1) {
+            return words[0].charAt(0).toUpperCase();
+        }
+        return words.slice(0, 2).map(word => word.charAt(0).toUpperCase()).join('');
+    } catch (error) {
+        console.warn('[fix][utils] toInitials error:', error);
+        return '?';
     }
-  }
-  global.saveAllData = global.saveAllData || saveAllData;
-
-  function _sanitizeName(s){
-    return String(s||'').trim().replace(/[\\/:*?"<>|#\[\]@]/g,'_').slice(0,128);
-  }
-
-  // Save attachments for Contacts
-  async function saveAttachmentToFileSystem(fileName, dataUrl, contactName){
-    if(!global.folderStructure || !(global.folderStructure.attachmentsContacts || global.folderStructure.attachments)){
-      throw new Error('attachments folder not ready');
-    }
-    var parent = global.folderStructure.attachmentsContacts || global.folderStructure.attachments;
-    var sub = await ensureSubfolder(parent, _sanitizeName(contactName||'contact'));
-    var safe = _sanitizeName(fileName || 'file');
-    var existingId = await getFileIdInFolder(safe, sub);
-    var id;
-    if(existingId){
-      id = await updateFileWithDataUrl(existingId, dataUrl);
-    }else{
-      id = await uploadDataUrlToFolder(safe, dataUrl, sub);
-    }
-    return 'drive:' + id;
-  }
-  global.saveAttachmentToFileSystem = global.saveAttachmentToFileSystem || saveAttachmentToFileSystem;
-
-  // Save attachments for Meetings
-  async function saveAttachmentToMeetingFileSystem(fileName, dataUrl, meetingId){
-    if(!global.folderStructure || !(global.folderStructure.attachmentsMeetings || global.folderStructure.attachments)){
-      throw new Error('attachments folder not ready');
-    }
-    var parent = global.folderStructure.attachmentsMeetings || global.folderStructure.attachments;
-    var sub = await ensureSubfolder(parent, _sanitizeName(String(meetingId||'meeting')));
-    var safe = _sanitizeName(fileName || 'file');
-    var existingId = await getFileIdInFolder(safe, sub);
-    var id;
-    if(existingId){
-      id = await updateFileWithDataUrl(existingId, dataUrl);
-    }else{
-      id = await uploadDataUrlToFolder(safe, dataUrl, sub);
-    }
-    return 'drive:' + id;
-  }
-  global.saveAttachmentToMeetingFileSystem = global.saveAttachmentToMeetingFileSystem || saveAttachmentToMeetingFileSystem;
-
-})(window);
+}

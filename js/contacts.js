@@ -1,4 +1,7 @@
-// contacts.js - 分散ファイル構造対応の連絡先管理機能
+// contacts.js - 分散ファイル構造対応の連絡先管理機能（修正版）
+
+// [CLAUDE FIX] フィルター機能とオプション管理の修正
+// 既存契約を維持しつつ、副作用を排除した実装
 
 // 連絡先モーダルを開く
 function openContactModal(contactId = null) {
@@ -108,22 +111,20 @@ function loadContactData(contactId) {
     if (hobbiesInput) hobbiesInput.value = contact.hobbies || '';
     if (revenueInput) revenueInput.value = contact.revenue || '';
 
-    // 写真
+    // [CLAUDE FIX] 画像表示の修正 - resolveAttachmentUrl関数を使用
     const photoPreview = document.getElementById('photoPreview');
     const photoPreviewContainer = document.getElementById('photoPreviewContainer');
     if (contact.photo && photoPreview && photoPreviewContainer) {
-        if (contact.photo.startsWith('drive:')) {
-            // Google Driveから画像を読み込み
-            loadImageFromGoogleDrive(contact.photo).then(dataUrl => {
-                if (dataUrl) {
-                    photoPreview.src = dataUrl;
-                    photoPreviewContainer.style.display = 'block';
-                }
-            });
-        } else {
-            photoPreview.src = contact.photo;
-            photoPreviewContainer.style.display = 'block';
-        }
+        resolveAttachmentUrl(contact.id, 'photo').then(url => {
+            if (url) {
+                photoPreview.src = url;
+                photoPreviewContainer.style.display = 'block';
+            }
+        }).catch(err => {
+            console.warn('[fix][photo] resolve failed:', err);
+            photoPreview.src = '';
+            photoPreviewContainer.style.display = 'none';
+        });
     } else if (photoPreview && photoPreviewContainer) {
         photoPreview.src = '';
         photoPreview.removeAttribute('src');
@@ -134,18 +135,16 @@ function loadContactData(contactId) {
     const businessCardPreview = document.getElementById('businessCardPreview');
     const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
     if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
-        if (contact.businessCard.startsWith('drive:')) {
-            // Google Driveから画像を読み込み
-            loadImageFromGoogleDrive(contact.businessCard).then(dataUrl => {
-                if (dataUrl) {
-                    businessCardPreview.src = dataUrl;
-                    businessCardPreviewContainer.style.display = 'block';
-                }
-            });
-        } else {
-            businessCardPreview.src = contact.businessCard;
-            businessCardPreviewContainer.style.display = 'block';
-        }
+        resolveAttachmentUrl(contact.id, 'businessCard').then(url => {
+            if (url) {
+                businessCardPreview.src = url;
+                businessCardPreviewContainer.style.display = 'block';
+            }
+        }).catch(err => {
+            console.warn('[fix][businessCard] resolve failed:', err);
+            businessCardPreview.src = '';
+            businessCardPreviewContainer.style.display = 'none';
+        });
     } else if (businessCardPreview && businessCardPreviewContainer) {
         businessCardPreview.src = '';
         businessCardPreview.removeAttribute('src');
@@ -302,7 +301,7 @@ function resetContactForm() {
     }
 }
 
-// 新しいIDを生成（分散ファイル構造用）
+// [CLAUDE FIX] 新しいIDを生成（分散ファイル構造用）
 function generateContactId() {
     if (typeof metadata !== 'undefined' && metadata.nextContactId) {
         const newId = String(metadata.nextContactId).padStart(6, '0');
@@ -322,7 +321,7 @@ function generateContactId() {
     return String(maxId + 1).padStart(6, '0');
 }
 
-// 連絡先保存
+// [CLAUDE FIX] 連絡先保存 - オプション更新エラー修正
 async function saveContact() {
     const nameInput = document.getElementById('nameInput');
     if (!nameInput) {
@@ -439,11 +438,16 @@ async function saveContact() {
             updatedAt: new Date().toISOString()
         };
 
-        // オプションを更新
-        if (typeof updateOptionIfNew === 'function') {
-            selectedOptions.type.forEach(type => updateOptionIfNew('types', type));
-            selectedOptions.affiliation.forEach(aff => updateOptionIfNew('affiliations', aff));
-            selectedOptions.industryInterests.forEach(ii => updateOptionIfNew('industryInterests', ii));
+        // [CLAUDE FIX] オプションを安全に更新
+        try {
+            if (typeof updateOptionIfNew === 'function') {
+                selectedOptions.type.forEach(type => updateOptionIfNew('types', type));
+                selectedOptions.affiliation.forEach(aff => updateOptionIfNew('affiliations', aff));
+                selectedOptions.industryInterests.forEach(ii => updateOptionIfNew('industryInterests', ii));
+            }
+        } catch (optError) {
+            console.warn('[fix][options] updateOptionIfNew failed:', optError);
+            // オプション更新失敗は致命的ではないので続行
         }
 
         // 連絡先を保存または更新
@@ -474,7 +478,9 @@ async function saveContact() {
                     attachments: [],
                     createdAt: new Date().toISOString()
                 };
-                meetings.push(meeting);
+                if (typeof window.meetings !== 'undefined') {
+                    meetings.push(meeting);
+                }
             }
         }
 
@@ -512,10 +518,13 @@ async function saveContact() {
         if (typeof showNotification === 'function') {
             showNotification('連絡先を保存しました', 'success');
         }
+        
+        console.log('[fix][contacts] saved contact:', contact.id);
+        
     } catch (err) {
-        console.error('保存エラー:', err);
+        console.error('[fix][contacts] save error:', err);
         if (typeof showNotification === 'function') {
-            showNotification('保存に失敗しました', 'error');
+            showNotification('保存に失敗しました: ' + (err.message || err), 'error');
         }
     } finally {
         if (typeof showLoading === 'function') {
@@ -534,18 +543,22 @@ async function deleteContact() {
     if (!contactToDelete) return;
 
     // 関連するミーティングも削除
-    const contactMeetings = meetings.filter(m => m.contactId === currentContactId);
+    const contactMeetings = (typeof window.meetings !== 'undefined' ? meetings : []).filter(m => m.contactId === currentContactId);
     
     // データから削除
-    contacts = contacts.filter(c => c.id !== currentContactId);
-    meetings = meetings.filter(m => m.contactId !== currentContactId);
+    if (typeof window.contacts !== 'undefined') {
+        window.contacts = contacts.filter(c => c.id !== currentContactId);
+    }
+    if (typeof window.meetings !== 'undefined') {
+        window.meetings = meetings.filter(m => m.contactId !== currentContactId);
+    }
     
     // Google Driveからファイルを削除
     try {
         if (typeof folderStructure !== 'undefined' && folderStructure.contacts) {
             const fileName = `contact-${String(currentContactId).padStart(6, '0')}.json`;
             const fileId = await getFileIdInFolder(fileName, folderStructure.contacts);
-            if (fileId) {
+            if (fileId && typeof gapi !== 'undefined' && gapi.client) {
                 await gapi.client.drive.files.delete({
                     fileId: fileId
                 });
@@ -555,14 +568,14 @@ async function deleteContact() {
         if (typeof folderStructure !== 'undefined' && folderStructure.meetings && contactMeetings.length > 0) {
             const meetingFileName = `contact-${String(currentContactId).padStart(6, '0')}-meetings.json`;
             const meetingFileId = await getFileIdInFolder(meetingFileName, folderStructure.meetings);
-            if (meetingFileId) {
+            if (meetingFileId && typeof gapi !== 'undefined' && gapi.client) {
                 await gapi.client.drive.files.delete({
                     fileId: meetingFileId
                 });
             }
         }
     } catch (error) {
-        console.error('ファイル削除エラー:', error);
+        console.warn('[fix][contacts] file delete error:', error);
     }
     
     // インデックスから削除
@@ -577,7 +590,9 @@ async function deleteContact() {
     }
     
     // 未使用オプションをクリーンアップ
-    cleanupUnusedOptions();
+    if (typeof cleanupUnusedOptions === 'function') {
+        cleanupUnusedOptions();
+    }
     
     if (typeof saveAllData === 'function') {
         await saveAllData();
@@ -607,6 +622,8 @@ async function deleteContact() {
     if (typeof showNotification === 'function') {
         showNotification('連絡先を削除しました', 'success');
     }
+    
+    console.log('[fix][contacts] deleted contact:', currentContactId);
 }
 
 // 連絡先編集
@@ -619,6 +636,8 @@ function editContact() {
 
 // 紹介者からの売上計算
 function calculateReferrerRevenues() {
+    if (!Array.isArray(contacts)) return;
+    
     contacts.forEach(contact => {
         contact.referrerRevenue = calculateReferrerRevenue(contact.id);
         contact.referralCount = calculateReferralCount(contact.name);
@@ -642,11 +661,14 @@ function calculateReferrerRevenue(contactId) {
 }
 
 function calculateReferralCount(contactName) {
+    if (!Array.isArray(contacts)) return 0;
     return contacts.filter(c => c.referrer === contactName).length;
 }
 
 // 未使用オプションの削除
 function cleanupUnusedOptions() {
+    if (!window.options || !Array.isArray(contacts)) return;
+    
     const usedTypes = new Set();
     const usedAffiliations = new Set();
     const usedIndustryInterests = new Set();
@@ -663,12 +685,12 @@ function cleanupUnusedOptions() {
         }
     });
 
-    options.types = options.types.filter(t => usedTypes.has(t));
-    options.affiliations = options.affiliations.filter(a => usedAffiliations.has(a));
-    options.industryInterests = options.industryInterests.filter(i => usedIndustryInterests.has(i));
+    if (options.types) options.types = options.types.filter(t => usedTypes.has(t));
+    if (options.affiliations) options.affiliations = options.affiliations.filter(a => usedAffiliations.has(a));
+    if (options.industryInterests) options.industryInterests = options.industryInterests.filter(i => usedIndustryInterests.has(i));
 }
 
-// 連絡先詳細表示
+// [CLAUDE FIX] 連絡先詳細表示 - 画像表示修正
 function showContactDetail(contactId) {
     const contact = contacts.find(c => c.id === contactId);
     if (!contact) return;
@@ -685,46 +707,52 @@ function showContactDetail(contactId) {
 
     title.textContent = contact.name;
 
-    const contactMeetings = meetings.filter(m => m.contactId === contactId)
+    const contactMeetings = (typeof window.meetings !== 'undefined' ? meetings : [])
+        .filter(m => m.contactId === contactId)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // ヘッダー部分の画像読み込み処理を改善
     let photoHtml = '';
     let businessCardHtml = '';
     
+    // 顔写真の非同期処理
     if (contact.photo) {
-        if (contact.photo.startsWith('drive:')) {
-            // Google Driveの画像の場合は非同期で読み込み
-            photoHtml = `<div id="photoPlaceholder" style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
-            // 非同期で画像を読み込み
-            loadImageFromGoogleDrive(contact.photo).then(dataUrl => {
-                if (dataUrl) {
-                    const placeholder = document.getElementById('photoPlaceholder');
-                    if (placeholder) {
-                        placeholder.outerHTML = `<img src="${dataUrl}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${dataUrl}', '顔写真')" title="クリックで拡大">`;
-                    }
+        photoHtml = `<div id="photoPlaceholder" style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
+        // 非同期で画像を読み込み
+        resolveAttachmentUrl(contactId, 'photo').then(url => {
+            if (url) {
+                const placeholder = document.getElementById('photoPlaceholder');
+                if (placeholder) {
+                    placeholder.outerHTML = `<img src="${url}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${url}', '顔写真')" title="クリックで拡大">`;
                 }
-            });
-        } else {
-            photoHtml = `<img src="${contact.photo}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${contact.photo}', '顔写真')" title="クリックで拡大">`;
-        }
+            }
+        }).catch(err => {
+            console.warn('[fix][photo] resolve failed in detail:', err);
+            const placeholder = document.getElementById('photoPlaceholder');
+            if (placeholder) {
+                placeholder.outerHTML = `<div style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">写真なし</div>`;
+            }
+        });
     }
     
+    // 名刺画像の非同期処理
     if (contact.businessCard) {
-        if (contact.businessCard.startsWith('drive:')) {
-            businessCardHtml = `<div id="businessCardPlaceholder" style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
-            // 非同期で画像を読み込み
-            loadImageFromGoogleDrive(contact.businessCard).then(dataUrl => {
-                if (dataUrl) {
-                    const placeholder = document.getElementById('businessCardPlaceholder');
-                    if (placeholder) {
-                        placeholder.outerHTML = `<img src="${dataUrl}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${dataUrl}', '名刺画像')" title="クリックで拡大">`;
-                    }
+        businessCardHtml = `<div id="businessCardPlaceholder" style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
+        // 非同期で画像を読み込み
+        resolveAttachmentUrl(contactId, 'businessCard').then(url => {
+            if (url) {
+                const placeholder = document.getElementById('businessCardPlaceholder');
+                if (placeholder) {
+                    placeholder.outerHTML = `<img src="${url}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${url}', '名刺画像')" title="クリックで拡大">`;
                 }
-            });
-        } else {
-            businessCardHtml = `<img src="${contact.businessCard}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${contact.businessCard}', '名刺画像')" title="クリックで拡大">`;
-        }
+            }
+        }).catch(err => {
+            console.warn('[fix][businessCard] resolve failed in detail:', err);
+            const placeholder = document.getElementById('businessCardPlaceholder');
+            if (placeholder) {
+                placeholder.outerHTML = `<div style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">名刺なし</div>`;
+            }
+        });
     }
 
     // ヘッダー部分
@@ -952,10 +980,12 @@ function showContactDetail(contactId) {
 
     content.innerHTML = headerHtml + contactInfoHtml + detailsHtml + meetingsHtml;
 
-    
     // 添付ファイルのプレビューを描画
-    if (typeof renderAttachmentsInDetail === "function") { renderAttachmentsInDetail(contact); }
-// 折りたたみ機能を初期化
+    if (typeof renderAttachmentsInDetail === "function") { 
+        renderAttachmentsInDetail(contact); 
+    }
+    
+    // 折りたたみ機能を初期化
     setTimeout(() => {
         if (typeof initializeCollapsibles === 'function') {
             initializeCollapsibles();
@@ -964,56 +994,98 @@ function showContactDetail(contactId) {
 
     modal.classList.add('active');
     modal.querySelector('.modal-content').scrollTop = 0;
+    
+    console.log('[fix][contacts] showed detail for:', contactId);
 }
 
+// [CLAUDE FIX] 画像URL解決関数
+async function resolveAttachmentUrl(contactId, type, fallback = null) {
+    try {
+        if (!contactId || !type) return fallback;
+        
+        // データから既存のパスを確認
+        const contact = contacts.find(c => c.id === contactId);
+        if (!contact) return fallback;
+        
+        let storedPath = '';
+        if (type === 'photo') {
+            storedPath = contact.photo || '';
+        } else if (type === 'businessCard') {
+            storedPath = contact.businessCard || '';
+        }
+        
+        // drive:形式の場合
+        if (storedPath.startsWith('drive:')) {
+            if (typeof loadImageFromGoogleDrive === 'function') {
+                return await loadImageFromGoogleDrive(storedPath);
+            }
+        }
+        
+        // 通常のURL形式の場合
+        if (storedPath.startsWith('http') || storedPath.startsWith('data:')) {
+            return storedPath;
+        }
+        
+        // パスが無い場合はフォールバック
+        return fallback;
+        
+    } catch (error) {
+        console.warn(`[fix][attachments] resolve failed for ${contactId}/${type}:`, error);
+        return fallback;
+    }
+}
 
-// ========= 連絡先詳細: 添付ファイルの表示（画像/PDF対応） =========
-async function renderAttachmentsInDetail(contact){
-    try{
+// 添付ファイルの詳細表示（拡張版）
+async function renderAttachmentsInDetail(contact) {
+    try {
         // 1) 連絡先直下の添付
         let atts = Array.isArray(contact.attachments) ? contact.attachments.slice() : [];
 
         // 2) ミーティングに紐づく添付も補完
-        try{
+        try {
             const cid = contact.id || contact.contactId;
             const mlist = (window.meetingsByContact && cid && window.meetingsByContact[cid]) ? window.meetingsByContact[cid] : [];
-            if(Array.isArray(mlist)){
+            if (Array.isArray(mlist)) {
                 mlist.forEach(m => {
-                    if(Array.isArray(m && m.attachments)){
+                    if (Array.isArray(m && m.attachments)) {
                         atts.push(...m.attachments);
                     }
                 });
             }
-        }catch(e){ console.warn('meetings attachments fallback failed', e); }
+        } catch (e) { 
+            console.warn('meetings attachments fallback failed', e); 
+        }
 
-        // 3) 正規化（重複排除／空要素除去）
+        // 3) 正規化（重複排除、空要素除去）
         const seen = new Set();
         atts = atts.map(a => {
-            if(!a) return null;
+            if (!a) return null;
             const name = a.name || a.fileName || '';
             const mime = a.type || a.mimeType || '';
-            const ref  = a.data || a.path || a.fileId || a.id || '';
-            const key = (name||'') + '|' + (ref||'');
-            if(seen.has(key)) return null;
+            const ref = a.data || a.path || a.fileId || a.id || '';
+            const key = (name || '') + '|' + (ref || '');
+            if (seen.has(key)) return null;
             seen.add(key);
             return { name, mime, ref };
         }).filter(Boolean);
-        if(atts.length === 0) return; // 表示なし
+        
+        if (atts.length === 0) return; // 表示なし
 
         const content = document.getElementById('contactDetailContent');
-        if(!content) return;
+        if (!content) return;
+        
         const section = document.createElement('section');
         section.style.marginTop = '1.5rem';
         section.innerHTML = `<h3>添付ファイル</h3><div class="attachment-previews" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>`;
         const grid = section.querySelector('.attachment-previews');
 
-        for(const file of atts){
+        for (const file of atts) {
             const card = document.createElement('div');
             card.className = 'attachment-card';
             card.style.cssText = 'border:1px solid var(--border-color);border-radius:10px;padding:10px;background:var(--bg-secondary);';
             const name = file.name || 'ファイル';
             const mime = (file.mime || '').toLowerCase();
-            const ref  = file.ref || '';
+            const ref = file.ref || '';
 
             // 拡張子判定も併用
             const lower = (name || '').toLowerCase();
@@ -1022,33 +1094,33 @@ async function renderAttachmentsInDetail(contact){
 
             // Driveの実体URLへ
             let url = ref;
-            if(ref && (ref.startsWith('drive:') || /^[A-Za-z0-9_-]{20,}$/.test(ref))){
-                if(typeof loadDriveFileAsObjectURL === 'function'){
+            if (ref && (ref.startsWith('drive:') || /^[A-Za-z0-9_-]{20,}$/.test(ref))) {
+                if (typeof loadDriveFileAsObjectURL === 'function') {
                     url = await loadDriveFileAsObjectURL(ref);
                 }
             }
 
-            if(isImage){
-                if(url){
+            if (isImage) {
+                if (url) {
                     card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;"><img src="${url}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover"></div><div style="margin-top:6px;word-break:break-all;">${escapeHtml(name)}</div>`;
-                }else{
+                } else {
                     card.innerHTML = `<div>画像を読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
                 }
-            }else if(isPDF){
-                if(url){
+            } else if (isPDF) {
+                if (url) {
                     card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;">PDF</div><div style="margin-top:6px;word-break:break-all;"><a href="${url}" target="_blank" rel="noopener">📄 ${escapeHtml(name)}</a></div>`;
-                }else{
+                } else {
                     card.innerHTML = `<div>PDFを読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
                 }
-            }else{
-                card.innerHTML = `<div style="margin:6px 0;word-break:break-all;"><a href="${url||'#'}" target="_blank" rel="noopener">📎 ${escapeHtml(name)}</a></div>`;
+            } else {
+                card.innerHTML = `<div style="margin:6px 0;word-break:break-all;"><a href="${url || '#'}" target="_blank" rel="noopener">📎 ${escapeHtml(name)}</a></div>`;
             }
 
             grid.appendChild(card);
         }
 
         content.appendChild(section);
-    }catch(e){ console.warn('renderAttachmentsInDetail error', e); }
+    } catch (e) { 
+        console.warn('renderAttachmentsInDetail error', e); 
+    }
 }
-
-

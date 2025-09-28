@@ -234,8 +234,32 @@
     }
 
     var hydrated = await hydrator(window.folderStructure, window.contacts, window.meetingsByContact, {concurrency: 12, onBatch});
+    
+    // [OPTIONS FIX] 既存データからオプションを構築
+    try{
+      if(typeof window.buildOptionsFromContacts === 'function'){
+        var extractedOptions = window.buildOptionsFromContacts(window.contacts);
+        // 既存のoptionsとマージ
+        Object.keys(extractedOptions).forEach(function(key){
+          if(!window.options[key]){
+            window.options[key] = extractedOptions[key];
+          } else {
+            // マージして重複排除
+            var combined = window.options[key].concat(extractedOptions[key]);
+            window.options[key] = Array.from(new Set(combined)).sort();
+          }
+        });
+        console.log('[options] rebuilt from contacts data');
+      }
+    }catch(e){
+      console.warn('[options] build from contacts failed', e);
+    }
+    
     // 最終描画
     if(typeof window.renderContacts === 'function'){ window.renderContacts(); }
+    if(typeof window.updateFilters === 'function'){ window.updateFilters(); }
+    if(typeof window.updateMultiSelectOptions === 'function'){ window.updateMultiSelectOptions(); }
+    
     try{
       if(AppData && typeof AppData.rebuildIndexes==='function'){
         AppData.rebuildIndexes(window.folderStructure, window.contacts, window.meetingsByContact);
@@ -405,40 +429,6 @@
       window.setupMultiSelect();
     }
     
-    // [CLAUDE FIX ALL-IN-ONE][options] 既存データからプルダウン値を再構築
-    function normalizeLabel(v){
-      if(!v) return '';
-      var s = (''+v).trim();
-      s = s.replace(/\s+/g,' ');
-      try{ s = s.normalize('NFKC'); }catch(e){}
-      return s;
-    }
-    function rebuildSelectOptions(){
-      try{
-        var setAff = new Set(), setBiz = new Set(), setInd = new Set(), setRes = new Set(), setType = new Set();
-        var idx = (window.contacts||[]);
-        idx.forEach(function(c){
-          if(c.affiliation) setAff.add(normalizeLabel(c.affiliation));
-          if(Array.isArray(c.businesses)) c.businesses.forEach(function(b){ setBiz.add(normalizeLabel(b)); });
-          if(Array.isArray(c.industryInterests)) c.industryInterests.forEach(function(i){ setInd.add(normalizeLabel(i)); });
-          if(c.residence) setRes.add(normalizeLabel(c.residence));
-          if(Array.isArray(c.types)) c.types.forEach(function(t){ setType.add(normalizeLabel(t)); });
-        });
-        function setOptions(selectId, values){
-          var el = document.getElementById(selectId);
-          if(!el) return;
-          var arr = Array.from(values).filter(Boolean).sort(function(a,b){ return a.localeCompare(b, 'ja'); });
-          el.innerHTML = '<option value="">(すべて)</option>' + arr.map(function(v){ return '<option value="'+v+'">'+v+'</option>'; }).join('');
-          console.log('[fix][options] rebuilt '+selectId+': '+arr.length);
-        }
-        setOptions('typeFilter', setType);
-        setOptions('affiliationFilter', setAff);
-        setOptions('businessFilter', setBiz);
-        setOptions('industryInterestsFilter', setInd);
-        setOptions('residenceFilter', setRes);
-      }catch(e){ console.warn('[fix][options] rebuild failed', e); }
-    }
-    if(typeof rebuildSelectOptions==='function') rebuildSelectOptions();
     log('メインアプリ初期化完了');
   }
 

@@ -1,8 +1,9 @@
-/* ===== 1to1app U build required JS (2025-09-25U4) =====
+/* ===== 1to1app U build required JS (2025-09-25U5 FIXED) =====
    - FedCM 有効 / gapi・GIS 自動ローダー
    - 二重初期化/同時要求ガード
    - Drive helpers（ensureFolderStructureByName 等）
-   - ☆ 成否イベント発火：document へ 'gis:token' / 'gis:error'
+   - ★ 成否イベント発火：document へ 'gis:token' / 'gis:error'
+   - 🔧 修正: upsertJsonInFolder 実装、画像URL解決、オプション初期化修正
 */
 (function(global){
   'use strict';
@@ -285,6 +286,123 @@ async function downloadJsonById(fileId){
   }
 }
 
+// 🔧 FIX: upsertJsonInFolder implementation (was missing)
+async function upsertJsonInFolder(folderId, fileName, jsonData){
+  _ensureReady();
+  try {
+    const existingFileId = await driveFindChildByName(folderId, fileName, 'application/json');
+    const jsonContent = JSON.stringify(jsonData, null, 2);
+    
+    if (existingFileId) {
+      // Update existing file
+      const response = await gapi.client.request({
+        path: '/upload/drive/v3/files/' + existingFileId,
+        method: 'PATCH',
+        params: { uploadType: 'media', supportsAllDrives: true },
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: jsonContent
+      });
+      log('Updated JSON file:', fileName, 'in folder:', folderId);
+      return response.result.id;
+    } else {
+      // Create new file
+      const metadata = {
+        name: fileName,
+        mimeType: 'application/json',
+        parents: [folderId]
+      };
+      
+      const boundary = '-------1to1app' + Date.now();
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const closeDelim = "\r\n--" + boundary + "--";
+      
+      const multipartBody = delimiter +
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+        JSON.stringify(metadata) + delimiter +
+        "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+        jsonContent + closeDelim;
+      
+      const response = await gapi.client.request({
+        path: '/upload/drive/v3/files',
+        method: 'POST',
+        params: { uploadType: 'multipart', supportsAllDrives: true },
+        headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+        body: multipartBody
+      });
+      
+      log('Created JSON file:', fileName, 'in folder:', folderId);
+      return response.result.id;
+    }
+  } catch (error) {
+    console.error('upsertJsonInFolder failed:', error);
+    throw error;
+  }
+}
+
+// 🔧 FIX: Image URL resolution with proper token handling
+async function resolveAttachmentUrl(contactId, kind, prefer){
+  _ensureReady();
+  prefer = prefer || 'webContent';
+  
+  try {
+    if (!global.folderStructure || !global.folderStructure.attachmentsContacts) {
+      console.warn('Attachments folder structure not available');
+      return null;
+    }
+    
+    const attachmentsFolder = global.folderStructure.attachmentsContacts;
+    const contactFolder = await driveFindChildByName(attachmentsFolder, 'contact-' + String(contactId).padStart(6, '0'));
+    
+    if (!contactFolder) {
+      console.warn('Contact folder not found for ID:', contactId);
+      return null;
+    }
+    
+    // Look for image files based on kind
+    const extensions = kind === 'avatar' ? ['jpg', 'jpeg', 'png', 'webp'] : ['jpg', 'jpeg', 'png', 'pdf'];
+    const prefixes = kind === 'avatar' ? ['photo', 'avatar', 'profile'] : ['business-card', 'card', 'namecard'];
+    
+    const files = await driveListChildren(contactFolder);
+    
+    for (const prefix of prefixes) {
+      for (const ext of extensions) {
+        const fileName = prefix + '.' + ext;
+        const file = files.find(f => f.name.toLowerCase() === fileName.toLowerCase());
+        if (file) {
+          // Return Drive file URL with media access
+          const token = gapi.client.getToken();
+          if (token && token.access_token) {
+            return `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&access_token=${encodeURIComponent(token.access_token)}`;
+          }
+          // Fallback to webContentLink if available
+          return file.webContentLink || null;
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('resolveAttachmentUrl failed:', error);
+    return null;
+  }
+}
+
+// 🔧 FIX: Sanitize URL to prevent HTML injection
+function sanitizeImageUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  
+  // Remove any HTML tags or encoded HTML
+  url = url.replace(/%3C[^%]*%3E/gi, ''); // Remove encoded HTML tags
+  url = url.replace(/<[^>]*>/g, ''); // Remove any actual HTML tags
+  
+  // Ensure it's a valid URL
+  if (url.startsWith('data:') || url.startsWith('https://') || url.startsWith('http://')) {
+    return url;
+  }
+  
+  return '';
+}
+
 async function resolveMigratedStructure(rootFolderId){
   _ensureReady();
   console.log('[data] resolving migrated structure from folder:', rootFolderId);
@@ -403,6 +521,21 @@ async function loadIndexes(indexFolderId){
       }
     }
     
+    // 🔧 FIX: Initialize options with safe defaults to prevent undefined errors
+    if (!result.options || typeof result.options !== 'object') {
+      result.options = {};
+    }
+    
+    // Ensure all option arrays exist and are arrays
+    result.options.types = Array.isArray(result.options.types) ? result.options.types : 
+      ['顧客候補', '顧客', '取次店・販売店', 'パートナー', 'その他'];
+    result.options.affiliations = Array.isArray(result.options.affiliations) ? result.options.affiliations : 
+      ['商工会議所', '青年会議所', 'BNI', 'その他団体'];
+    result.options.industryInterests = Array.isArray(result.options.industryInterests) ? result.options.industryInterests : 
+      ['IT・技術', 'コンサルティング', '製造業', '小売業', 'サービス業', 'その他'];
+    result.options.statuses = Array.isArray(result.options.statuses) ? result.options.statuses : 
+      ['新規', '商談中', '成約', '保留', '終了'];
+    
     console.log('[data] loaded indexes - contacts:', result.contacts.length, 'meetings:', Object.keys(result.meetings).length);
     return result;
   } catch (error) {
@@ -411,7 +544,12 @@ async function loadIndexes(indexFolderId){
       contacts: [],
       meetings: {},
       meetingsByContact: {},
-      options: {},
+      options: {
+        types: ['顧客候補', '顧客', '取次店・販売店', 'パートナー', 'その他'],
+        affiliations: ['商工会議所', '青年会議所', 'BNI', 'その他団体'],
+        industryInterests: ['IT・技術', 'コンサルティング', '製造業', '小売業', 'サービス業', 'その他'],
+        statuses: ['新規', '商談中', '成約', '保留', '終了']
+      },
       metadata: {},
       indexes: {}
     };
@@ -567,10 +705,7 @@ __root.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
   console.log('[data] BP7: meetings loaded per contact:', Object.keys(meetingsMap||{}).length);
   return { contacts: contactsArr||[], meetingsByContact: meetingsMap };
 };
-;})(window);
 
-// === High-speed parallel hydrator with concurrency limit and progressive callback ===
-var hydratorConcurrency = 10;
 
 // === High-speed parallel hydrator with concurrency limit and progressive callback (self-contained) ===
 var hydratorConcurrency = 10;
@@ -842,3 +977,77 @@ try{
     return false;
   }
 };
+
+// 🔧 FIX: Export additional utility functions
+__root.AppData.resolveAttachmentUrl = resolveAttachmentUrl;
+__root.AppData.sanitizeImageUrl = sanitizeImageUrl;
+__root.AppData.upsertJsonInFolder = upsertJsonInFolder;
+
+// 🔧 FIX: Collect all option values from existing contacts data
+__root.AppData.collectOptionValuesFromContacts = function(contacts) {
+  contacts = Array.isArray(contacts) ? contacts : [];
+  
+  const collected = {
+    types: new Set(),
+    affiliations: new Set(),
+    industryInterests: new Set(),
+    businesses: new Set(),
+    residences: new Set()
+  };
+  
+  contacts.forEach(function(contact) {
+    if (!contact) return;
+    
+    // Collect types
+    if (Array.isArray(contact.types)) {
+      contact.types.forEach(function(type) {
+        if (type && typeof type === 'string' && type.trim()) {
+          collected.types.add(type.trim());
+        }
+      });
+    }
+    
+    // Collect affiliations
+    if (Array.isArray(contact.affiliations)) {
+      contact.affiliations.forEach(function(aff) {
+        if (aff && typeof aff === 'string' && aff.trim()) {
+          collected.affiliations.add(aff.trim());
+        }
+      });
+    }
+    
+    // Collect industry interests
+    if (Array.isArray(contact.industryInterests)) {
+      contact.industryInterests.forEach(function(interest) {
+        if (interest && typeof interest === 'string' && interest.trim()) {
+          collected.industryInterests.add(interest.trim());
+        }
+      });
+    }
+    
+    // Collect businesses
+    if (Array.isArray(contact.businesses)) {
+      contact.businesses.forEach(function(business) {
+        if (business && typeof business === 'string' && business.trim()) {
+          collected.businesses.add(business.trim());
+        }
+      });
+    }
+    
+    // Collect residences
+    if (contact.residence && typeof contact.residence === 'string' && contact.residence.trim()) {
+      collected.residences.add(contact.residence.trim());
+    }
+  });
+  
+  // Convert Sets to sorted arrays
+  return {
+    types: Array.from(collected.types).sort(function(a, b) { return a.localeCompare(b, 'ja'); }),
+    affiliations: Array.from(collected.affiliations).sort(function(a, b) { return a.localeCompare(b, 'ja'); }),
+    industryInterests: Array.from(collected.industryInterests).sort(function(a, b) { return a.localeCompare(b, 'ja'); }),
+    businesses: Array.from(collected.businesses).sort(function(a, b) { return a.localeCompare(b, 'ja'); }),
+    residences: Array.from(collected.residences).sort(function(a, b) { return a.localeCompare(b, 'ja'); })
+  };
+};
+
+})(window);
