@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="dark">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,432 +15,499 @@
             <div class="header-actions">
                 <!-- Google認証ボタン -->
                 <button class="btn btn-success" id="googleSignInBtn" onclick="handleAuthClick()">
-                    🔐 Googleでログイン
+                    🔑 Googleでログイン
                 </button>
                 <button class="btn btn-danger" id="signoutBtn" style="display: none;" onclick="handleSignoutClick()">
                     🚪 ログアウト
                 </button>
                 
-                <!-- [CLAUDE FIX ALL-IN-ONE][darkmode] テーマ切り替えボタン -->
                 <button class="btn btn-icon" id="themeToggle" title="テーマ切替">
                     <span id="themeIcon">🌙</span>
                 </button>
-                <!-- [CLAUDE FIX ALL-IN-ONE][merge-button] データマージボタンを削除（コメントアウト） -->
-                <!-- <button class="btn btn-secondary" id="dataMergeBtn" onclick="mergeData()">データマージ</button> -->
+                <button class="btn" id="exportBtn" title="CSVエクスポート">
+                    📤 エクスポート
+                </button>
+                <button class="btn" id="importBtn" title="CSVインポート">
+                    📥 インポート
+                </button>
+                <button class="btn btn-primary" id="selectFolderBtn" style="display: none;">
+                    📁 保存フォルダ選択
+                </button>
+                <button class="btn btn-primary" id="addContactBtn">
+                    ➕ 連絡先追加
+                </button>
             </div>
         </div>
     </header>
 
     <!-- メインコンテンツ -->
     <main class="main-content">
-        <div class="content-wrapper">
-            <!-- ステータス表示 -->
-            <div id="statusText" class="status-text">Googleでサインインしてください</div>
-            
+        <!-- 固定ヘッダー部分 -->
+        <div class="fixed-header">
             <!-- タブナビゲーション -->
-            <div class="tabs" id="mainTabs" style="display: none;">
-                <button class="tab active" id="contactsTab" onclick="showContactsView()">連絡先</button>
-                <button class="tab" id="meetingsTab" onclick="showMeetingsView()">ミーティング</button>
-            </div>
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="contacts">連絡先一覧</button>
+                <button class="tab-btn" data-tab="todos">
+                    ToDo一覧
+                    <span class="tab-badge" id="todoTabBadge" style="display: none;">0</span>
+                </button>
+            </nav>
 
-            <!-- 連絡先ビュー -->
-            <div class="view" id="contactsView" style="display: none;">
-                <!-- 検索・フィルター -->
-                <div class="search-filters">
-                    <div class="search-section">
-                        <input type="text" id="searchInput" class="search-input" placeholder="連絡先を検索..." />
+            <!-- 連絡先タブの検索・フィルター -->
+            <div class="tab-content" id="contactsTabHeader" style="display: block;">
+                <div class="search-filter-section">
+                    <div class="search-bar">
+                        <input type="text" class="search-input" id="searchInput" placeholder="名前、会社名、事業内容、事業内容詳細などで検索...">
+                        <select class="sort-select" id="sortSelect">
+                            <option value="meeting-desc">ミーティング日時（新しい順）</option>
+                            <option value="meeting-asc">ミーティング日時（古い順）</option>
+                            <option value="referrer-revenue-desc">紹介売上（多い順）</option>
+                            <option value="revenue-desc">売上（多い順）</option>
+                            <option value="referral-count-desc">紹介数（多い順）</option>
+                        </select>
+                        <div class="view-toggle">
+                            <button class="view-btn active" data-view="card">カード</button>
+                            <button class="view-btn" data-view="list">リスト</button>
+                            <button class="view-btn" data-view="tree">ツリー</button>
+                            <button class="view-btn" data-view="kanban">カンバン</button>
+                        </div>
+                        <button class="btn btn-clear" onclick="clearSearchAndFilters()">
+                            🔄 検索・フィルタークリア
+                        </button>
                     </div>
-                    
-                    <!-- [CLAUDE FIX ALL-IN-ONE][filter] フィルター改修 -->
-                    <div class="filters-section">
-                        <div class="filter-group">
-                            <label for="typeFilter">種別</label>
-                            <select id="typeFilter" class="filter-select">
-                                <option value="">すべて</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="affiliationFilter">所属</label>
-                            <select id="affiliationFilter" class="filter-select">
-                                <option value="">すべて</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="businessFilter">事業</label>
-                            <select id="businessFilter" class="filter-select">
-                                <option value="">すべて</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="residenceFilter">居住地</label>
-                            <select id="residenceFilter" class="filter-select">
-                                <option value="">すべて</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 連絡先一覧 -->
-                <div class="contacts-section">
-                    <div class="section-header">
-                        <h2>連絡先一覧</h2>
-                        <button class="btn btn-primary" onclick="showNewContactModal()">+ 新規連絡先</button>
-                    </div>
-                    <div id="contactsContainer" class="contacts-container">
-                        <div class="loading">データを読み込み中...</div>
+                    <div class="filter-controls">
+                        <select class="filter-select" id="typeFilter">
+                            <option value="">種別: すべて</option>
+                        </select>
+                        <input type="text" class="filter-search-input" id="affiliationFilter" placeholder="所属で検索...">
+                        <input type="text" class="filter-search-input" id="businessFilter" placeholder="事業内容で検索...">
+                        <input type="text" class="filter-search-input" id="industryInterestsFilter" placeholder="会いたい業種等で検索...">
+                        <input type="text" class="filter-search-input" id="residenceFilter" placeholder="居住地で検索...">
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- ミーティングビュー -->
-            <div class="view" id="meetingsView" style="display: none;">
-                <div class="meetings-section">
-                    <div class="section-header">
-                        <h2>ミーティング一覧</h2>
-                        <button class="btn btn-primary" onclick="showNewMeetingModal()">+ 新規ミーティング</button>
+        <!-- スクロール可能なコンテンツ -->
+        <div class="scrollable-content">
+            <!-- 認証待機メッセージ -->
+            <div id="authMessage" style="display: block; text-align: center; padding: 3rem; background: #f0f0f0; margin: 1rem; border-radius: 0.5rem;">
+                <h2>ログインが必要です</h2>
+                <p>上部の「Googleでログイン」ボタンをクリックして、Googleドライブにアクセスしてください。</p>
+                <div id="statusText" style="margin-top: 1rem; font-weight: bold; color: #666;"></div>
+            </div>
+
+            <!-- 紹介者フィルターメッセージ -->
+            <div class="referrer-filter-message" id="referrerFilterMessage" style="display: none;">
+                <span id="referrerFilterText"></span>
+                <button class="btn btn-sm" onclick="clearReferrerFilter()">フィルター解除</button>
+            </div>
+
+            <!-- 連絡先タブ -->
+            <div class="tab-content" id="contactsTab" style="display: block;">
+                <div id="contactsList" class="card-grid"></div>
+            </div>
+
+            <!-- ToDoタブ -->
+            <div class="tab-content" id="todosTab" style="display: none;">
+                <div class="todo-summary">
+                    <div class="todo-summary-header">
+                        📋 全体ToDo一覧
+                        <span class="todo-badge" id="todoCount">0件</span>
                     </div>
-                    <div id="meetingsContainer" class="meetings-container">
-                        <div class="loading">データを読み込み中...</div>
-                    </div>
+                    <div class="todo-summary-list" id="todoSummaryList"></div>
                 </div>
             </div>
         </div>
     </main>
 
+    <!-- 連絡先追加/編集モーダル -->
+    <div class="modal" id="contactModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">連絡先追加</h2>
+                <button class="btn btn-icon" onclick="closeModal('contactModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="contactForm">
+                    <!-- 顔写真 -->
+                    <div class="form-group">
+                        <label class="form-label">顔写真</label>
+                        <div class="drop-zone" id="photoDropZone">
+                            <div class="drop-zone-content">
+                                <p>画像をドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="image-preview-container" id="photoPreviewContainer" style="display: none;">
+                            <img id="photoPreview" class="image-preview">
+                            <button type="button" class="image-delete-btn" onclick="deleteImage('photo')">×</button>
+                        </div>
+                    </div>
+
+                    <!-- 基本情報 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">名前 *</label>
+                            <input type="text" class="form-input" id="nameInput" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ふりがな</label>
+                            <input type="text" class="form-input" id="furiganaInput">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">会社・組織</label>
+                            <input type="text" class="form-input" id="companyInput">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ホームページ</label>
+                            <input type="url" class="form-input" id="websiteInput">
+                        </div>
+                    </div>
+
+                    <!-- 種別（複数選択） -->
+                    <div class="form-group">
+                        <label class="form-label">種別</label>
+                        <div class="multi-select-container">
+                            <div class="multi-select-tags" id="typeTags" onclick="toggleMultiSelectDropdown('type')">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">選択してください...</span>
+                            </div>
+                            <div class="multi-select-dropdown" id="typeDropdown">
+                                <div class="multi-select-search">
+                                    <input type="text" placeholder="検索..." onkeyup="filterMultiSelectOptions('type', this.value)">
+                                </div>
+                                <div class="multi-select-options" id="typeOptions"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 所属（複数選択） -->
+                    <div class="form-group">
+                        <label class="form-label">所属</label>
+                        <div class="multi-select-container">
+                            <div class="multi-select-tags" id="affiliationTags" onclick="toggleMultiSelectDropdown('affiliation')">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">選択してください...</span>
+                            </div>
+                            <div class="multi-select-dropdown" id="affiliationDropdown">
+                                <div class="multi-select-search">
+                                    <input type="text" placeholder="検索..." onkeyup="filterMultiSelectOptions('affiliation', this.value)">
+                                </div>
+                                <div class="multi-select-options" id="affiliationOptions"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 会いたい業種等（複数選択） -->
+                    <div class="form-group">
+                        <label class="form-label">会いたい業種等</label>
+                        <div class="multi-select-container">
+                            <div class="multi-select-tags" id="industryInterestsTags" onclick="toggleMultiSelectDropdown('industryInterests')">
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">選択してください...</span>
+                            </div>
+                            <div class="multi-select-dropdown" id="industryInterestsDropdown">
+                                <div class="multi-select-search">
+                                    <input type="text" placeholder="検索..." onkeyup="filterMultiSelectOptions('industryInterests', this.value)">
+                                </div>
+                                <div class="multi-select-options" id="industryInterestsOptions"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- メールアドレス（複数入力） -->
+                    <div class="form-group">
+                        <label class="form-label">メールアドレス</label>
+                        <div class="multi-input-container" id="emailContainer"></div>
+                        <button type="button" class="btn btn-sm" onclick="addEmailInput('')">+ メール追加</button>
+                    </div>
+
+                    <!-- 電話番号（複数入力） -->
+                    <div class="form-group">
+                        <label class="form-label">電話番号</label>
+                        <div class="multi-input-container" id="phoneContainer"></div>
+                        <button type="button" class="btn btn-sm" onclick="addPhoneInput('')">+ 電話追加</button>
+                    </div>
+
+                    <!-- 事業内容（複数入力） -->
+                    <div class="form-group">
+                        <label class="form-label">事業内容</label>
+                        <div class="multi-input-container" id="businessContainer"></div>
+                        <button type="button" class="btn btn-sm" onclick="addBusinessInput('')">+ 事業追加</button>
+                    </div>
+
+                    <!-- 接触方法 -->
+                    <div class="form-group">
+                        <label class="form-label">接触方法</label>
+                        <div class="contact-method-selector">
+                            <label class="contact-method-radio">
+                                <input type="radio" name="contactMethod" id="contactMethodDirect" value="direct" checked>
+                                <span>直接</span>
+                            </label>
+                            <label class="contact-method-radio">
+                                <input type="radio" name="contactMethod" id="contactMethodReferral" value="referral">
+                                <span>紹介</span>
+                            </label>
+                        </div>
+                        
+                        <div id="directContactSection">
+                            <input type="text" class="form-input" id="directContactInput" placeholder="接触経緯（例：所属が同じ、セミナーで知り合った）">
+                        </div>
+                        
+                        <div id="referralContactSection" style="display: none;">
+                            <div class="autocomplete-container">
+                                <input type="text" class="form-input" id="referrerInput" placeholder="紹介者名">
+                                <div class="autocomplete-dropdown" id="referrerDropdown"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 詳細情報（Markdownエディタ） -->
+                    <div class="form-group">
+                        <label class="form-label">事業内容詳細</label>
+                        <div class="markdown-editor-container">
+                            <div class="markdown-editor-tabs">
+                                <button type="button" class="markdown-editor-tab active" onclick="switchMarkdownView('business', 'edit')">編集</button>
+                                <button type="button" class="markdown-editor-tab" onclick="switchMarkdownView('business', 'preview')">プレビュー</button>
+                            </div>
+                            <div class="markdown-editor-content">
+                                <textarea class="form-textarea" id="businessInput" placeholder="事業内容の詳細をMarkdown形式で記入..."></textarea>
+                                <div class="markdown-editor-preview" id="businessPreview" style="display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">強み</label>
+                        <div class="markdown-editor-container">
+                            <div class="markdown-editor-tabs">
+                                <button type="button" class="markdown-editor-tab active" onclick="switchMarkdownView('strengths', 'edit')">編集</button>
+                                <button type="button" class="markdown-editor-tab" onclick="switchMarkdownView('strengths', 'preview')">プレビュー</button>
+                            </div>
+                            <div class="markdown-editor-content">
+                                <textarea class="form-textarea" id="strengthsInput" placeholder="強みをMarkdown形式で記入..."></textarea>
+                                <div class="markdown-editor-preview" id="strengthsPreview" style="display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">切り出し方</label>
+                        <div class="markdown-editor-container">
+                            <div class="markdown-editor-tabs">
+                                <button type="button" class="markdown-editor-tab active" onclick="switchMarkdownView('approach', 'edit')">編集</button>
+                                <button type="button" class="markdown-editor-tab" onclick="switchMarkdownView('approach', 'preview')">プレビュー</button>
+                            </div>
+                            <div class="markdown-editor-content">
+                                <textarea class="form-textarea" id="approachInput" placeholder="切り出し方をMarkdown形式で記入..."></textarea>
+                                <div class="markdown-editor-preview" id="approachPreview" style="display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">過去の経歴</label>
+                        <div class="markdown-editor-container">
+                            <div class="markdown-editor-tabs">
+                                <button type="button" class="markdown-editor-tab active" onclick="switchMarkdownView('history', 'edit')">編集</button>
+                                <button type="button" class="markdown-editor-tab" onclick="switchMarkdownView('history', 'preview')">プレビュー</button>
+                            </div>
+                            <div class="markdown-editor-content">
+                                <textarea class="form-textarea" id="historyInput" placeholder="過去の経歴をMarkdown形式で記入..."></textarea>
+                                <div class="markdown-editor-preview" id="historyPreview" style="display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">事前情報</label>
+                        <div class="markdown-editor-container">
+                            <div class="markdown-editor-tabs">
+                                <button type="button" class="markdown-editor-tab active" onclick="switchMarkdownView('priorInfo', 'edit')">編集</button>
+                                <button type="button" class="markdown-editor-tab" onclick="switchMarkdownView('priorInfo', 'preview')">プレビュー</button>
+                            </div>
+                            <div class="markdown-editor-content">
+                                <textarea class="form-textarea" id="priorInfoInput" placeholder="事前情報をMarkdown形式で記入..."></textarea>
+                                <div class="markdown-editor-preview" id="priorInfoPreview" style="display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- その他の情報 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">活動エリア</label>
+                            <input type="text" class="form-input" id="activityAreaInput">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">居住地</label>
+                            <input type="text" class="form-input" id="residenceInput">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">趣味・興味</label>
+                            <input type="text" class="form-input" id="hobbiesInput">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">売上（円）</label>
+                            <input type="number" class="form-input" id="revenueInput" min="0">
+                        </div>
+                    </div>
+
+                    <!-- 名刺画像 -->
+                    <div class="form-group">
+                        <label class="form-label">名刺画像</label>
+                        <div class="drop-zone" id="businessCardDropZone">
+                            <div class="drop-zone-content">
+                                <p>名刺画像をドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="image-preview-container" id="businessCardPreviewContainer" style="display: none;">
+                            <img id="businessCardPreview" class="image-preview">
+                            <button type="button" class="image-delete-btn" onclick="deleteImage('businessCard')">×</button>
+                        </div>
+                    </div>
+
+                    <!-- 添付ファイル -->
+                    <div class="form-group">
+                        <label class="form-label">添付ファイル</label>
+                        <div class="drop-zone" id="attachmentDropZone">
+                            <div class="drop-zone-content">
+                                <p>ファイルをドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="file-list" id="attachmentList"></div>
+                    </div>
+
+                    <!-- 初回ミーティング情報 -->
+                    <div id="initialMeetingSection" style="border-top: 2px solid var(--border-color); padding-top: 1.5rem; margin-top: 1.5rem;">
+                        <h3 style="margin-bottom: 1rem;">初回ミーティング情報</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">ミーティング日時</label>
+                                <input type="datetime-local" class="form-input" id="meetingDateInput">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">ミーティング内容</label>
+                            <textarea class="form-textarea" id="meetingContentInput" placeholder="ミーティングの内容を記入..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">ToDo</label>
+                            <div class="todo-list" id="todoList">
+                                <button type="button" class="btn btn-primary" onclick="addTodoItem()">➕ ToDo追加</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('contactModal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveContact()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ミーティング追加/編集モーダル -->
+    <div class="modal" id="meetingModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="meetingModalTitle">ミーティング追加</h2>
+                <button class="btn btn-icon" onclick="closeModal('meetingModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="meetingForm">
+                    <div class="form-group">
+                        <label class="form-label">ミーティング日時</label>
+                        <input type="datetime-local" class="form-input" id="newMeetingDateInput">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">ミーティング内容</label>
+                        <textarea class="form-textarea" id="newMeetingContentInput" placeholder="ミーティングの内容を記入..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">ToDo</label>
+                        <div class="todo-list" id="newTodoList">
+                            <button type="button" class="btn btn-primary" onclick="addNewTodoItem()">➕ ToDo追加</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">添付ファイル</label>
+                        <div class="drop-zone" id="meetingAttachmentDropZone">
+                            <div class="drop-zone-content">
+                                <p>ファイルをドラッグ&ドロップ<br>またはクリックして選択</p>
+                            </div>
+                        </div>
+                        <div class="file-list" id="meetingAttachmentList"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('meetingModal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveMeeting()">保存</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 連絡先詳細モーダル -->
     <div class="modal" id="contactDetailModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">連絡先詳細</h3>
-                <button class="modal-close" onclick="closeModal('contactDetailModal')">&times;</button>
+                <h2 id="detailModalTitle">連絡先詳細</h2>
+                <button class="btn btn-icon" onclick="closeModal('contactDetailModal')">✕</button>
             </div>
-            <div class="modal-body">
-                <!-- 動的に生成される -->
-            </div>
+            <div class="modal-body" id="contactDetailContent"></div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('contactDetailModal')">閉じる</button>
-                <button class="btn btn-primary" onclick="editCurrentContact()">編集</button>
+                <button class="btn btn-danger" onclick="deleteContact()">削除</button>
+                <button class="btn" onclick="editContact()">編集</button>
+                <button class="btn btn-primary" onclick="closeModal('contactDetailModal')">閉じる</button>
             </div>
         </div>
     </div>
 
-    <!-- 連絡先編集モーダル -->
-    <div class="modal" id="contactEditModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">連絡先編集</h3>
-                <button class="modal-close" onclick="closeModal('contactEditModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="contactEditForm">
-                    <div class="form-group">
-                        <label for="contactName">名前 *</label>
-                        <input type="text" id="contactName" name="name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="contactFurigana">ふりがな</label>
-                        <input type="text" id="contactFurigana" name="furigana">
-                    </div>
-                    <div class="form-group">
-                        <label for="contactCompany">会社・組織</label>
-                        <input type="text" id="contactCompany" name="company">
-                    </div>
-                    
-                    <!-- [CLAUDE FIX ALL-IN-ONE][options] マルチセレクト対応 -->
-                    <div class="form-group">
-                        <label for="contactTypes">種別</label>
-                        <div class="multi-select-wrapper">
-                            <div class="multi-select-display" onclick="toggleMultiSelectDropdown('contactTypes')">
-                                <span class="selected-items" id="contactTypesDisplay">選択してください</span>
-                                <span class="dropdown-arrow">▼</span>
-                            </div>
-                            <div class="multi-select-dropdown" id="contactTypesDropdown" style="display: none;">
-                                <select id="contactTypes" name="types" multiple>
-                                    <!-- 動的に生成される -->
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactAffiliations">所属</label>
-                        <div class="multi-select-wrapper">
-                            <div class="multi-select-display" onclick="toggleMultiSelectDropdown('contactAffiliations')">
-                                <span class="selected-items" id="contactAffiliationsDisplay">選択してください</span>
-                                <span class="dropdown-arrow">▼</span>
-                            </div>
-                            <div class="multi-select-dropdown" id="contactAffiliationsDropdown" style="display: none;">
-                                <select id="contactAffiliations" name="affiliations" multiple>
-                                    <!-- 動的に生成される -->
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactBusiness">事業内容</label>
-                        <select id="contactBusiness" name="business">
-                            <option value="">選択してください</option>
-                            <!-- 動的に生成される -->
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactResidence">居住地</label>
-                        <select id="contactResidence" name="residence">
-                            <option value="">選択してください</option>
-                            <!-- 動的に生成される -->
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactEmail">メールアドレス</label>
-                        <input type="email" id="contactEmail" name="email">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactPhone">電話番号</label>
-                        <input type="tel" id="contactPhone" name="phone">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="contactNotes">メモ</label>
-                        <textarea id="contactNotes" name="notes" rows="4"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('contactEditModal')">キャンセル</button>
-                <button class="btn btn-primary" onclick="saveContactForm()">保存</button>
-            </div>
+    <!-- 画像拡大モーダル -->
+    <div class="modal" id="imageModal" onclick="closeModal('imageModal')">
+        <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+            <button class="btn btn-icon" style="position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.9); color: #333; z-index: 10;" onclick="event.stopPropagation(); closeModal('imageModal')">✕</button>
+            <img id="modalImage" style="max-width: 90%; max-height: 90%; border-radius: 0.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
         </div>
     </div>
 
-    <!-- ミーティング詳細モーダル -->
-    <div class="modal" id="meetingDetailModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">ミーティング詳細</h3>
-                <button class="modal-close" onclick="closeModal('meetingDetailModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <!-- 動的に生成される -->
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('meetingDetailModal')">閉じる</button>
-                <button class="btn btn-primary" onclick="editCurrentMeeting()">編集</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ミーティング編集モーダル -->
-    <div class="modal" id="meetingEditModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">ミーティング編集</h3>
-                <button class="modal-close" onclick="closeModal('meetingEditModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="meetingEditForm">
-                    <div class="form-group">
-                        <label for="meetingTitle">タイトル *</label>
-                        <input type="text" id="meetingTitle" name="title" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="meetingContact">連絡先 *</label>
-                        <select id="meetingContact" name="contactId" required>
-                            <option value="">選択してください</option>
-                            <!-- 動的に生成される -->
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="meetingDate">日付</label>
-                            <input type="date" id="meetingDate" name="date">
-                        </div>
-                        <div class="form-group">
-                            <label for="meetingTime">時刻</label>
-                            <input type="time" id="meetingTime" name="time">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="meetingLocation">場所</label>
-                        <input type="text" id="meetingLocation" name="location">
-                    </div>
-                    <div class="form-group">
-                        <label for="meetingContent">内容</label>
-                        <textarea id="meetingContent" name="content" rows="6" placeholder="ミーティングの内容を入力してください..."></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('meetingEditModal')">キャンセル</button>
-                <button class="btn btn-primary" onclick="saveMeetingForm()">保存</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 画像表示モーダル -->
-    <div class="modal" id="imageModal">
-        <div class="modal-content image-modal">
-            <div class="modal-header">
-                <h3 class="modal-title">画像表示</h3>
-                <button class="modal-close" onclick="closeModal('imageModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <img id="modalImage" class="modal-image" alt="表示画像">
-            </div>
-        </div>
-    </div>
-
-    <!-- ローディングオーバーレイ -->
-    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-        <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>読み込み中...</p>
-        </div>
-    </div>
+    <!-- CSVインポート用の隠しファイル入力 -->
+    <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleCSVImport(event)">
 
     <!-- 通知エリア -->
-    <div id="notificationArea" class="notification-area"></div>
+    <div id="notificationArea"></div>
 
-    <!-- JavaScriptファイルの読み込み -->
+    <!-- JavaScript読み込み - 修正版の順序 -->
+    <!-- まず設定と基本関数 -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    
+    <!-- 次にデータ管理（Google API関連を含む） -->
     <script src="js/data.20250925u.js"></script>
+    <script>(function(){console.log("[marker] BUILD", window.__BUILD_ID__);})();</script>
+    
+    <!-- マルチセレクト機能（contacts.jsより前に読み込む） -->
+    <script src="js/multiselect.js"></script>
+    
+    <!-- CSV機能 -->
+    <script src="js/exports.js"></script>
+    
+    <!-- 機能別のスクリプト -->
     <script src="js/contacts.js"></script>
     <script src="js/meetings.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/ui.js"></script>
     
-    <!-- [CLAUDE FIX ALL-IN-ONE] モーダル・フォーム関連のグローバル関数 -->
-    <script>
-        // モーダル制御
-        function closeModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) {
-                modal.style.display = 'none';
-            }
-        }
-
-        // 新規連絡先モーダル表示
-        function showNewContactModal() {
-            const modal = document.getElementById('contactEditModal');
-            if (modal) {
-                // フォームをクリア
-                document.getElementById('contactEditForm').reset();
-                
-                // オプションを更新
-                if (window.updateEditFormOptions) {
-                    window.updateEditFormOptions();
-                }
-                
-                modal.style.display = 'block';
-                window.currentContactId = null; // 新規作成フラグ
-            }
-        }
-
-        // 連絡先編集
-        function editCurrentContact() {
-            if (window.currentContactId) {
-                closeModal('contactDetailModal');
-                if (window.editContact) {
-                    window.editContact(window.currentContactId);
-                }
-            }
-        }
-
-        // 連絡先フォーム保存
-        function saveContactForm() {
-            try {
-                const form = document.getElementById('contactEditForm');
-                const formData = new FormData(form);
-                
-                const contact = {
-                    id: window.currentContactId || generateUUID(),
-                    name: formData.get('name'),
-                    furigana: formData.get('furigana'),
-                    company: formData.get('company'),
-                    business: formData.get('business'),
-                    residence: formData.get('residence'),
-                    email: formData.get('email'),
-                    phone: formData.get('phone'),
-                    notes: formData.get('notes'),
-                    types: getMultiSelectValues('contactTypes'),
-                    affiliations: getMultiSelectValues('contactAffiliations'),
-                    createdAt: window.currentContactId ? undefined : new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-
-                // 必須フィールドチェック
-                if (!contact.name.trim()) {
-                    showNotification('名前は必須です', 'warning');
-                    return;
-                }
-
-                if (window.saveContact) {
-                    window.saveContact(contact).then(() => {
-                        closeModal('contactEditModal');
-                        showNotification('連絡先を保存しました', 'success');
-                    }).catch(e => {
-                        showNotification('保存エラー: ' + e.message, 'error');
-                    });
-                }
-            } catch (e) {
-                console.error('saveContactForm error:', e);
-                showNotification('保存エラー: ' + e.message, 'error');
-            }
-        }
-
-        // マルチセレクト値取得
-        function getMultiSelectValues(selectId) {
-            const select = document.getElementById(selectId);
-            if (select && select.multiple) {
-                return Array.from(select.selectedOptions).map(option => option.value);
-            }
-            return [];
-        }
-
-        // 新規ミーティングモーダル表示
-        function showNewMeetingModal() {
-            if (window.createNewMeeting) {
-                window.createNewMeeting();
-            }
-        }
-
-        // ミーティング編集
-        function editCurrentMeeting() {
-            if (window.currentMeetingId && window.showMeetingEditModal) {
-                const meeting = (window.meetings || []).find(m => m.id === window.currentMeetingId);
-                if (meeting) {
-                    closeModal('meetingDetailModal');
-                    window.showMeetingEditModal(meeting);
-                }
-            }
-        }
-
-        // ミーティングフォーム保存
-        function saveMeetingForm() {
-            if (window.saveMeeting) {
-                window.saveMeeting();
-            }
-        }
-
-        // 画像表示モーダル
-        function showImageModal(imageSrc) {
-            const modal = document.getElementById('imageModal');
-            const modalImage = document.getElementById('modalImage');
-            if (modal && modalImage) {
-                modalImage.src = imageSrc;
-                modal.style.display = 'block';
-            }
-        }
-
-        // モーダル外クリックで閉じる
-        document.addEventListener('click', function(event) {
-            if (event.target.classList.contains('modal')) {
-                event.target.style.display = 'none';
-            }
-        });
-    </script>
+    <!-- 最後にメイン初期化 -->
+    <script src="js/main.js"></script>
 </body>
 </html>
