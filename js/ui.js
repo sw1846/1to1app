@@ -1,5 +1,4 @@
-
-// === 画像srcが 'drive:{fileId}' の場合にトークン付きAPIでDataURLへ変換して差し込む共通処理 ===
+// === 画像srcが 'drive:{fileId}' の場合にトークン付APIでDataURLへ変換して差し込む共通処理 ===
 async function hydrateDriveImage(imgEl){
     try{
         if(!imgEl) return;
@@ -244,7 +243,7 @@ function createContactCard(contact) {
             ${contact.emails && contact.emails[0] ? `<p>📧 ${escapeHtml(contact.emails[0])}</p>` : ''}
             ${contact.phones && contact.phones[0] ? `<p>📞 ${escapeHtml(contact.phones[0])}</p>` : ''}
             ${contact.revenue ? `<p>💰 売上: ¥${contact.revenue.toLocaleString()}</p>` : ''}
-            ${contact.referrerRevenue ? `<p>👥 紹介売上: ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
+            ${contact.referrerRevenue ? `<p>🤝 紹介売上: ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
             ${contact.referralCount > 0 ? `<p>🔗 <span class="clickable-link" onclick="event.stopPropagation(); filterByReferrer('${escapeHtml(contact.name)}')">紹介数: ${contact.referralCount}人</span></p>` : ''}
             ${todoCount > 0 ? `<p>📋 未完了ToDo: ${todoCount}件</p>` : ''}
             ${latestMeetingDate ? `<p>📅 最終面談: ${formatDate(latestMeetingDate)}</p>` : ''}
@@ -333,7 +332,7 @@ function createTreeNode(contact, allContacts, level = 0) {
             <p style="font-size: 0.75rem;">
                 ${contact.company || ''} 
                 💰¥${(contact.revenue || 0).toLocaleString()} 
-                👥¥${(contact.referrerRevenue || 0).toLocaleString()}
+                🤝¥${(contact.referrerRevenue || 0).toLocaleString()}
             </p>
         </div>
     `;

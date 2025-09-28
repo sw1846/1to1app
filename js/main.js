@@ -29,7 +29,6 @@
     }catch(e){ console.warn('[fix][darkmode] failed to apply', e); }
   }
 
-
   // URL parameter helper
   function getUrlParam(key){
     try{
@@ -38,7 +37,6 @@
     }catch(e){ return null; }
   }
 
-  
   function log(){ console.log.apply(console, ['[main]'].concat([].slice.call(arguments))); }
   function qs(sel){ return document.querySelector(sel); }
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
@@ -84,7 +82,9 @@
     hideSignin();
     
     // 認証メッセージを隠す
-    var authMsg = qs('#authMessage'); if(authMsg) authMsg.style.display = 'none'; // fixed stray token
+    var authMsg = qs('#authMessage'); 
+    if(authMsg) authMsg.style.display = 'none';
+    
     // [CLAUDE FIX ALL-IN-ONE][darkmode] トグル配線
     (function(){
       var btn = document.getElementById('themeToggle');
@@ -95,7 +95,7 @@
         });
       }
     })();
-
+  }
 
   function ensureAppData(){
     if(typeof window.AppData !== 'object'){
@@ -168,7 +168,6 @@
     if(modal) modal.remove();
   };
 
-
   // ========== Drive 読み込み（簡易） ==========
   // 指定フォルダ直下のファイルをいくつか一覧表示（確認用）
   async function listFilesInFolder(folderId, limit){
@@ -195,8 +194,7 @@
   }
 
   // 既存データ読み込みパイプライン
-
-async function loadFromFolderId(folderId){
+  async function loadFromFolderId(folderId){
     // フォルダ内の最近のファイル一覧（デバッグ用）
     try{
       var files = await listFilesInFolder(folderId, 20);
@@ -245,8 +243,7 @@ async function loadFromFolderId(folderId){
     }catch(_e){}
     setStatus('読み込み完了');
     return hydrated;
-}
-
+  }
 
   // 念のためグローバルにも公開（他モジュールから直接呼びたい場合に備える）
   window.loadFromFolderId = loadFromFolderId;
@@ -303,7 +300,6 @@ async function loadFromFolderId(folderId){
     return String(s||'').replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; });
   }
 
-  
   function chooseFolderAndLoad(pathOrFalse, forceModal){
     var urlFolderId = getUrlParam('folderId');
     if(urlFolderId){
@@ -351,7 +347,6 @@ async function loadFromFolderId(folderId){
       throw err;
     });
   }
-
 
   function initializeMainApp(){
     // グローバル変数の初期化
@@ -410,43 +405,41 @@ async function loadFromFolderId(folderId){
       window.setupMultiSelect();
     }
     
-    
-  // [CLAUDE FIX ALL-IN-ONE][options] 既存データからプルダウン値を再構築
-  function normalizeLabel(v){
-    if(!v) return '';
-    var s = (''+v).trim();
-    s = s.replace(/\s+/g,' ');
-    try{ s = s.normalize('NFKC'); }catch(e){}
-    return s;
-  }
-  function rebuildSelectOptions(){
-    try{
-      var setAff = new Set(), setBiz = new Set(), setInd = new Set(), setRes = new Set(), setType = new Set();
-      var idx = (window.contacts||[]);
-      idx.forEach(function(c){
-        if(c.affiliation) setAff.add(normalizeLabel(c.affiliation));
-        if(Array.isArray(c.businesses)) c.businesses.forEach(function(b){ setBiz.add(normalizeLabel(b)); });
-        if(Array.isArray(c.industryInterests)) c.industryInterests.forEach(function(i){ setInd.add(normalizeLabel(i)); });
-        if(c.residence) setRes.add(normalizeLabel(c.residence));
-        if(Array.isArray(c.types)) c.types.forEach(function(t){ setType.add(normalizeLabel(t)); });
-      });
-      function setOptions(selectId, values){
-        var el = document.getElementById(selectId);
-        if(!el) return;
-        var arr = Array.from(values).filter(Boolean).sort(function(a,b){ return a.localeCompare(b, 'ja'); });
-        el.innerHTML = '<option value="">(すべて)</option>' + arr.map(function(v){ return '<option value="'+v+'">'+v+'</option>'; }).join('');
-        console.log('[fix][options] rebuilt '+selectId+': '+arr.length);
-      }
-      setOptions('typeFilter', setType);
-      setOptions('affiliationFilter', setAff);
-      setOptions('businessFilter', setBiz);
-      setOptions('industryInterestsFilter', setInd);
-      setOptions('residenceFilter', setRes);
-    }catch(e){ console.warn('[fix][options] rebuild failed', e); }
-  }
-  if(typeof rebuildSelectOptions==='function') rebuildSelectOptions();
-  log('メインアプリ初期化完了');
-
+    // [CLAUDE FIX ALL-IN-ONE][options] 既存データからプルダウン値を再構築
+    function normalizeLabel(v){
+      if(!v) return '';
+      var s = (''+v).trim();
+      s = s.replace(/\s+/g,' ');
+      try{ s = s.normalize('NFKC'); }catch(e){}
+      return s;
+    }
+    function rebuildSelectOptions(){
+      try{
+        var setAff = new Set(), setBiz = new Set(), setInd = new Set(), setRes = new Set(), setType = new Set();
+        var idx = (window.contacts||[]);
+        idx.forEach(function(c){
+          if(c.affiliation) setAff.add(normalizeLabel(c.affiliation));
+          if(Array.isArray(c.businesses)) c.businesses.forEach(function(b){ setBiz.add(normalizeLabel(b)); });
+          if(Array.isArray(c.industryInterests)) c.industryInterests.forEach(function(i){ setInd.add(normalizeLabel(i)); });
+          if(c.residence) setRes.add(normalizeLabel(c.residence));
+          if(Array.isArray(c.types)) c.types.forEach(function(t){ setType.add(normalizeLabel(t)); });
+        });
+        function setOptions(selectId, values){
+          var el = document.getElementById(selectId);
+          if(!el) return;
+          var arr = Array.from(values).filter(Boolean).sort(function(a,b){ return a.localeCompare(b, 'ja'); });
+          el.innerHTML = '<option value="">(すべて)</option>' + arr.map(function(v){ return '<option value="'+v+'">'+v+'</option>'; }).join('');
+          console.log('[fix][options] rebuilt '+selectId+': '+arr.length);
+        }
+        setOptions('typeFilter', setType);
+        setOptions('affiliationFilter', setAff);
+        setOptions('businessFilter', setBiz);
+        setOptions('industryInterestsFilter', setInd);
+        setOptions('residenceFilter', setRes);
+      }catch(e){ console.warn('[fix][options] rebuild failed', e); }
+    }
+    if(typeof rebuildSelectOptions==='function') rebuildSelectOptions();
+    log('メインアプリ初期化完了');
   }
 
   function setupEventListeners(){
@@ -584,13 +577,10 @@ async function loadFromFolderId(folderId){
     setStatus('認証に失敗しました');
   });
 
-  // 初期化ブート（DOM読み込み後）
-  document.addEventListener('DOMContentLoaded', function(){
-    try{
   // ===== アプリ初期化（DOM読み込み後） =====
   document.addEventListener('DOMContentLoaded', function(){
     try {
-      try { applyTheme(getInitialTheme()); } catch(e) {}
+      try { applyTheme(getInitialTheme()); } catch(e) { console.warn('theme init warn', e); }
       ensureAppData();
     } catch(e) {
       console.error('AppData初期化エラー:', e);
@@ -622,8 +612,6 @@ async function loadFromFolderId(folderId){
     alert('サインインの初期化に失敗しました。ページを再読み込みしてお試しください。');
   };
 
-})();
-
   // サインアウト（簡易） - トークン無効化してリロード
   window.handleSignoutClick = function(){
     try{
@@ -638,65 +626,68 @@ async function loadFromFolderId(folderId){
     location.reload();
   };
 
-// ====== DnD inputs for photo, business card, attachments ======
-function initDnDInputs(){
-  function wire(zoneId, accept, multiple, onFiles){
-    var zone = document.getElementById(zoneId);
-    if(!zone) return;
-    var input = document.createElement('input');
-    input.type = 'file'; input.accept = accept || ''; input.multiple = !!multiple; input.style.display = 'none';
-    zone.tabIndex = 0;
-    zone.addEventListener('click', function(){ input.click(); });
-    zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('drag-over'); });
-    zone.addEventListener('dragleave', function(e){ zone.classList.remove('drag-over'); });
-    zone.addEventListener('drop', function(e){
-      e.preventDefault(); zone.classList.remove('drag-over');
-      var files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-      onFiles(files);
+  // ====== DnD inputs for photo, business card, attachments ======
+  function initDnDInputs(){
+    function wire(zoneId, accept, multiple, onFiles){
+      var zone = document.getElementById(zoneId);
+      if(!zone) return;
+      var input = document.createElement('input');
+      input.type = 'file'; input.accept = accept || ''; input.multiple = !!multiple; input.style.display = 'none';
+      zone.tabIndex = 0;
+      zone.addEventListener('click', function(){ input.click(); });
+      zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', function(e){ zone.classList.remove('drag-over'); });
+      zone.addEventListener('drop', function(e){
+        e.preventDefault(); zone.classList.remove('drag-over');
+        var files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+        onFiles(files);
+      });
+      input.addEventListener('change', function(e){
+        var files = Array.from(input.files || []);
+        onFiles(files);
+        input.value = '';
+      });
+      zone.parentElement && zone.parentElement.appendChild(input);
+    }
+
+    function readAsDataURL(file){ return new Promise(function(res, rej){ var r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
+
+    wire('photoDropZone', 'image/*', false, async function(files){
+      if(!files.length) return;
+      var url = await readAsDataURL(files[0]);
+      var prev = document.getElementById('photoPreview');
+      var cont = document.getElementById('photoPreviewContainer');
+      if(prev){ prev.src = url; }
+      if(cont){ cont.style.display = 'block'; }
     });
-    input.addEventListener('change', function(e){
-      var files = Array.from(input.files || []);
-      onFiles(files);
-      input.value = '';
+
+    wire('businessCardDropZone', 'image/*,application/pdf', false, async function(files){
+      if(!files.length) return;
+      var url = await readAsDataURL(files[0]);
+      var prev = document.getElementById('businessCardPreview');
+      var cont = document.getElementById('businessCardPreviewContainer');
+      if(prev){ prev.src = url; }
+      if(cont){ cont.style.display = 'block'; }
     });
-    zone.parentElement && zone.parentElement.appendChild(input);
+
+    wire('attachmentDropZone', '', true, async function(files){
+      var list = document.getElementById('attachmentList');
+      if(!list) return;
+      for(const f of files){
+        var url = await readAsDataURL(f);
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.dataset.fileName = f.name;
+        div.dataset.fileData = url;
+        div.dataset.fileType = f.type || '';
+        div.innerHTML = '📎 <span>' + (f.name || 'file') + '</span> <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>';
+        list.appendChild(div);
+      }
+    });
   }
 
-  function readAsDataURL(file){ return new Promise(function(res, rej){ var r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
-
-  wire('photoDropZone', 'image/*', false, async function(files){
-    if(!files.length) return;
-    var url = await readAsDataURL(files[0]);
-    var prev = document.getElementById('photoPreview');
-    var cont = document.getElementById('photoPreviewContainer');
-    if(prev){ prev.src = url; }
-    if(cont){ cont.style.display = 'block'; }
+  document.addEventListener('DOMContentLoaded', function(){
+    try{ initDnDInputs(); }catch(e){ console.warn('initDnDInputs error', e); }
   });
 
-  wire('businessCardDropZone', 'image/*,application/pdf', false, async function(files){
-    if(!files.length) return;
-    var url = await readAsDataURL(files[0]);
-    var prev = document.getElementById('businessCardPreview');
-    var cont = document.getElementById('businessCardPreviewContainer');
-    if(prev){ prev.src = url; }
-    if(cont){ cont.style.display = 'block'; }
-  });
-
-  wire('attachmentDropZone', '', true, async function(files){
-    var list = document.getElementById('attachmentList');
-    if(!list) return;
-    for(const f of files){
-      var url = await readAsDataURL(f);
-      var div = document.createElement('div');
-      div.className = 'file-item';
-      div.dataset.fileName = f.name;
-      div.dataset.fileData = url;
-      div.dataset.fileType = f.type || '';
-      div.innerHTML = '📎 <span>' + (f.name || 'file') + '</span> <button class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>';
-      list.appendChild(div);
-    }
-  });
-}
-document.addEventListener('DOMContentLoaded', function(){
-  try{ initDnDInputs(); }catch(e){ console.warn('initDnDInputs error', e); }
-});
+})();
