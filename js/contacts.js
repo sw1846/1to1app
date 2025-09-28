@@ -197,7 +197,7 @@ async function loadContactImages(contact) {
         const photoPreviewContainer = document.getElementById('photoPreviewContainer');
         if (contact.photo && photoPreview && photoPreviewContainer) {
             if (typeof resolveAttachmentUrl === 'function') {
-                const url = await resolveAttachmentUrl(contact.id, 'photo');
+                const url = await resolveAttachmentUrl(contact.id, 'avatar');
                 if (url) {
                     photoPreview.src = url;
                     photoPreviewContainer.style.display = 'block';
@@ -351,6 +351,27 @@ function generateContactId() {
 }
 
 // [CLAUDE FIX] 連絡先保存 - オプション更新エラー修正
+
+/* [fix][image-resolve] 正準参照化: dataURL/HTTP/blobの永続化を禁止し、既存のDrive参照を優先 */
+function normalizeImageRefForSave(existingRef, currentSrc){
+    try{
+        const cur = String(currentSrc||'');
+        const exist = String(existingRef||'');
+        // 既に drive: ならそのまま
+        if(cur.startsWith('drive:')) return cur;
+        // data: はアップロード器に委ね（呼び出し元で処理）
+        if(cur.startsWith('data:')) return null;
+        // blob: / http(s): は期限切れになるため、既存の参照を維持
+        if(cur.startsWith('blob:') || cur.startsWith('http:') || cur.startsWith('https:')){
+            if(exist && exist.startsWith('drive:')) return exist;
+            return null; // 保存しない（既存がなければ空）
+        }
+        // 既存のattachments相対パス等は許容
+        if(cur && !cur.endsWith('.html')) return cur;
+        return exist && !exist.endsWith('.html') ? exist : null;
+    }catch(e){ console.warn('[fix][image-resolve] normalize error', e); return existingRef||null; }
+}
+
 async function saveContact() {
     const nameInput = document.getElementById('nameInput');
     if (!nameInput) {

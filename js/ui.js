@@ -1,3 +1,85 @@
+
+/* [fix][avatar-cache] 画像のLRUキャッシュ＋同時実行制御＋キャンセル */
+(function(){
+    if(window.__imageCache){ return; }
+    const MAX = 180;
+    const cache = new Map(); // key: ref (e.g., 'drive:FILEID') -> objectURL/http/data
+    const pending = new Map(); // ref -> Promise
+    let inflight = 0;
+    const QUEUE = [];
+    const MAX_CONCURRENCY = 6;
+
+    function lruGet(k){
+        if(!cache.has(k)) return null;
+        const v = cache.get(k);
+        cache.delete(k); cache.set(k, v);
+        return v;
+    }
+    function lruSet(k, v){
+        if(cache.has(k)) cache.delete(k);
+        cache.set(k, v);
+        // エビクション
+        while(cache.size > MAX){
+            const oldestKey = cache.keys().next().value;
+            const oldestVal = cache.get(oldestKey);
+            cache.delete(oldestKey);
+            try{ if(typeof oldestVal === 'string' && oldestVal.startsWith('blob:')) URL.revokeObjectURL(oldestVal); }catch(_e){}
+            console.log('[fix][avatar-cache] evict:', oldestKey);
+        }
+    }
+
+    async function doFetch(ref, signal){
+        try{
+            if(typeof getImageObjectUrl === 'function'){
+                return await getImageObjectUrl(ref, signal);
+            }else if(typeof loadImageFromGoogleDriveWithSignal === 'function'){
+                return await loadImageFromGoogleDriveWithSignal(ref, signal);
+            }else if(typeof loadImageFromGoogleDrive === 'function'){
+                return await loadImageFromGoogleDrive(ref);
+            }
+            return ref;
+        }catch(e){
+            if(e && e.name === 'AbortError'){ return null; }
+            throw e;
+        }
+    }
+
+    function pump(){
+        while(inflight < MAX_CONCURRENCY && QUEUE.length){
+            const job = QUEUE.shift();
+            const {ref, resolve, reject, signal} = job;
+            const cached = lruGet(ref);
+            if(cached){ console.log('[fix][avatar-cache] hit LRU:', ref); resolve(cached); continue; }
+            if(pending.has(ref)){ pending.get(ref).then(resolve).catch(reject); continue; }
+            inflight++;
+            const p = doFetch(ref, signal).then(url=>{
+                if(url){ lruSet(ref, url); }
+                return url;
+            }).finally(()=>{
+                inflight--;
+                pending.delete(ref);
+                pump();
+            });
+            pending.set(ref, p);
+            p.then(resolve).catch(reject);
+        }
+    }
+
+    function enqueue(ref, signal){
+        const cached = lruGet(ref);
+        if(cached){ console.log('[fix][avatar-cache] hit LRU:', ref); return Promise.resolve(cached); }
+        return new Promise((resolve, reject)=>{
+            QUEUE.push({ref, resolve, reject, signal});
+            pump();
+        });
+    }
+
+    window.__imageCache = { get:lruGet, set:lruSet, size: ()=>cache.size };
+    window.__imageQueue = { enqueue };
+    window.__imagePending = pending;
+    window.__imageAbort = { current: null };
+})();
+
 // === 画像srcが 'drive:{fileId}' の場合にトークン付APIでDataURLへ変換して差し込む共通処理 ===
 async function hydrateDriveImage(imgEl){
     try{
@@ -425,6 +507,9 @@ function clearSearchAndFilters() {
 }
 
 // ソート
+/* [fix][sort] 数値正規化 */
+function toNum(v){ if(v===null||v===undefined) return 0; const n = Number(String(v).replace(/[^\d\.\-]/g,'')); return isFinite(n)? n : 0; }
+/* existing */
 function sortContacts(contactList) {
     return contactList.sort((a, b) => {
         switch (currentSort) {
@@ -443,11 +528,11 @@ function sortContacts(contactList) {
                 if (!dateBsc) return -1;
                 return dateAsc - dateBsc;
             case 'referrer-revenue-desc':
-                return (b.referrerRevenue || 0) - (a.referrerRevenue || 0);
+                return toNum(b.referrerRevenue) - toNum(a.referrerRevenue);
             case 'revenue-desc':
-                return (b.revenue || 0) - (a.revenue || 0);
+                return toNum(b.revenue) - toNum(a.revenue);
             case 'referral-count-desc':
-                return (b.referralCount || 0) - (a.referralCount || 0);
+                return toNum(b.referralCount) - toNum(a.referralCount);
             default:
                 return 0;
         }
@@ -526,15 +611,25 @@ function resolveImageUrl(contact, type = 'photo') {
 }
 
 // [IMAGE FIX] 安全な画像読み込み
-async function loadImageSafely(imgElement, url) {
+async function loadImageSafely(imgElement, url){
     if (!imgElement || !url) return;
-    
-    try {
+    try{
         if (url.startsWith('drive:')) {
-            const dataUrl = await loadImageFromGoogleDrive(url);
-            if (dataUrl) {
-                imgElement.src = dataUrl;
+            const ctrl = (window.__imageAbort && window.__imageAbort.current) ? window.__imageAbort.current : null;
+            const objUrl = await (window.__imageQueue ? window.__imageQueue.enqueue(url, ctrl ? ctrl.signal : undefined) : (typeof loadImageFromGoogleDrive==='function'? loadImageFromGoogleDrive(url) : Promise.resolve(url)));
+            if (objUrl) {
+                imgElement.src = objUrl;
             } else {
+                imgElement.src = generatePlaceholderImage();
+            }
+        } else {
+            imgElement.src = url;
+        }
+    }catch(e){
+        console.warn('[fix][avatar-cache] loadImageSafely error', e);
+        try{ imgElement.src = generatePlaceholderImage(); }catch(_){}
+    }
+} else {
                 imgElement.src = generatePlaceholderImage();
             }
         } else {
@@ -1374,7 +1469,16 @@ async function saveStatuses() {
   }
   var _origRender = window.renderContacts;
   window.renderContacts = function(){
-    if(typeof _origRender === 'function') _origRender.apply(this, arguments);
+    
+    /* [fix][avatar-cache] 前回の画像取得をキャンセル */
+    try{
+        if(window.__imageAbort && window.__imageAbort.current){
+            window.__imageAbort.current.abort();
+        }
+        if(window.__imageAbort){
+            window.__imageAbort.current = new AbortController();
+        }
+    }catch(_e){}if(typeof _origRender === 'function') _origRender.apply(this, arguments);
     try{
       var els = document.querySelectorAll('img[data-src]');
       var obs = ensureIO();

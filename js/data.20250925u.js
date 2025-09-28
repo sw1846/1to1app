@@ -359,8 +359,12 @@ async function resolveAttachmentUrl(contactId, kind, prefer){
     }
     
     // Look for image files based on kind
-    const extensions = kind === 'avatar' ? ['jpg', 'jpeg', 'png', 'webp'] : ['jpg', 'jpeg', 'png', 'pdf'];
-    const prefixes = kind === 'avatar' ? ['photo', 'avatar', 'profile'] : ['business-card', 'card', 'namecard'];
+    /* [fix][image-resolve] accept 'photo'/'avatar' and 'businessCard' synonyms */
+const _k = (String(kind||'').toLowerCase());
+const isAvatar = (_k === 'avatar' || _k === 'photo' || _k === 'face' || _k === 'profile');
+const isBiz = (_k === 'businesscard' || _k === 'business-card' || _k === 'card' || _k === 'namecard');
+const extensions = isAvatar ? ['jpg','jpeg','png','webp'] : ['jpg','jpeg','png','pdf','webp'];
+const prefixes = isAvatar ? ['photo','avatar','profile','face'] : ['business-card','businessCard','card','namecard','meishi'];
     
     const files = await driveListChildren(contactFolder);
     

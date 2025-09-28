@@ -907,6 +907,49 @@ async function loadImageFromGoogleDrive(ref) {
         return null;
     }
 }
+/* [fix][avatar-cache] AbortSignal対応版（UIからのキャンセルに対応） */
+async function loadImageFromGoogleDriveWithSignal(ref, signal){
+    try{
+        if(!ref) return null;
+        if(ref.startsWith('data:')) return ref;
+        if(ref.startsWith('drive:')){
+            const fileId = ref.split(':')[1];
+            let token = null;
+            if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken) {
+                const tokenObj = gapi.client.getToken();
+                token = tokenObj && tokenObj.access_token;
+            }
+            if (!token && typeof AppData === 'object' && AppData.authToken) {
+                token = AppData.authToken;
+            }
+            if(!token){
+                console.warn('[fix][utils] no access token for Drive image (with signal)');
+                return null;
+            }
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+                signal
+            });
+            if(!res.ok){ console.warn('[fix][utils] fetch failed', res.status); return null; }
+            const blob = await res.blob();
+            return URL.createObjectURL(blob);
+        }
+        // http(s)はそのまま返す
+        if(/^https?:/.test(ref)) return ref;
+        return null;
+    }catch(e){
+        if(e && e.name === 'AbortError'){ console.log('[fix][avatar-cache] aborted'); return null; }
+        console.warn('[fix][utils] loadImageFromGoogleDriveWithSignal error', e);
+        return null;
+    }
+}
+
+/* [fix][avatar-cache] 汎用ラッパー */
+async function getImageObjectUrl(ref, signal){
+    if(typeof loadImageFromGoogleDriveWithSignal === 'function') return loadImageFromGoogleDriveWithSignal(ref, signal);
+    return loadImageFromGoogleDrive(ref);
+}
+
 
 // Drive汎用ファイル読み込みユーティリティ
 async function loadDriveFileAsObjectURL(ref) {
