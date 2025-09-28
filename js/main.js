@@ -587,22 +587,21 @@ async function loadFromFolderId(folderId){
   // 初期化ブート（DOM読み込み後）
   document.addEventListener('DOMContentLoaded', function(){
     try{
-    try{ applyTheme(getInitialTheme()); }catch(e){}
-
+  // ===== アプリ初期化（DOM読み込み後） =====
+  document.addEventListener('DOMContentLoaded', function(){
+    try {
+      try { applyTheme(getInitialTheme()); } catch(e) {}
       ensureAppData();
-    }catch(e){ 
-      console.error('AppData初期化エラー:', e); 
+    } catch(e) {
+      console.error('AppData初期化エラー:', e);
       setStatus('システム初期化エラー');
-      return; 
+      return;
     }
-    
     // UIとグローバル状態の初期化（ビュー/フィルタ等）
-    try{ initializeMainApp(); }catch(e){ console.warn('initializeMainApp で警告:', e); }
-    
-    if(typeof window.initializeGoogleAPI === 'function'){
+    try { initializeMainApp(); } catch(e) { console.warn('initializeMainApp で警告:', e); }
+    if (typeof window.initializeGoogleAPI === 'function') {
       window.initializeGoogleAPI();
     }
-    
     // 初期状態の設定
     setStatus('Googleでログインしてください');
     showSignin();
