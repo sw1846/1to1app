@@ -7,6 +7,29 @@
 (function(){
   'use strict';
 
+  // [CLAUDE FIX ALL-IN-ONE][darkmode] ダークモード適用/永続化
+  function getInitialTheme(){
+    try{
+      var saved = localStorage.getItem('theme');
+      if(saved === 'dark' || saved === 'light') return saved;
+    }catch(e){}
+    try{
+      if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    }catch(e){}
+    return 'light';
+  }
+  function applyTheme(theme){
+    var t = (theme === 'dark') ? 'dark' : 'light';
+    try{
+      document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+      var iconEl = document.getElementById('themeIcon');
+      if(iconEl) iconEl.textContent = (t === 'dark') ? '☀️' : '🌙';
+      try{ localStorage.setItem('theme', t); }catch(e){}
+      console.log('[fix][darkmode] applied theme=' + t);
+    }catch(e){ console.warn('[fix][darkmode] failed to apply', e); }
+  }
+
+
   // URL parameter helper
   function getUrlParam(key){
     try{
@@ -55,14 +78,24 @@
     
     if(signoutBtn) signoutBtn.style.display = '';
     if(selectFolderBtn) selectFolderBtn.style.display = '';
-    if(mergeDataBtn) mergeDataBtn.style.display = '';
+    if(mergeDataBtn){ mergeDataBtn.remove(); console.log('[fix][merge-button] removed'); }
     
     // ログインボタンを隠す
     hideSignin();
     
     // 認証メッセージを隠す
-    hideAuthMessage();
-  }
+    \1
+    // [CLAUDE FIX ALL-IN-ONE][darkmode] トグル配線
+    (function(){
+      var btn = document.getElementById('themeToggle');
+      if(btn){
+        btn.addEventListener('click', function(){
+          var cur = (document.documentElement.getAttribute('data-theme')==='dark')?'dark':'light';
+          applyTheme(cur==='dark'?'light':'dark');
+        });
+      }
+    })();
+
 
   function ensureAppData(){
     if(typeof window.AppData !== 'object'){
@@ -377,7 +410,43 @@ async function loadFromFolderId(folderId){
       window.setupMultiSelect();
     }
     
-    log('メインアプリ初期化完了');
+    
+  // [CLAUDE FIX ALL-IN-ONE][options] 既存データからプルダウン値を再構築
+  function normalizeLabel(v){
+    if(!v) return '';
+    var s = (''+v).trim();
+    s = s.replace(/\s+/g,' ');
+    try{ s = s.normalize('NFKC'); }catch(e){}
+    return s;
+  }
+  function rebuildSelectOptions(){
+    try{
+      var setAff = new Set(), setBiz = new Set(), setInd = new Set(), setRes = new Set(), setType = new Set();
+      var idx = (window.contacts||[]);
+      idx.forEach(function(c){
+        if(c.affiliation) setAff.add(normalizeLabel(c.affiliation));
+        if(Array.isArray(c.businesses)) c.businesses.forEach(function(b){ setBiz.add(normalizeLabel(b)); });
+        if(Array.isArray(c.industryInterests)) c.industryInterests.forEach(function(i){ setInd.add(normalizeLabel(i)); });
+        if(c.residence) setRes.add(normalizeLabel(c.residence));
+        if(Array.isArray(c.types)) c.types.forEach(function(t){ setType.add(normalizeLabel(t)); });
+      });
+      function setOptions(selectId, values){
+        var el = document.getElementById(selectId);
+        if(!el) return;
+        var arr = Array.from(values).filter(Boolean).sort(function(a,b){ return a.localeCompare(b, 'ja'); });
+        el.innerHTML = '<option value="">(すべて)</option>' + arr.map(function(v){ return '<option value="'+v+'">'+v+'</option>'; }).join('');
+        console.log('[fix][options] rebuilt '+selectId+': '+arr.length);
+      }
+      setOptions('typeFilter', setType);
+      setOptions('affiliationFilter', setAff);
+      setOptions('businessFilter', setBiz);
+      setOptions('industryInterestsFilter', setInd);
+      setOptions('residenceFilter', setRes);
+    }catch(e){ console.warn('[fix][options] rebuild failed', e); }
+  }
+  if(typeof rebuildSelectOptions==='function') rebuildSelectOptions();
+  log('メインアプリ初期化完了');
+
   }
 
   function setupEventListeners(){
@@ -515,9 +584,9 @@ async function loadFromFolderId(folderId){
     setStatus('認証に失敗しました');
   });
 
-  document.addEventListener('DOMContentLoaded', function boot(){
-    log('DOM読み込み完了 - 初期化開始...');
-    try{
+  \1
+    try{ applyTheme(getInitialTheme()); }catch(e){}
+
       ensureAppData();
     }catch(e){ 
       console.error('AppData初期化エラー:', e); 

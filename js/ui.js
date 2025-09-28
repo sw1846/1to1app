@@ -235,7 +235,7 @@ function createContactCard(contact) {
         contact.businesses.slice(0, 2).join(', ') + (contact.businesses.length > 2 ? '...' : '') : '';
 
     card.innerHTML = `
-        ${contact.photo ? `<img src="${contact.photo}" class="contact-photo">` : '<div class="contact-photo"></div>'}
+        ${contact.photo ? `<img data-src="${contact.photo}" class="contact-photo lazy-avatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjZGRkZGRkIi8+PHRleHQgeD0iMzIiIHk9IjM2IiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5Ij7jgZPjgpPjga7jgZk8L3RleHQ+PC9zdmc+">` : '<div class="contact-photo"></div>'}
         <div class="contact-info">
             <h3>${escapeHtml(contact.name)}</h3>
             ${contact.furigana ? `<p>${escapeHtml(contact.furigana)}</p>` : ''}
@@ -275,7 +275,7 @@ function createContactListItem(contact) {
     const types = Array.isArray(contact.types) ? contact.types.join(', ') : '';
 
     item.innerHTML = `
-        ${contact.photo ? `<img src="${contact.photo}" class="list-photo">` : '<div class="list-photo"></div>'}
+        ${contact.photo ? `<img data-src="${contact.photo}" class="list-photo lazy-avatar" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjZGRkZGRkIi8+PHRleHQgeD0iMzIiIHk9IjM2IiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5Ij7jgZPjgpPjga7jgZk8L3RleHQ+PC9zdmc+">` : '<div class="list-photo"></div>'}
         <div class="list-info">
             <h4>${escapeHtml(contact.name)}${contact.furigana ? ` (${escapeHtml(contact.furigana)})` : ''}</h4>
             <p>${contact.company || ''} ${types} ${contact.revenue ? `💰¥${contact.revenue.toLocaleString()}` : ''} ${todoCount > 0 ? `📋${todoCount}` : ''} ${contact.referralCount > 0 ? `<span class="clickable-link" onclick="event.stopPropagation(); filterByReferrer('${escapeHtml(contact.name)}')">🔗${contact.referralCount}</span>` : ''}</p>
@@ -964,3 +964,38 @@ async function saveStatuses() {
         showNotification('ステータスを保存しました', 'success');
     }
 }
+// [CLAUDE FIX ALL-IN-ONE][avatar] IntersectionObserver による遅延読込＆解決
+(function(){
+  var io = null;
+  function ensureIO(){
+    if(io) return io;
+    io = new IntersectionObserver(async function(entries){
+      for(var i=0;i<entries.length;i++){
+        var ent = entries[i];
+        if(ent.isIntersecting){
+          var img = ent.target;
+          io.unobserve(img);
+          try{
+            var ref = img.getAttribute('data-src') || '';
+            if(ref){
+              console.log('[fix][avatar] resolving contact image, url=', ref);
+              var url = await loadImageFromGoogleDrive(ref);
+              if(url){ img.src = url; console.log('[fix][avatar] resolved url='+url); }
+              else { console.warn('[warn][avatar] resolve failed for '+ref); }
+            }
+          }catch(e){ console.warn('[warn][avatar] error', e); }
+        }
+      }
+    }, { rootMargin: '200px' });
+    return io;
+  }
+  var _origRender = window.renderContacts;
+  window.renderContacts = function(){
+    if(typeof _origRender === 'function') _origRender.apply(this, arguments);
+    try{
+      var els = document.querySelectorAll('img.lazy-avatar');
+      var obs = ensureIO();
+      els.forEach(function(el){ obs.observe(el); });
+    }catch(e){}
+  };
+})();
