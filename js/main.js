@@ -584,6 +584,9 @@ async function loadFromFolderId(folderId){
     setStatus('認証に失敗しました');
   });
 
+  // 初期化ブート（DOM読み込み後）
+  document.addEventListener('DOMContentLoaded', function(){
+    try{
     try{ applyTheme(getInitialTheme()); }catch(e){}
 
       ensureAppData();
