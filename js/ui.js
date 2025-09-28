@@ -501,15 +501,28 @@ function sanitizeImageUrl(url) {
 
 // [IMAGE FIX] 画像URL解決
 function resolveImageUrl(contact, type = 'photo') {
-    const fieldName = type === 'photo' ? 'photo' : 'businessCard';
-    const url = contact[fieldName];
-    
-    if (!url) return null;
-    
-    const sanitized = sanitizeImageUrl(url);
-    if (!sanitized) return null;
-    
-    return sanitized;
+    try{
+        const fieldName = (type === 'photo') ? 'photo' : 'businessCard';
+        let url = contact && contact[fieldName];
+
+        // Fallback to *Ref if string URL missing
+        if (!url) {
+            const refObj = (type === 'photo') ? (contact && contact.photoRef) : (contact && contact.businessCardRef);
+            if (refObj && refObj.driveFileId) {
+                url = 'drive:' + refObj.driveFileId;
+            } else if (refObj && refObj.path) {
+                // Path only is not directly loadable in <img>; leave null so placeholder is used.
+                url = null;
+            }
+        }
+
+        if (!url) return null;
+        const sanitized = sanitizeImageUrl(url);
+        return sanitized || null;
+    }catch(e){
+        console.warn('[image] resolveImageUrl error', e);
+        return null;
+    }
 }
 
 // [IMAGE FIX] 安全な画像読み込み

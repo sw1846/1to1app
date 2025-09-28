@@ -1050,4 +1050,44 @@ __root.AppData.collectOptionValuesFromContacts = function(contacts) {
   };
 };
 
+
+
+// === Save options back to index/metadata.json (upsert) ===
+async function saveOptionsToMetadata(structure, options){
+  _ensureReady();
+  try{
+    if(!structure || !structure.index){ throw new Error('index フォルダが未解決'); }
+    await ensureGapiClient();
+    // Try to find existing metadata.json in index folder
+    var list = await driveListChildren(structure.index, { nameContains: 'metadata' });
+    var fileId = null;
+    var current = {};
+    if(Array.isArray(list)){
+      // pick metadata.json if present
+      var meta = list.find(f => String(f.name||'').toLowerCase() === 'metadata.json') || list[0];
+      if(meta){
+        fileId = meta.id;
+        try{ current = await downloadJsonById(fileId) || {}; }catch(e){ current = {}; }
+      }
+    }
+    current = current && typeof current === 'object' ? current : {};
+    current.options = current.options && typeof current.options === 'object' ? current.options : {};
+    // Merge known keys only (types, affiliations, industryInterests, statuses)
+    var keys = ['types','affiliations','industryInterests','statuses'];
+    keys.forEach(function(k){
+      if(options && Array.isArray(options[k])){
+        current.options[k] = Array.from(new Set(options[k])).sort();
+      }
+    });
+    // Upsert to index folder
+    var jsonStr = JSON.stringify(current, null, 2);
+    var id = await upsertJsonInFolder(structure.index, 'metadata.json', jsonStr);
+    return id;
+  }catch(e){
+    console.warn('[data] saveOptionsToMetadata failed', e);
+    throw e;
+  }
+}
+__root.AppData.saveOptionsToMetadata = saveOptionsToMetadata;
+
 })(window);
