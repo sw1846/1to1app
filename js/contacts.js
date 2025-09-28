@@ -1,1155 +1,622 @@
-// contacts.js - 分散ファイル構造対応の連絡先管理機能（修正版）
+/* ===== contacts.js - 連絡先管理（完全修正版） ===== */
 
-// [CLAUDE FIX] フィルター機能とオプション管理の修正
-// 既存契約を維持しつつ、副作用を排除した実装
+// [CLAUDE FIX ALL-IN-ONE][filter] フィルター状態管理
+let currentFilters = {};
+let filteredContacts = [];
 
-// 連絡先モーダルを開く
-function openContactModal(contactId = null) {
-    currentContactId = contactId;
-    const modal = document.getElementById('contactModal');
-    const title = document.getElementById('modalTitle');
-    const initialMeetingSection = document.getElementById('initialMeetingSection');
-
-    if (!modal || !title) {
-        console.error('Modal elements not found');
-        return;
-    }
-
-    // 選択状態をリセット
-    selectedOptions = {
-        type: [],
-        affiliation: [],
-        industryInterests: []
+// [CLAUDE FIX ALL-IN-ONE][options] 既存データからオプション収集
+function collectOptionsFromContacts() {
+    const options = {
+        types: new Set(),
+        affiliations: new Set(),
+        businesses: new Set(),
+        residences: new Set()
     };
-
-    multiSelectSearchQueries = {
-        type: '',
-        affiliation: '',
-        industryInterests: ''
-    };
-
-    if (contactId) {
-        title.textContent = '連絡先編集';
-        if (initialMeetingSection) {
-            initialMeetingSection.style.display = 'none';
-        }
-        loadContactData(contactId);
-    } else {
-        title.textContent = '連絡先追加';
-        if (initialMeetingSection) {
-            initialMeetingSection.style.display = 'block';
-        }
-        resetContactForm();
-    }
-
-    // Markdownエディタを編集モードに設定
-    const markdownFields = ['business', 'strengths', 'approach', 'history', 'priorInfo'];
-    markdownFields.forEach(field => {
-        if (typeof switchMarkdownView === 'function') {
-            switchMarkdownView(field, 'edit');
-        }
-    });
-
-    // [FIX] マルチセレクトオプションを確実に初期化
-    if (typeof updateMultiSelectOptions === 'function') {
-        updateMultiSelectOptions();
-    }
-
-    modal.classList.add('active');
-    modal.querySelector('.modal-content').scrollTop = 0;
-}
-
-// 連絡先データ読み込み
-function loadContactData(contactId) {
-    const contact = contacts.find(c => c.id === contactId);
-    if (!contact) return;
-
-    // 基本情報
-    const nameInput = document.getElementById('nameInput');
-    const furiganaInput = document.getElementById('furiganaInput');
-    const companyInput = document.getElementById('companyInput');
-    const websiteInput = document.getElementById('websiteInput');
-    
-    if (nameInput) nameInput.value = contact.name || '';
-    if (furiganaInput) furiganaInput.value = contact.furigana || '';
-    if (companyInput) companyInput.value = contact.company || '';
-    if (websiteInput) websiteInput.value = contact.website || '';
-    
-    // 接触方法
-    const contactMethodReferral = document.getElementById('contactMethodReferral');
-    const contactMethodDirect = document.getElementById('contactMethodDirect');
-    const referrerInput = document.getElementById('referrerInput');
-    const directContactInput = document.getElementById('directContactInput');
-    
-    if (contact.contactMethod === 'referral') {
-        if (contactMethodReferral) contactMethodReferral.checked = true;
-        if (referrerInput) referrerInput.value = contact.referrer || '';
-    } else {
-        if (contactMethodDirect) contactMethodDirect.checked = true;
-        if (directContactInput) directContactInput.value = contact.directContact || '所属が同じ';
-    }
-    if (typeof handleContactMethodChange === 'function') {
-        handleContactMethodChange();
-    }
-    
-    // Markdownフィールド
-    const businessInput = document.getElementById('businessInput');
-    const strengthsInput = document.getElementById('strengthsInput');
-    const approachInput = document.getElementById('approachInput');
-    const historyInput = document.getElementById('historyInput');
-    const priorInfoInput = document.getElementById('priorInfoInput');
-    
-    if (businessInput) businessInput.value = contact.business || '';
-    if (strengthsInput) strengthsInput.value = contact.strengths || '';
-    if (approachInput) approachInput.value = contact.approach || '';
-    if (historyInput) historyInput.value = contact.history || '';
-    if (priorInfoInput) priorInfoInput.value = contact.priorInfo || '';
-    
-    // その他の情報
-    const activityAreaInput = document.getElementById('activityAreaInput');
-    const residenceInput = document.getElementById('residenceInput');
-    const hobbiesInput = document.getElementById('hobbiesInput');
-    const revenueInput = document.getElementById('revenueInput');
-    
-    if (activityAreaInput) activityAreaInput.value = contact.activityArea || '';
-    if (residenceInput) residenceInput.value = contact.residence || '';
-    if (hobbiesInput) hobbiesInput.value = contact.hobbies || '';
-    if (revenueInput) revenueInput.value = contact.revenue || '';
-
-    // [CLAUDE FIX] 画像表示の修正 - 確実な画像URL解決
-    loadContactImages(contact);
-    
-    // [FIX] 複数選択項目の確実な読み込み
-    selectedOptions.type = Array.isArray(contact.types) ? [...contact.types] : [];
-    selectedOptions.affiliation = Array.isArray(contact.affiliations) ? [...contact.affiliations] : [];
-    selectedOptions.industryInterests = Array.isArray(contact.industryInterests) ? [...contact.industryInterests] : [];
-    
-    // マルチセレクトオプションとタグを更新
-    setTimeout(() => {
-        if (typeof updateMultiSelectOptions === 'function') {
-            updateMultiSelectOptions('type');
-            updateMultiSelectOptions('affiliation');
-            updateMultiSelectOptions('industryInterests');
-        }
-        if (typeof updateMultiSelectTags === 'function') {
-            updateMultiSelectTags('type');
-            updateMultiSelectTags('affiliation');
-            updateMultiSelectTags('industryInterests');
-        }
-    }, 100);
-
-    // メールアドレス
-    const emailContainer = document.getElementById('emailContainer');
-    if (emailContainer) {
-        emailContainer.innerHTML = '';
-        if (contact.emails && contact.emails.length > 0) {
-            contact.emails.forEach((email) => {
-                if (typeof addEmailInput === 'function') {
-                    addEmailInput(email);
-                }
-            });
-        } else if (typeof addEmailInput === 'function') {
-            addEmailInput('');
-        }
-    }
-
-    // 電話番号
-    const phoneContainer = document.getElementById('phoneContainer');
-    if (phoneContainer) {
-        phoneContainer.innerHTML = '';
-        if (contact.phones && contact.phones.length > 0) {
-            contact.phones.forEach((phone) => {
-                if (typeof addPhoneInput === 'function') {
-                    addPhoneInput(phone);
-                }
-            });
-        } else if (typeof addPhoneInput === 'function') {
-            addPhoneInput('');
-        }
-    }
-
-    // 事業内容
-    const businessContainer = document.getElementById('businessContainer');
-    if (businessContainer) {
-        businessContainer.innerHTML = '';
-        if (contact.businesses && contact.businesses.length > 0) {
-            contact.businesses.forEach((business) => {
-                if (typeof addBusinessInput === 'function') {
-                    addBusinessInput(business);
-                }
-            });
-        } else if (typeof addBusinessInput === 'function') {
-            addBusinessInput('');
-        }
-    }
-
-    // 添付ファイル
-    if (contact.attachments && typeof displayAttachments === 'function') {
-        displayAttachments(contact.attachments, 'attachmentList');
-    }
-}
-
-// [CLAUDE FIX] 画像読み込み関数の追加
-async function loadContactImages(contact) {
-    try {
-        // 顔写真の処理
-        const photoPreview = document.getElementById('photoPreview');
-        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-        if (contact.photo && photoPreview && photoPreviewContainer) {
-            if (typeof resolveAttachmentUrl === 'function') {
-                const url = await resolveAttachmentUrl(contact.id, 'photo');
-                if (url) {
-                    photoPreview.src = url;
-                    photoPreviewContainer.style.display = 'block';
-                } else {
-                    photoPreview.src = '';
-                    photoPreviewContainer.style.display = 'none';
-                }
-            } else {
-                console.warn('[fix][photo] resolveAttachmentUrl not available');
-                photoPreview.src = '';
-                photoPreviewContainer.style.display = 'none';
-            }
-        } else if (photoPreview && photoPreviewContainer) {
-            photoPreview.src = '';
-            photoPreviewContainer.style.display = 'none';
-        }
-        
-        // 名刺画像の処理
-        const businessCardPreview = document.getElementById('businessCardPreview');
-        const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
-        if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
-            if (typeof resolveAttachmentUrl === 'function') {
-                const url = await resolveAttachmentUrl(contact.id, 'businessCard');
-                if (url) {
-                    businessCardPreview.src = url;
-                    businessCardPreviewContainer.style.display = 'block';
-                } else {
-                    businessCardPreview.src = '';
-                    businessCardPreviewContainer.style.display = 'none';
-                }
-            } else {
-                console.warn('[fix][businessCard] resolveAttachmentUrl not available');
-                businessCardPreview.src = '';
-                businessCardPreviewContainer.style.display = 'none';
-            }
-        } else if (businessCardPreview && businessCardPreviewContainer) {
-            businessCardPreview.src = '';
-            businessCardPreviewContainer.style.display = 'none';
-        }
-    } catch (error) {
-        console.warn('[fix][images] loadContactImages error:', error);
-    }
-}
-
-// フォームリセット
-function resetContactForm() {
-    const contactForm = document.getElementById('contactForm');
-    if (contactForm) {
-        contactForm.reset();
-    }
-    
-    // 接触方法を直接に設定
-    const contactMethodDirect = document.getElementById('contactMethodDirect');
-    const directContactInput = document.getElementById('directContactInput');
-    if (contactMethodDirect) contactMethodDirect.checked = true;
-    if (directContactInput) directContactInput.value = '所属が同じ';
-    if (typeof handleContactMethodChange === 'function') {
-        handleContactMethodChange();
-    }
-    
-    // 画像プレビューをクリア
-    const photoPreview = document.getElementById('photoPreview');
-    const businessCardPreview = document.getElementById('businessCardPreview');
-    const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-    const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
-    
-    if (photoPreview) {
-        photoPreview.src = '';
-        if (photoPreview.hasAttribute('src')) {
-            photoPreview.removeAttribute('src');
-        }
-    }
-    if (photoPreviewContainer) {
-        photoPreviewContainer.style.display = 'none';
-    }
-    
-    if (businessCardPreview) {
-        businessCardPreview.src = '';
-        if (businessCardPreview.hasAttribute('src')) {
-            businessCardPreview.removeAttribute('src');
-        }
-    }
-    if (businessCardPreviewContainer) {
-        businessCardPreviewContainer.style.display = 'none';
-    }
-    
-    // 複数入力フィールドをリセット
-    const emailContainer = document.getElementById('emailContainer');
-    const phoneContainer = document.getElementById('phoneContainer');
-    const businessContainer = document.getElementById('businessContainer');
-    const attachmentList = document.getElementById('attachmentList');
-    
-    if (emailContainer) {
-        emailContainer.innerHTML = '';
-        if (typeof addEmailInput === 'function') {
-            addEmailInput('');
-        }
-    }
-    if (phoneContainer) {
-        phoneContainer.innerHTML = '';
-        if (typeof addPhoneInput === 'function') {
-            addPhoneInput('');
-        }
-    }
-    if (businessContainer) {
-        businessContainer.innerHTML = '';
-        if (typeof addBusinessInput === 'function') {
-            addBusinessInput('');
-        }
-    }
-    if (attachmentList) {
-        attachmentList.innerHTML = '';
-    }
-    
-    // ToDoリストをリセット
-    const todoList = document.getElementById('todoList');
-    if (todoList) {
-        todoList.innerHTML = '<button type="button" class="btn btn-primary" onclick="addTodoItem()">➕ ToDo追加</button>';
-    }
-    
-    // 複数選択をリセット
-    selectedOptions.type = [];
-    selectedOptions.affiliation = [];
-    selectedOptions.industryInterests = [];
-    
-    if (typeof updateMultiSelectTags === 'function') {
-        updateMultiSelectTags('type');
-        updateMultiSelectTags('affiliation');
-        updateMultiSelectTags('industryInterests');
-    }
-}
-
-// [CLAUDE FIX] 新しいIDを生成（分散ファイル構造用）
-function generateContactId() {
-    if (typeof metadata !== 'undefined' && metadata.nextContactId) {
-        const newId = String(metadata.nextContactId).padStart(6, '0');
-        metadata.nextContactId++;
-        return newId;
-    }
-    
-    // フォールバック：既存の最大IDから次のIDを生成
-    let maxId = 0;
-    contacts.forEach(contact => {
-        const id = parseInt(contact.id) || 0;
-        if (id > maxId) {
-            maxId = id;
-        }
-    });
-    
-    return String(maxId + 1).padStart(6, '0');
-}
-
-// [CLAUDE FIX] 連絡先保存 - オプション更新エラー修正
-async function saveContact() {
-    const nameInput = document.getElementById('nameInput');
-    if (!nameInput) {
-        if (typeof showNotification === 'function') {
-            showNotification('名前入力フィールドが見つかりません', 'error');
-        }
-        return;
-    }
-
-    const name = nameInput.value.trim();
-    if (!name) {
-        if (typeof showNotification === 'function') {
-            showNotification('名前は必須です', 'error');
-        }
-        return;
-    }
-
-    if (typeof showLoading === 'function') {
-        showLoading(true);
-    }
     
     try {
-        // 添付ファイルの処理
-        const attachments = typeof getAttachments === 'function' ? getAttachments('attachmentList') : [];
-        for (let i = 0; i < attachments.length; i++) {
-            if (attachments[i].data && !attachments[i].path.includes('attachments/') && !attachments[i].path.startsWith('drive:')) {
-                if (typeof saveAttachmentToFileSystem === 'function') {
-                    const filePath = await saveAttachmentToFileSystem(
-                        attachments[i].name,
-                        attachments[i].data,
-                        name
-                    );
-                    attachments[i].path = filePath;
+        if (window.contacts && Array.isArray(window.contacts)) {
+            window.contacts.forEach(contact => {
+                // 種別
+                if (contact.types && Array.isArray(contact.types)) {
+                    contact.types.forEach(type => type && options.types.add(type.trim()));
                 }
-            }
-        }
-
-        // 写真の処理
-        const photoPreview = document.getElementById('photoPreview');
-        const businessCardPreview = document.getElementById('businessCardPreview');
-        const photoSrc = photoPreview ? photoPreview.src : '';
-        const businessCardSrc = businessCardPreview ? businessCardPreview.src : '';
-        
-        let photoPath = null;
-        let businessCardPath = null;
-        
-        // 新しい画像の場合はGoogle Driveにアップロード
-        if (photoSrc && photoSrc.startsWith('data:')) {
-            photoPath = await saveAttachmentToFileSystem('photo.jpg', photoSrc, name);
-        } else if (photoSrc && !photoSrc.endsWith('.html')) {
-            photoPath = photoSrc; // 既存の画像パス
-        }
-        
-        if (businessCardSrc && businessCardSrc.startsWith('data:')) {
-            businessCardPath = await saveAttachmentToFileSystem('business-card.jpg', businessCardSrc, name);
-        } else if (businessCardSrc && !businessCardSrc.endsWith('.html')) {
-            businessCardPath = businessCardSrc; // 既存の画像パス
-        }
-        
-        // 接触方法の処理
-        const contactMethodDirect = document.getElementById('contactMethodDirect');
-        const isDirect = contactMethodDirect ? contactMethodDirect.checked : true;
-        const contactMethod = isDirect ? 'direct' : 'referral';
-        
-        const directContactInput = document.getElementById('directContactInput');
-        const referrerInput = document.getElementById('referrerInput');
-        const directContact = isDirect && directContactInput ? directContactInput.value : null;
-        const referrer = !isDirect && referrerInput ? referrerInput.value : null;
-        
-        // フォーム値の取得
-        const furiganaInput = document.getElementById('furiganaInput');
-        const companyInput = document.getElementById('companyInput');
-        const websiteInput = document.getElementById('websiteInput');
-        const businessInput = document.getElementById('businessInput');
-        const strengthsInput = document.getElementById('strengthsInput');
-        const approachInput = document.getElementById('approachInput');
-        const historyInput = document.getElementById('historyInput');
-        const priorInfoInput = document.getElementById('priorInfoInput');
-        const activityAreaInput = document.getElementById('activityAreaInput');
-        const residenceInput = document.getElementById('residenceInput');
-        const hobbiesInput = document.getElementById('hobbiesInput');
-        const revenueInput = document.getElementById('revenueInput');
-        
-        // 連絡先オブジェクトの作成
-        const contact = {
-            id: currentContactId || generateContactId(),
-            name: name,
-            furigana: furiganaInput ? furiganaInput.value : '',
-            company: companyInput ? companyInput.value : '',
-            emails: typeof getMultiInputValues === 'function' ? getMultiInputValues('emailContainer') : [],
-            phones: typeof getMultiInputValues === 'function' ? getMultiInputValues('phoneContainer') : [],
-            website: websiteInput ? websiteInput.value : '',
-            businesses: typeof getMultiInputValues === 'function' ? getMultiInputValues('businessContainer') : [],
-            contactMethod: contactMethod,
-            directContact: directContact,
-            referrer: referrer,
-            business: businessInput ? businessInput.value : '',
-            strengths: strengthsInput ? strengthsInput.value : '',
-            approach: approachInput ? approachInput.value : '',
-            history: historyInput ? historyInput.value : '',
-            priorInfo: priorInfoInput ? priorInfoInput.value : '',
-            activityArea: activityAreaInput ? activityAreaInput.value : '',
-            residence: residenceInput ? residenceInput.value : '',
-            hobbies: hobbiesInput ? hobbiesInput.value : '',
-            revenue: revenueInput ? (parseFloat(revenueInput.value) || 0) : 0,
-            types: selectedOptions.type || [],
-            affiliations: selectedOptions.affiliation || [],
-            industryInterests: selectedOptions.industryInterests || [],
-            status: currentContactId ? (contacts.find(c => c.id === currentContactId)?.status || '新規') : '新規',
-            photo: photoPath,
-            businessCard: businessCardPath,
-            attachments: attachments,
-            createdAt: currentContactId ? (contacts.find(c => c.id === currentContactId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-
-        // [CLAUDE FIX] オプションを安全に更新
-        try {
-            if (typeof updateOptionIfNew === 'function') {
-                (selectedOptions.type || []).forEach(type => updateOptionIfNew('types', type));
-                (selectedOptions.affiliation || []).forEach(aff => updateOptionIfNew('affiliations', aff));
-                (selectedOptions.industryInterests || []).forEach(ii => updateOptionIfNew('industryInterests', ii));
-            }
-        } catch (optError) {
-            console.warn('[fix][options] updateOptionIfNew failed:', optError);
-            // オプション更新失敗は致命的ではないので続行
-        }
-
-        // 連絡先を保存または更新
-        if (currentContactId) {
-            const index = contacts.findIndex(c => c.id === currentContactId);
-            if (index !== -1) {
-                contacts[index] = contact;
-            }
-        } else {
-            contacts.push(contact);
-
-            // 初回ミーティング情報の処理
-            const meetingDateInput = document.getElementById('meetingDateInput');
-            const meetingContentInput = document.getElementById('meetingContentInput');
-            const meetingDate = meetingDateInput ? meetingDateInput.value : '';
-            const meetingContent = meetingContentInput ? meetingContentInput.value : '';
-            
-            if (meetingDate || meetingContent) {
-                const todoList = document.getElementById('todoList');
-                const todos = todoList && typeof getTodos === 'function' ? getTodos('todoList') : [];
+                if (contact.type && typeof contact.type === 'string') {
+                    contact.type.split(',').forEach(type => type.trim() && options.types.add(type.trim()));
+                }
                 
-                const meeting = {
-                    id: typeof generateId === 'function' ? generateId() : Date.now().toString(),
-                    contactId: contact.id,
-                    date: meetingDate,
-                    content: meetingContent,
-                    todos: todos,
-                    attachments: [],
-                    createdAt: new Date().toISOString()
-                };
-                if (typeof window.meetings !== 'undefined') {
-                    meetings.push(meeting);
+                // 所属
+                if (contact.affiliations && Array.isArray(contact.affiliations)) {
+                    contact.affiliations.forEach(aff => aff && options.affiliations.add(aff.trim()));
                 }
-            }
-        }
-
-        // 紹介売上を再計算
-        if (typeof calculateReferrerRevenues === 'function') {
-            calculateReferrerRevenues();
-        }
-
-        // データを保存（分散ファイル構造）
-        if (typeof saveAllData === 'function') {
-            await saveAllData();
+                if (contact.affiliation && typeof contact.affiliation === 'string') {
+                    contact.affiliation.split(',').forEach(aff => aff.trim() && options.affiliations.add(aff.trim()));
+                }
+                
+                // 事業・関心
+                if (contact.businesses && Array.isArray(contact.businesses)) {
+                    contact.businesses.forEach(bus => bus && options.businesses.add(bus.trim()));
+                }
+                if (contact.business && typeof contact.business === 'string') {
+                    contact.business.split(',').forEach(bus => bus.trim() && options.businesses.add(bus.trim()));
+                }
+                
+                // 居住地
+                if (contact.residence && typeof contact.residence === 'string') {
+                    contact.residence.split(',').forEach(res => res.trim() && options.residences.add(res.trim()));
+                }
+            });
         }
         
-        if (typeof closeModal === 'function') {
-            closeModal('contactModal');
+        console.log('[fix][options] rebuilt typeFilter: ' + options.types.size);
+        console.log('[fix][options] rebuilt affiliationFilter: ' + options.affiliations.size);
+        console.log('[fix][options] rebuilt businessFilter: ' + options.businesses.size);
+        console.log('[fix][options] rebuilt residenceFilter: ' + options.residences.size);
+        
+    } catch (e) {
+        console.error('collectOptionsFromContacts error:', e);
+    }
+    
+    return options;
+}
+
+// [CLAUDE FIX ALL-IN-ONE][options] 既存オプションとマージ
+function mergeWithExistingOptions(collectedOptions) {
+    try {
+        if (!window.options) {
+            window.options = {};
         }
+        
+        // 各カテゴリをマージ
+        Object.keys(collectedOptions).forEach(key => {
+            const existingSet = new Set(window.options[key] || []);
+            const collectedSet = collectedOptions[key];
+            
+            // 既存とコレクションをユニオン
+            const mergedSet = new Set([...existingSet, ...collectedSet]);
+            window.options[key] = uniqueSortedJa([...mergedSet]);
+        });
+        
+        return window.options;
+    } catch (e) {
+        console.error('mergeWithExistingOptions error:', e);
+        return window.options || {};
+    }
+}
+
+// [CLAUDE FIX ALL-IN-ONE][options] フィルターUI更新
+function refreshFiltersUI() {
+    try {
+        const collected = collectOptionsFromContacts();
+        const merged = mergeWithExistingOptions(collected);
+        
+        // 種別フィルター
+        const typeFilter = document.getElementById('typeFilter');
+        if (typeFilter) {
+            const currentValue = typeFilter.value;
+            typeFilter.innerHTML = '<option value="">すべて</option>';
+            (merged.types || []).forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeFilter.appendChild(option);
+            });
+            typeFilter.value = currentValue;
+        }
+        
+        // 所属フィルター
+        const affiliationFilter = document.getElementById('affiliationFilter');
+        if (affiliationFilter) {
+            const currentValue = affiliationFilter.value;
+            affiliationFilter.innerHTML = '<option value="">すべて</option>';
+            (merged.affiliations || []).forEach(affiliation => {
+                const option = document.createElement('option');
+                option.value = affiliation;
+                option.textContent = affiliation;
+                affiliationFilter.appendChild(option);
+            });
+            affiliationFilter.value = currentValue;
+        }
+        
+        // 事業フィルター
+        const businessFilter = document.getElementById('businessFilter');
+        if (businessFilter) {
+            const currentValue = businessFilter.value;
+            businessFilter.innerHTML = '<option value="">すべて</option>';
+            (merged.businesses || []).forEach(business => {
+                const option = document.createElement('option');
+                option.value = business;
+                option.textContent = business;
+                businessFilter.appendChild(option);
+            });
+            businessFilter.value = currentValue;
+        }
+        
+        // 居住地フィルター
+        const residenceFilter = document.getElementById('residenceFilter');
+        if (residenceFilter) {
+            const currentValue = residenceFilter.value;
+            residenceFilter.innerHTML = '<option value="">すべて</option>';
+            (merged.residences || []).forEach(residence => {
+                const option = document.createElement('option');
+                option.value = residence;
+                option.textContent = residence;
+                residenceFilter.appendChild(option);
+            });
+            residenceFilter.value = currentValue;
+        }
+        
+    } catch (e) {
+        console.error('refreshFiltersUI error:', e);
+    }
+}
+
+// [CLAUDE FIX ALL-IN-ONE][filter] フィルター変更処理
+function onFilterChange() {
+    try {
+        // フィルター値を収集
+        currentFilters = {
+            type: document.getElementById('typeFilter')?.value || '',
+            affiliation: document.getElementById('affiliationFilter')?.value || '',
+            business: document.getElementById('businessFilter')?.value || '',
+            residence: document.getElementById('residenceFilter')?.value || ''
+        };
+        
+        // フィルター適用
+        filteredContacts = applyFilters(window.contacts || [], currentFilters);
+        
+        console.log(`[fix][filter] applied count=${filteredContacts.length}`);
         
         // UI更新
-        if (typeof renderContacts === 'function') {
-            renderContacts();
-        }
-        if (typeof renderTodos === 'function') {
-            renderTodos();
-        }
-        if (typeof updateFilters === 'function') {
-            updateFilters();
-        }
-        if (typeof updateMultiSelectOptions === 'function') {
-            updateMultiSelectOptions();
-        }
-        if (typeof updateTodoTabBadge === 'function') {
-            updateTodoTabBadge();
-        }
+        renderContacts();
         
-        if (typeof showNotification === 'function') {
-            showNotification('連絡先を保存しました', 'success');
-        }
-        
-        console.log('[fix][contacts] saved contact:', contact.id);
-        
-    } catch (err) {
-        console.error('[fix][contacts] save error:', err);
-        if (typeof showNotification === 'function') {
-            showNotification('保存に失敗しました: ' + (err.message || err), 'error');
-        }
-    } finally {
-        if (typeof showLoading === 'function') {
-            showLoading(false);
-        }
+    } catch (e) {
+        console.error('onFilterChange error:', e);
     }
 }
 
-// 連絡先削除
-async function deleteContact() {
-    if (!confirm('この連絡先を削除してもよろしいですか?\n関連するミーティング記録も削除されます。')) {
-        return;
-    }
-
-    const contactToDelete = contacts.find(c => c.id === currentContactId);
-    if (!contactToDelete) return;
-
-    // 関連するミーティングも削除
-    const contactMeetings = (typeof window.meetings !== 'undefined' ? meetings : []).filter(m => m.contactId === currentContactId);
-    
-    // データから削除
-    if (typeof window.contacts !== 'undefined') {
-        window.contacts = contacts.filter(c => c.id !== currentContactId);
-    }
-    if (typeof window.meetings !== 'undefined') {
-        window.meetings = meetings.filter(m => m.contactId !== currentContactId);
-    }
-    
-    // Google Driveからファイルを削除
+// [CLAUDE FIX ALL-IN-ONE][avatar] 画像URL解決
+function resolveAvatarUrl(contactId) {
     try {
-        if (typeof folderStructure !== 'undefined' && folderStructure.contacts) {
-            const fileName = `contact-${String(currentContactId).padStart(6, '0')}.json`;
-            const fileId = await getFileIdInFolder(fileName, folderStructure.contacts);
-            if (fileId && typeof gapi !== 'undefined' && gapi.client) {
-                await gapi.client.drive.files.delete({
-                    fileId: fileId
-                });
+        if (!contactId) return null;
+        
+        // data.20250925u.js の関数を使用
+        if (window.resolveAttachmentUrl) {
+            const url = window.resolveAttachmentUrl(contactId, 'avatar');
+            if (url) {
+                const sanitized = sanitizeUrl(url);
+                if (sanitized) {
+                    console.log(`[fix][avatar] resolved contactId=${contactId} url=${sanitized}`);
+                    return sanitized;
+                }
             }
         }
         
-        if (typeof folderStructure !== 'undefined' && folderStructure.meetings && contactMeetings.length > 0) {
-            const meetingFileName = `contact-${String(currentContactId).padStart(6, '0')}-meetings.json`;
-            const meetingFileId = await getFileIdInFolder(meetingFileName, folderStructure.meetings);
-            if (meetingFileId && typeof gapi !== 'undefined' && gapi.client) {
-                await gapi.client.drive.files.delete({
-                    fileId: meetingFileId
-                });
+        console.warn(`[warn][avatar] could not resolve for contactId=${contactId}`);
+        return null;
+        
+    } catch (e) {
+        console.warn(`[warn][avatar] error resolving contactId=${contactId}:`, e);
+        return null;
+    }
+}
+
+// [CLAUDE FIX ALL-IN-ONE][avatar] 名刺画像URL解決
+function resolveBusinessCardUrl(contactId) {
+    try {
+        if (!contactId) return null;
+        
+        if (window.resolveAttachmentUrl) {
+            const url = window.resolveAttachmentUrl(contactId, 'businessCard');
+            if (url) {
+                const sanitized = sanitizeUrl(url);
+                if (sanitized) {
+                    console.log(`[fix][avatar] resolved business card contactId=${contactId} url=${sanitized}`);
+                    return sanitized;
+                }
             }
         }
-    } catch (error) {
-        console.warn('[fix][contacts] file delete error:', error);
+        
+        return null;
+        
+    } catch (e) {
+        console.warn(`[warn][avatar] error resolving business card contactId=${contactId}:`, e);
+        return null;
     }
-    
-    // インデックスから削除
-    if (typeof contactsIndex !== 'undefined') {
-        delete contactsIndex[currentContactId];
+}
+
+// [CLAUDE FIX ALL-IN-ONE][avatar] 遅延画像読み込み
+function setupLazyImageLoading() {
+    if ('IntersectionObserver' in window) {
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    const contactId = img.dataset.contactId;
+                    const imageType = img.dataset.imageType;
+                    
+                    let url = null;
+                    if (imageType === 'avatar') {
+                        url = resolveAvatarUrl(contactId);
+                    } else if (imageType === 'businessCard') {
+                        url = resolveBusinessCardUrl(contactId);
+                    }
+                    
+                    if (url) {
+                        img.src = url;
+                        img.onerror = () => {
+                            img.style.display = 'none';
+                            const initials = img.nextElementSibling;
+                            if (initials && initials.classList.contains('contact-initials')) {
+                                initials.style.display = 'flex';
+                            }
+                        };
+                    } else {
+                        img.style.display = 'none';
+                        const initials = img.nextElementSibling;
+                        if (initials && initials.classList.contains('contact-initials')) {
+                            initials.style.display = 'flex';
+                        }
+                    }
+                    
+                    observer.unobserve(img);
+                }
+            });
+        });
+        
+        // 既存の画像に適用
+        document.querySelectorAll('img[data-contact-id]').forEach(img => {
+            imageObserver.observe(img);
+        });
+        
+        // 新規画像用のオブザーバーをグローバルに公開
+        window.contactImageObserver = imageObserver;
     }
-    if (typeof meetingsIndex !== 'undefined') {
-        delete meetingsIndex[currentContactId];
+}
+
+// 連絡先詳細表示
+function showContactDetail(contactId) {
+    try {
+        const contact = window.contacts.find(c => c.id === contactId);
+        if (!contact) {
+            console.error('Contact not found:', contactId);
+            return;
+        }
+        
+        const modal = document.getElementById('contactDetailModal');
+        if (!modal) {
+            console.error('Contact detail modal not found');
+            return;
+        }
+        
+        // モーダル内容を生成
+        const modalContent = generateContactDetailHTML(contact);
+        modal.querySelector('.modal-body').innerHTML = modalContent;
+        
+        // モーダル表示
+        modal.style.display = 'block';
+        
+        // 画像の遅延読み込みを設定
+        if (window.contactImageObserver) {
+            modal.querySelectorAll('img[data-contact-id]').forEach(img => {
+                window.contactImageObserver.observe(img);
+            });
+        }
+        
+        // 現在の連絡先IDを保存
+        window.currentContactId = contactId;
+        
+    } catch (e) {
+        console.error('showContactDetail error:', e);
     }
-    if (typeof searchIndex !== 'undefined') {
-        delete searchIndex[currentContactId];
+}
+
+// 連絡先詳細HTML生成
+function generateContactDetailHTML(contact) {
+    try {
+        const avatarImg = `<img data-contact-id="${contact.id}" data-image-type="avatar" style="display:none;" alt="avatar">`;
+        const initialsDiv = `<div class="contact-initials">${toInitials(contact.name)}</div>`;
+        
+        const businessCardImg = contact.businessCard ? 
+            `<img data-contact-id="${contact.id}" data-image-type="businessCard" style="max-width: 100%; cursor: pointer;" alt="business card" onclick="showImageModal(this.src)">` : '';
+        
+        return `
+            <div class="contact-detail-header">
+                <div class="contact-avatar-large">
+                    ${avatarImg}
+                    ${initialsDiv}
+                </div>
+                <div class="contact-basic-info">
+                    <h3>${escapeHtml(contact.name || '')}</h3>
+                    <p class="contact-company">${escapeHtml(contact.company || '')}</p>
+                    <p class="contact-furigana">${escapeHtml(contact.furigana || '')}</p>
+                </div>
+            </div>
+            <div class="contact-detail-body">
+                <div class="detail-section">
+                    <h4>基本情報</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <label>種別</label>
+                            <span>${escapeHtml((contact.types || []).join(', '))}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>所属</label>
+                            <span>${escapeHtml((contact.affiliations || []).join(', '))}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>事業内容</label>
+                            <span>${escapeHtml(contact.business || '')}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>居住地</label>
+                            <span>${escapeHtml(contact.residence || '')}</span>
+                        </div>
+                    </div>
+                </div>
+                ${businessCardImg ? `<div class="detail-section">
+                    <h4>名刺</h4>
+                    ${businessCardImg}
+                </div>` : ''}
+                <div class="detail-section">
+                    <h4>ミーティング履歴</h4>
+                    <div id="contactMeetings"></div>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        console.error('generateContactDetailHTML error:', e);
+        return '<div class="error">詳細表示でエラーが発生しました</div>';
     }
-    
-    // 未使用オプションをクリーンアップ
-    if (typeof cleanupUnusedOptions === 'function') {
-        cleanupUnusedOptions();
+}
+
+// 連絡先保存
+function saveContact(contact) {
+    try {
+        console.log('Saving contact:', contact.id);
+        
+        // [CLAUDE FIX ALL-IN-ONE][options] オプション更新（エラー回避）
+        if (!window.options) {
+            window.options = {};
+        }
+        
+        // 種別
+        if (contact.types && Array.isArray(contact.types)) {
+            contact.types.forEach(type => updateOptionIfNew(window.options, 'types', type));
+        }
+        
+        // 所属
+        if (contact.affiliations && Array.isArray(contact.affiliations)) {
+            contact.affiliations.forEach(aff => updateOptionIfNew(window.options, 'affiliations', aff));
+        }
+        
+        // 事業
+        if (contact.business) {
+            updateOptionIfNew(window.options, 'businesses', contact.business);
+        }
+        
+        // 居住地
+        if (contact.residence) {
+            updateOptionIfNew(window.options, 'residences', contact.residence);
+        }
+        
+        // 連絡先を配列に保存/更新
+        if (!window.contacts) {
+            window.contacts = [];
+        }
+        
+        const existingIndex = window.contacts.findIndex(c => c.id === contact.id);
+        if (existingIndex >= 0) {
+            window.contacts[existingIndex] = contact;
+        } else {
+            window.contacts.push(contact);
+        }
+        
+        // Google Driveに保存
+        if (window.saveContactToFolder) {
+            return window.saveContactToFolder(contact).then(() => {
+                console.log('Contact saved successfully');
+                
+                // フィルターUIを更新
+                refreshFiltersUI();
+                
+                // 連絡先一覧を再描画
+                renderContacts();
+                
+                showNotification('連絡先を保存しました', 'success');
+            }).catch(e => {
+                console.error('Save contact error:', e);
+                showNotification('保存に失敗しました: ' + e.message, 'error');
+                throw e;
+            });
+        } else {
+            console.warn('saveContactToFolder function not available');
+            showNotification('保存機能が利用できません', 'warning');
+        }
+        
+    } catch (e) {
+        console.error('saveContact error:', e);
+        showNotification('保存エラー: ' + e.message, 'error');
+        throw e;
     }
-    
-    if (typeof saveAllData === 'function') {
-        await saveAllData();
-    }
-    
-    if (typeof closeModal === 'function') {
-        closeModal('contactDetailModal');
-    }
-    
-    // UI更新
-    if (typeof renderContacts === 'function') {
-        renderContacts();
-    }
-    if (typeof renderTodos === 'function') {
-        renderTodos();
-    }
-    if (typeof updateFilters === 'function') {
-        updateFilters();
-    }
-    if (typeof updateMultiSelectOptions === 'function') {
-        updateMultiSelectOptions();
-    }
-    if (typeof updateTodoTabBadge === 'function') {
-        updateTodoTabBadge();
-    }
-    
-    if (typeof showNotification === 'function') {
-        showNotification('連絡先を削除しました', 'success');
-    }
-    
-    console.log('[fix][contacts] deleted contact:', currentContactId);
 }
 
 // 連絡先編集
-function editContact() {
-    if (typeof closeModal === 'function') {
-        closeModal('contactDetailModal');
+function editContact(contactId) {
+    try {
+        const contact = window.contacts.find(c => c.id === contactId);
+        if (!contact) {
+            console.error('Contact not found for editing:', contactId);
+            return;
+        }
+        
+        // 編集モーダルを表示
+        showContactEditModal(contact);
+        
+    } catch (e) {
+        console.error('editContact error:', e);
     }
-    openContactModal(currentContactId);
 }
 
-// 紹介者からの売上計算
-function calculateReferrerRevenues() {
-    if (!Array.isArray(contacts)) return;
-    
-    contacts.forEach(contact => {
-        contact.referrerRevenue = calculateReferrerRevenue(contact.id);
-        contact.referralCount = calculateReferralCount(contact.name);
-    });
-}
-
-function calculateReferrerRevenue(contactId) {
-    let totalRevenue = 0;
-    
-    const contact = contacts.find(c => c.id === contactId);
-    if (!contact) return 0;
-    
-    const referrals = contacts.filter(c => c.referrer === contact.name);
-    
-    referrals.forEach(referral => {
-        totalRevenue += referral.revenue || 0;
-        totalRevenue += calculateReferrerRevenue(referral.id);
-    });
-    
-    return totalRevenue;
-}
-
-function calculateReferralCount(contactName) {
-    if (!Array.isArray(contacts)) return 0;
-    return contacts.filter(c => c.referrer === contactName).length;
-}
-
-// 未使用オプションの削除
-function cleanupUnusedOptions() {
-    if (!window.options || !Array.isArray(contacts)) return;
-    
-    const usedTypes = new Set();
-    const usedAffiliations = new Set();
-    const usedIndustryInterests = new Set();
-
-    contacts.forEach(contact => {
-        if (Array.isArray(contact.types)) {
-            contact.types.forEach(t => usedTypes.add(t));
+// 連絡先編集モーダル表示
+function showContactEditModal(contact) {
+    try {
+        const modal = document.getElementById('contactEditModal');
+        if (!modal) {
+            console.error('Contact edit modal not found');
+            return;
         }
-        if (Array.isArray(contact.affiliations)) {
-            contact.affiliations.forEach(a => usedAffiliations.add(a));
-        }
-        if (Array.isArray(contact.industryInterests)) {
-            contact.industryInterests.forEach(i => usedIndustryInterests.add(i));
-        }
-    });
-
-    if (options.types) options.types = options.types.filter(t => usedTypes.has(t));
-    if (options.affiliations) options.affiliations = options.affiliations.filter(a => usedAffiliations.has(a));
-    if (options.industryInterests) options.industryInterests = options.industryInterests.filter(i => usedIndustryInterests.has(i));
-}
-
-// [CLAUDE FIX] 連絡先詳細表示 - 画像表示修正
-function showContactDetail(contactId) {
-    const contact = contacts.find(c => c.id === contactId);
-    if (!contact) return;
-
-    currentContactId = contactId;
-    const modal = document.getElementById('contactDetailModal');
-    const title = document.getElementById('detailModalTitle');
-    const content = document.getElementById('contactDetailContent');
-
-    if (!modal || !title || !content) {
-        console.error('Detail modal elements not found');
-        return;
+        
+        // [CLAUDE FIX ALL-IN-ONE][options] 編集フォームのオプション更新
+        updateEditFormOptions();
+        
+        // フォームにデータを設定
+        populateContactForm(contact);
+        
+        modal.style.display = 'block';
+        
+    } catch (e) {
+        console.error('showContactEditModal error:', e);
     }
+}
 
-    title.textContent = contact.name;
+// [CLAUDE FIX ALL-IN-ONE][options] 編集フォームオプション更新
+function updateEditFormOptions() {
+    try {
+        const collected = collectOptionsFromContacts();
+        const merged = mergeWithExistingOptions(collected);
+        
+        // 種別オプション
+        const typesSelect = document.getElementById('contactTypes');
+        if (typesSelect) {
+            updateSelectOptions(typesSelect, merged.types || []);
+        }
+        
+        // 所属オプション
+        const affiliationsSelect = document.getElementById('contactAffiliations');
+        if (affiliationsSelect) {
+            updateSelectOptions(affiliationsSelect, merged.affiliations || []);
+        }
+        
+        // 事業オプション
+        const businessSelect = document.getElementById('contactBusiness');
+        if (businessSelect) {
+            updateSelectOptions(businessSelect, merged.businesses || []);
+        }
+        
+        // 居住地オプション
+        const residenceSelect = document.getElementById('contactResidence');
+        if (residenceSelect) {
+            updateSelectOptions(residenceSelect, merged.residences || []);
+        }
+        
+    } catch (e) {
+        console.error('updateEditFormOptions error:', e);
+    }
+}
 
-    const contactMeetings = (typeof window.meetings !== 'undefined' ? meetings : [])
-        .filter(m => m.contactId === contactId)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+// セレクトボックスのオプション更新
+function updateSelectOptions(selectElement, options) {
+    try {
+        if (!selectElement) return;
+        
+        const currentValue = selectElement.value;
+        selectElement.innerHTML = '<option value="">選択してください</option>';
+        
+        options.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option;
+            optionElement.textContent = option;
+            selectElement.appendChild(optionElement);
+        });
+        
+        selectElement.value = currentValue;
+        
+    } catch (e) {
+        console.error('updateSelectOptions error:', e);
+    }
+}
 
-    // ヘッダー部分の画像読み込み処理を改善
-    let photoHtml = '';
-    let businessCardHtml = '';
-    
-    // 顔写真の非同期処理
-    if (contact.photo) {
-        photoHtml = `<div id="photoPlaceholder" style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
-        // 非同期で画像を読み込み
-        resolveContactImage(contactId, 'photo').then(url => {
-            const placeholder = document.getElementById('photoPlaceholder');
-            if (placeholder && url) {
-                placeholder.outerHTML = `<img src="${url}" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; cursor: pointer;" onclick="showImageModal('${url}', '顔写真')" title="クリックで拡大">`;
-            } else if (placeholder) {
-                placeholder.outerHTML = `<div style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">写真なし</div>`;
-            }
-        }).catch(err => {
-            console.warn('[fix][photo] resolve failed in detail:', err);
-            const placeholder = document.getElementById('photoPlaceholder');
-            if (placeholder) {
-                placeholder.outerHTML = `<div style="width: 150px; height: 150px; border-radius: 50%; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">写真なし</div>`;
+// 連絡先フォームデータ設定
+function populateContactForm(contact) {
+    try {
+        const formFields = {
+            'contactName': contact.name || '',
+            'contactFurigana': contact.furigana || '',
+            'contactCompany': contact.company || '',
+            'contactBusiness': contact.business || '',
+            'contactResidence': contact.residence || ''
+        };
+        
+        Object.entries(formFields).forEach(([fieldId, value]) => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.value = value;
             }
         });
-    }
-    
-    // 名刺画像の非同期処理
-    if (contact.businessCard) {
-        businessCardHtml = `<div id="businessCardPlaceholder" style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">読み込み中...</div>`;
-        // 非同期で画像を読み込み
-        resolveContactImage(contactId, 'businessCard').then(url => {
-            const placeholder = document.getElementById('businessCardPlaceholder');
-            if (placeholder && url) {
-                placeholder.outerHTML = `<img src="${url}" style="width: 200px; height: auto; border-radius: 0.5rem; cursor: pointer;" onclick="showImageModal('${url}', '名刺画像')" title="クリックで拡大">`;
-            } else if (placeholder) {
-                placeholder.outerHTML = `<div style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">名刺なし</div>`;
-            }
-        }).catch(err => {
-            console.warn('[fix][businessCard] resolve failed in detail:', err);
-            const placeholder = document.getElementById('businessCardPlaceholder');
-            if (placeholder) {
-                placeholder.outerHTML = `<div style="width: 200px; height: 120px; border-radius: 0.5rem; background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">名刺なし</div>`;
-            }
-        });
-    }
-
-    // ヘッダー部分
-    let headerHtml = `
-        <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
-            ${photoHtml}
-            <div style="flex: 1;">
-                <h3>${escapeHtml(contact.name)}${contact.furigana ? ` (${escapeHtml(contact.furigana)})` : ''}</h3>
-                ${contact.company ? `<p><strong>会社:</strong> ${escapeHtml(contact.company)}</p>` : ''}
-                ${contact.types && Array.isArray(contact.types) && contact.types.length > 0 ? `<p><strong>種別:</strong> ${contact.types.map(t => escapeHtml(t)).join(', ')}</p>` : ''}
-                ${contact.affiliations && Array.isArray(contact.affiliations) && contact.affiliations.length > 0 ? `<p><strong>所属:</strong> ${contact.affiliations.map(a => escapeHtml(a)).join(', ')}</p>` : ''}
-                ${contact.industryInterests && Array.isArray(contact.industryInterests) && contact.industryInterests.length > 0 ? `<p><strong>会いたい業種等:</strong> ${contact.industryInterests.map(i => escapeHtml(i)).join(', ')}</p>` : ''}
-                ${contact.revenue ? `<p><strong>売上:</strong> ¥${contact.revenue.toLocaleString()}</p>` : ''}
-                ${contact.referrerRevenue ? `<p><strong>紹介売上:</strong> ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
-            </div>
-            ${businessCardHtml}
-        </div>
-    `;
-
-    // 連絡先情報部分
-    let contactInfoHtml = '<div class="contact-detail-grid">';
-    
-    contactInfoHtml += '<div>';
-    if (contact.emails && contact.emails.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>メールアドレス</h4>
-                ${contact.emails.map(email => `<p>📧 <a href="mailto:${email}">${escapeHtml(email)}</a></p>`).join('')}
-            </div>
-        `;
-    }
-    if (contact.phones && contact.phones.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>電話番号</h4>
-                ${contact.phones.map(phone => `<p>📞 <a href="tel:${phone}">${escapeHtml(phone)}</a></p>`).join('')}
-            </div>
-        `;
-    }
-    if (contact.businesses && contact.businesses.length > 0) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>事業内容</h4>
-                ${contact.businesses.map(business => `<p>📋 ${escapeHtml(business)}</p>`).join('')}
-            </div>
-        `;
-    }
-    contactInfoHtml += '</div>';
-    
-    contactInfoHtml += '<div>';
-    if (contact.website) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>ホームページ</h4>
-                <p>🌐 <a href="${contact.website}" target="_blank">${escapeHtml(contact.website)}</a></p>
-            </div>
-        `;
-    }
-    
-    // 接触方法の表示
-    if (contact.contactMethod === 'referral' && contact.referrer) {
-        const referrerContact = contacts.find(c => c.name === contact.referrer);
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(紹介)</h4>
-                <p>👤 ${referrerContact ? `<span class="clickable-link" onclick="closeModal('contactDetailModal'); showContactDetail('${referrerContact.id}')">${escapeHtml(contact.referrer)}</span>` : escapeHtml(contact.referrer)}</p>
-            </div>
-        `;
-    } else if (contact.contactMethod === 'direct' || contact.directContact) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(直接)</h4>
-                <p>🤝 ${escapeHtml(contact.directContact || '所属が同じ')}</p>
-            </div>
-        `;
-    } else if (contact.referrer) {
-        const referrerContact = contacts.find(c => c.name === contact.referrer);
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>接触(紹介)</h4>
-                <p>👤 ${referrerContact ? `<span class="clickable-link" onclick="closeModal('contactDetailModal'); showContactDetail('${referrerContact.id}')">${escapeHtml(contact.referrer)}</span>` : escapeHtml(contact.referrer)}</p>
-            </div>
-        `;
-    }
-    
-    if (contact.residence) {
-        contactInfoHtml += `
-            <div class="contact-detail-section">
-                <h4>居住地</h4>
-                <p>🏠 ${escapeHtml(contact.residence)}</p>
-            </div>
-        `;
-    }
-    
-    contactInfoHtml += '</div>';
-    contactInfoHtml += '</div>';
-
-    // 詳細情報部分
-    let detailsHtml = '';
-    if (contact.business) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>事業内容詳細</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="businessContent">
-                        ${typeof renderMarkdown === 'function' ? renderMarkdown(contact.business) : escapeHtml(contact.business)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.strengths) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>強み</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="strengthsContent">
-                        ${typeof renderMarkdown === 'function' ? renderMarkdown(contact.strengths) : escapeHtml(contact.strengths)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.approach) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>切り出し方</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="approachContent">
-                        ${typeof renderMarkdown === 'function' ? renderMarkdown(contact.approach) : escapeHtml(contact.approach)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.history) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>過去の経歴</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="historyContent">
-                        ${typeof renderMarkdown === 'function' ? renderMarkdown(contact.history) : escapeHtml(contact.history)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.priorInfo) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>事前情報</h4>
-                <div class="collapsible-wrapper">
-                    <div class="markdown-preview collapsible-content" id="priorInfoContent">
-                        ${typeof renderMarkdown === 'function' ? renderMarkdown(contact.priorInfo) : escapeHtml(contact.priorInfo)}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    if (contact.attachments && contact.attachments.length > 0) {
-        detailsHtml += `
-            <div class="form-group">
-                <h4>添付ファイル</h4>
-                <div class="file-list">
-                    ${contact.attachments.map(file => `
-                        <div class="file-item">
-                            📎 <a href="javascript:void(0)" onclick="openFile('${file.data || file.path}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    // ミーティング履歴部分
-    let meetingsHtml = `
-        <div class="meeting-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3>ミーティング履歴</h3>
-                <button class="btn btn-primary" onclick="openMeetingModal('${contactId}')">➕ ミーティング追加</button>
-            </div>
-            <div class="meeting-list">
-                ${contactMeetings.length > 0 ? contactMeetings.map(meeting => `
-                    <div class="meeting-item">
-                        <div class="meeting-header">
-                            <div class="meeting-date">${typeof formatDate === 'function' ? formatDate(meeting.date) : meeting.date}</div>
-                            <div class="meeting-actions">
-                                <button class="btn btn-sm" onclick="editMeeting('${meeting.id}')">編集</button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteMeeting('${meeting.id}')">削除</button>
-                            </div>
-                        </div>
-                        <div class="meeting-content">${typeof renderMarkdown === 'function' ? renderMarkdown(meeting.content || '') : escapeHtml(meeting.content || '')}</div>
-                        ${meeting.todos && meeting.todos.length > 0 ? `
-                            <div class="todo-section">
-                                <div class="todo-section-header">
-                                    📋 ToDo
-                                    <span class="todo-badge">${meeting.todos.filter(t => !t.completed).length}/${meeting.todos.length}</span>
-                                </div>
-                                <div class="todo-list">
-                                    ${meeting.todos.map((todo, todoIndex) => `
-                                        <div class="todo-item">
-                                            <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} 
-                                                   onchange="toggleTodoComplete('${meeting.id}', ${todoIndex})">
-                                            <span class="todo-text ${todo.completed ? 'completed' : ''}">${escapeHtml(todo.text)}</span>
-                                            ${todo.dueDate ? `<span class="todo-date">期限: ${typeof formatDate === 'function' ? formatDate(todo.dueDate) : todo.dueDate}</span>` : ''}
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        ${meeting.attachments && meeting.attachments.length > 0 ? `
-                            <div class="file-list">
-                                ${meeting.attachments.map(file => `
-                                    <div class="file-item">
-                                        📎 <a href="javascript:void(0)" onclick="openFile('${file.data || file.path}', '${file.name}', '${file.type || ''}')">${escapeHtml(file.name)}</a>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                    </div>
-                `).join('') : '<p>ミーティング履歴がありません</p>'}
-            </div>
-        </div>
-    `;
-
-    content.innerHTML = headerHtml + contactInfoHtml + detailsHtml + meetingsHtml;
-
-    // 添付ファイルのプレビューを描画
-    if (typeof renderAttachmentsInDetail === "function") { 
-        renderAttachmentsInDetail(contact); 
-    }
-    
-    // 折りたたみ機能を初期化
-    setTimeout(() => {
-        if (typeof initializeCollapsibles === 'function') {
-            initializeCollapsibles();
+        
+        // 複数選択フィールド
+        if (contact.types && Array.isArray(contact.types)) {
+            setMultiSelectValue('contactTypes', contact.types);
         }
-    }, 100);
-
-    modal.classList.add('active');
-    modal.querySelector('.modal-content').scrollTop = 0;
-    
-    console.log('[fix][contacts] showed detail for:', contactId);
+        
+        if (contact.affiliations && Array.isArray(contact.affiliations)) {
+            setMultiSelectValue('contactAffiliations', contact.affiliations);
+        }
+        
+    } catch (e) {
+        console.error('populateContactForm error:', e);
+    }
 }
 
-// [CLAUDE FIX] 画像URL解決関数（改善版）
-async function resolveContactImage(contactId, type, fallback = null) {
+// 複数選択値設定
+function setMultiSelectValue(fieldId, values) {
     try {
-        if (!contactId || !type) return fallback;
-        
-        // データから既存のパスを確認
-        const contact = contacts.find(c => c.id === contactId);
-        if (!contact) return fallback;
-        
-        let storedPath = '';
-        if (type === 'photo') {
-            storedPath = contact.photo || '';
-        } else if (type === 'businessCard') {
-            storedPath = contact.businessCard || '';
+        const field = document.getElementById(fieldId);
+        if (field && field.multiple) {
+            Array.from(field.options).forEach(option => {
+                option.selected = values.includes(option.value);
+            });
         }
-        
-        // drive:形式の場合
-        if (storedPath.startsWith('drive:')) {
-            if (typeof loadImageFromGoogleDrive === 'function') {
-                return await loadImageFromGoogleDrive(storedPath);
-            }
-        }
-        
-        // 通常のURL形式の場合
-        if (storedPath.startsWith('http') || storedPath.startsWith('data:')) {
-            return storedPath;
-        }
-        
-        // パスが無い場合はフォールバック
-        return fallback;
-        
-    } catch (error) {
-        console.warn(`[fix][attachments] resolve failed for ${contactId}/${type}:`, error);
-        return fallback;
+    } catch (e) {
+        console.error('setMultiSelectValue error:', e);
     }
 }
 
-// 添付ファイルの詳細表示（拡張版）
-async function renderAttachmentsInDetail(contact) {
+// [CLAUDE FIX ALL-IN-ONE] マルチセレクトドロップダウン（未定義エラー解消）
+function toggleMultiSelectDropdown(fieldId) {
     try {
-        // 1) 連絡先直下の添付
-        let atts = Array.isArray(contact.attachments) ? contact.attachments.slice() : [];
-
-        // 2) ミーティングに紐づく添付も補完
-        try {
-            const cid = contact.id || contact.contactId;
-            const mlist = (window.meetingsByContact && cid && window.meetingsByContact[cid]) ? window.meetingsByContact[cid] : [];
-            if (Array.isArray(mlist)) {
-                mlist.forEach(m => {
-                    if (Array.isArray(m && m.attachments)) {
-                        atts.push(...m.attachments);
-                    }
-                });
-            }
-        } catch (e) { 
-            console.warn('meetings attachments fallback failed', e); 
+        const dropdown = document.getElementById(fieldId + 'Dropdown');
+        if (dropdown) {
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
         }
-
-        // 3) 正規化（重複排除、空要素除去）
-        const seen = new Set();
-        atts = atts.map(a => {
-            if (!a) return null;
-            const name = a.name || a.fileName || '';
-            const mime = a.type || a.mimeType || '';
-            const ref = a.data || a.path || a.fileId || a.id || '';
-            const key = (name || '') + '|' + (ref || '');
-            if (seen.has(key)) return null;
-            seen.add(key);
-            return { name, mime, ref };
-        }).filter(Boolean);
-        
-        if (atts.length === 0) return; // 表示なし
-
-        const content = document.getElementById('contactDetailContent');
-        if (!content) return;
-        
-        const section = document.createElement('section');
-        section.style.marginTop = '1.5rem';
-        section.innerHTML = `<h3>添付ファイル</h3><div class="attachment-previews" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>`;
-        const grid = section.querySelector('.attachment-previews');
-
-        for (const file of atts) {
-            const card = document.createElement('div');
-            card.className = 'attachment-card';
-            card.style.cssText = 'border:1px solid var(--border-color);border-radius:10px;padding:10px;background:var(--bg-secondary);';
-            const name = file.name || 'ファイル';
-            const mime = (file.mime || '').toLowerCase();
-            const ref = file.ref || '';
-
-            // 拡張子判定も併用
-            const lower = (name || '').toLowerCase();
-            const isPDF = mime.includes('pdf') || lower.endsWith('.pdf');
-            const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(lower);
-
-            // Driveの実体URLへ
-            let url = ref;
-            if (ref && (ref.startsWith('drive:') || /^[A-Za-z0-9_-]{20,}$/.test(ref))) {
-                if (typeof loadDriveFileAsObjectURL === 'function') {
-                    url = await loadDriveFileAsObjectURL(ref);
-                }
-            }
-
-            if (isImage) {
-                if (url) {
-                    card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;"><img src="${url}" alt="${escapeHtml(name)}" style="width:100%;height:100%;object-fit:cover"></div><div style="margin-top:6px;word-break:break-all;">${escapeHtml(name)}</div>`;
-                } else {
-                    card.innerHTML = `<div>画像を読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
-                }
-            } else if (isPDF) {
-                if (url) {
-                    card.innerHTML = `<div style="aspect-ratio:4/3;overflow:hidden;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;">PDF</div><div style="margin-top:6px;word-break:break-all;"><a href="${url}" target="_blank" rel="noopener">📄 ${escapeHtml(name)}</a></div>`;
-                } else {
-                    card.innerHTML = `<div>PDFを読み込めませんでした</div><div>${escapeHtml(name)}</div>`;
-                }
-            } else {
-                card.innerHTML = `<div style="margin:6px 0;word-break:break-all;"><a href="${url || '#'}" target="_blank" rel="noopener">📎 ${escapeHtml(name)}</a></div>`;
-            }
-
-            grid.appendChild(card);
-        }
-
-        content.appendChild(section);
-    } catch (e) { 
-        console.warn('renderAttachmentsInDetail error', e); 
+    } catch (e) {
+        console.error('toggleMultiSelectDropdown error:', e);
     }
 }
+
+// グローバル関数のエクスポート
+window.collectOptionsFromContacts = collectOptionsFromContacts;
+window.mergeWithExistingOptions = mergeWithExistingOptions;
+window.refreshFiltersUI = refreshFiltersUI;
+window.onFilterChange = onFilterChange;
+window.resolveAvatarUrl = resolveAvatarUrl;
+window.resolveBusinessCardUrl = resolveBusinessCardUrl;
+window.setupLazyImageLoading = setupLazyImageLoading;
+window.showContactDetail = showContactDetail;
+window.saveContact = saveContact;
+window.editContact = editContact;
+window.toggleMultiSelectDropdown = toggleMultiSelectDropdown;
+
+// DOMContentLoaded時の初期化
+document.addEventListener('DOMContentLoaded', function() {
+    // 遅延画像読み込み設定
+    setupLazyImageLoading();
+    
+    // フィルター変更イベント設定
+    ['typeFilter', 'affiliationFilter', 'businessFilter', 'residenceFilter'].forEach(filterId => {
+        const filterElement = document.getElementById(filterId);
+        if (filterElement) {
+            filterElement.addEventListener('change', debounce(onFilterChange, 200));
+        }
+    });
+});

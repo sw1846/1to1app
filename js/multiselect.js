@@ -38,8 +38,6 @@ function toggleMultiSelectDropdown(fieldName) {
 
 // マルチセレクトオプションの更新
 function updateMultiSelectOptions(fieldName) {
-    // 追加UI行を挿入
-    if(fieldName){ renderAddNewRow(fieldName); }
     if (!fieldName) {
         // 全てのフィールドを更新
         updateMultiSelectOptions('type');
@@ -177,9 +175,6 @@ function filterMultiSelectOptions(fieldName, query) {
 function setupMultiSelect() {
     // 初期オプションを設定
     updateMultiSelectOptions();
-    renderAddNewRow('type');
-    renderAddNewRow('affiliation');
-    renderAddNewRow('industryInterests');
     
     // 初期タグ表示を更新
     updateMultiSelectTags('type');
@@ -392,90 +387,3 @@ window.handleContactMethodChange = handleContactMethodChange;
 window.setupReferrerAutocomplete = setupReferrerAutocomplete;
 window.selectReferrer = selectReferrer;
 window.switchMarkdownView = switchMarkdownView;
-
-
-// --- Add-New row (input + button) just under search ---
-function renderAddNewRow(fieldName) {
-    const dropdown = document.getElementById(fieldName + 'Dropdown');
-    if (!dropdown) return;
-    // If already present, skip
-    if (dropdown.querySelector('.multi-select-addnew')) return;
-    const searchBox = dropdown.querySelector('.multi-select-search');
-    const addDiv = document.createElement('div');
-    addDiv.className = 'multi-select-addnew';
-    addDiv.style.display = 'flex';
-    addDiv.style.gap = '0.5rem';
-    addDiv.style.padding = '0.4rem 0.6rem';
-    addDiv.innerHTML = `
-        <input type="text" class="form-input" placeholder="新規値を追加..." style="flex:1" id="${fieldName}AddInput">
-        <button type="button" class="btn btn-secondary" id="${fieldName}AddBtn">追加</button>
-    `;
-    if (searchBox && searchBox.parentNode) {
-        searchBox.parentNode.insertBefore(addDiv, searchBox.nextSibling);
-    } else {
-        dropdown.prepend(addDiv);
-    }
-    const btn = addDiv.querySelector('#' + fieldName + 'AddBtn');
-    btn.addEventListener('click', function(){
-        const input = addDiv.querySelector('#' + fieldName + 'AddInput');
-        const value = (input.value || '').trim();
-        addNewOption(fieldName, value);
-        input.value = '';
-        input.focus();
-    });
-}
-
-
-
-// --- Persist new taxonomy option ---
-function addNewOption(fieldName, value) {
-    try{
-        if(!value){ notify('値を入力してください'); return; }
-        // 正規化（全角/半角・大文字小文字）
-        const normalizedValue = normalizeString(value);
-        if(!normalizedValue){ notify('値が無効です'); return; }
-
-        // window.options を準備
-        if (!window.options || typeof window.options !== 'object') window.options = {};
-        const optionKey = (fieldName === 'industryInterests') ? 'industryInterests'
-                        : (fieldName === 'affiliation') ? 'affiliations'
-                        : (fieldName === 'type') ? 'types' : fieldName;
-        if (!Array.isArray(window.options[optionKey])) {
-            window.options[optionKey] = [];
-        }
-
-        // 重複（正規化ベース）をチェック
-        const existingNormalized = window.options[optionKey].map(item => normalizeString(item));
-        if (existingNormalized.includes(normalizedValue)) {
-            notify('既に存在します'); 
-            return;
-        }
-
-        // 追加
-        window.options[optionKey].push(value.trim());
-        window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
-        console.log(`[options] added "${value}" to ${optionKey}`);
-
-        // メタデータへ永続化
-        if (window.folderStructure && typeof AppData === 'object' && typeof AppData.saveOptionsToMetadata === 'function') {
-            AppData.saveOptionsToMetadata(window.folderStructure, window.options)
-                .then(() => console.log('[options] saved to metadata.json'))
-                .catch(err => console.warn('[options] save failed', err));
-        }
-
-        // UI即時反映
-        updateMultiSelectOptions(fieldName);
-        updateFilters && updateFilters();
-    }catch(e){
-        console.error('[options] addNewOption error', e);
-    }
-}
-
-
-/** fallback notify */
-function notify(msg){
-    try{
-        if (typeof window.showToast === 'function') { window.showToast(String(msg)); }
-        else { alert(String(msg)); }
-    }catch(e){ console.log(String(msg)); }
-}
