@@ -479,3 +479,6 @@ function notify(msg){
         else { alert(String(msg)); }
     }catch(e){ console.log(String(msg)); }
 }
+
+/* [fix][multiselect-add] expose for late mounts */
+window.renderAddNewRow = renderAddNewRow;

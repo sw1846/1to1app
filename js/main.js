@@ -211,7 +211,9 @@
     var idxContacts = Array.isArray(payload && payload.contacts) ? payload.contacts : [];
     window.contacts = idxContacts;                 // まずはインデックスの素データ
     window.meetingsByContact = payload && payload.meetingsByContact ? payload.meetingsByContact : {};
-    window.options = payload && payload.options ? payload.options : (window.options||{});
+    
+    rebuildMeetingsArray();
+window.options = payload && payload.options ? payload.options : (window.options||{});
     window.folderStructure = payload && payload.structure ? payload.structure : null;
 
     // 即時描画（プログレッシブ）
@@ -235,7 +237,9 @@
 
     var hydrated = await hydrator(window.folderStructure, window.contacts, window.meetingsByContact, {concurrency: 12, onBatch});
     
-    // [OPTIONS FIX] 既存データからオプションを構築
+    
+    rebuildMeetingsArray();
+// [OPTIONS FIX] 既存データからオプションを構築
     try{
       if(typeof window.buildOptionsFromContacts === 'function'){
         var extractedOptions = window.buildOptionsFromContacts(window.contacts);
@@ -372,7 +376,37 @@
     });
   }
 
-  function initializeMainApp(){
+  
+  /* [fix][meetings-init] meetingsByContact → meetings 配列へフラット化 */
+  function rebuildMeetingsArray(){
+    try{
+      var map = window.meetingsByContact || {};
+      var arr = [];
+      Object.keys(map).forEach(function(cid){
+        var list = Array.isArray(map[cid]) ? map[cid] : [];
+        list.forEach(function(m){
+          if(!m) return;
+          if(!m.contactId) m.contactId = cid;
+          // idが無い場合は安定IDを生成
+          if(!m.id){
+            var seed = (cid||'') + '|' + (m.date||'') + '|' + (m.title||'');
+            m.id = 'mtg_' + Array.from(seed).reduce((h,c)=>((h<<5)-h + c.charCodeAt(0))|0,0).toString(16);
+          }
+          arr.push(m);
+        });
+      });
+      // 日付降順で並べ替え（存在する場合）
+      arr.sort(function(a,b){ return new Date(b.date||0) - new Date(a.date||0); });
+      window.meetings = arr;
+      return arr;
+    }catch(e){
+      console.warn('[fix][meetings-init] rebuild failed', e);
+      window.meetings = window.meetings || [];
+      return window.meetings;
+    }
+  }
+
+function initializeMainApp(){
     // グローバル変数の初期化
     if(typeof window.contacts === 'undefined') window.contacts = [];
     if(typeof window.meetings === 'undefined') window.meetings = [];

@@ -420,13 +420,13 @@ async function saveContact() {
         
         // 新しい画像の場合はGoogle Driveにアップロード
         if (photoSrc && photoSrc.startsWith('data:')) {
-            photoPath = await saveAttachmentToFileSystem('photo.jpg', photoSrc, name);
+            photoPath = await saveAttachmentToFileSystem('photo.jpg', photoSrc, (typeof currentContactId!=='undefined'&&currentContactId)?currentContactId:name);
         } else if (photoSrc && !photoSrc.endsWith('.html')) {
             photoPath = photoSrc; // 既存の画像パス
         }
         
         if (businessCardSrc && businessCardSrc.startsWith('data:')) {
-            businessCardPath = await saveAttachmentToFileSystem('business-card.jpg', businessCardSrc, name);
+            businessCardPath = await saveAttachmentToFileSystem('business-card.jpg', businessCardSrc, (typeof currentContactId!=='undefined'&&currentContactId)?currentContactId:name);
         } else if (businessCardSrc && !businessCardSrc.endsWith('.html')) {
             businessCardPath = businessCardSrc; // 既存の画像パス
         }
