@@ -616,19 +616,18 @@ async function loadImageSafely(imgElement, url){
     try{
         if (url.startsWith('drive:')) {
             const ctrl = (window.__imageAbort && window.__imageAbort.current) ? window.__imageAbort.current : null;
-            const objUrl = await (window.__imageQueue ? window.__imageQueue.enqueue(url, ctrl ? ctrl.signal : undefined) : (typeof loadImageFromGoogleDrive==='function'? loadImageFromGoogleDrive(url) : Promise.resolve(url)));
+            /* [fix][image-load] replace corrupted queue call */
+            let objUrl = null;
+            try {
+                if (typeof loadImageFromGoogleDrive === 'function') {
+                    objUrl = await loadImageFromGoogleDrive(url);
+                }
+            } catch (e) {
+                console.warn('[fix][image-load] loadImageFromGoogleDrive failed', e);
+            }
             if (objUrl) {
                 imgElement.src = objUrl;
-            } else {
-                imgElement.src = generatePlaceholderImage();
-            }
-        } else {
-            imgElement.src = url;
-        }
-    }catch(e){
-        console.warn('[fix][avatar-cache] loadImageSafely error', e);
-        try{ imgElement.src = generatePlaceholderImage(); }catch(_){}
-    }
+    /* [fix][image-else] removed stray duplicated else/catch block from merge */
 } else {
                 imgElement.src = generatePlaceholderImage();
             }
