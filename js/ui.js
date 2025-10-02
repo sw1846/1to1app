@@ -1,5 +1,4 @@
-
-/* [fix][avatar-cache] 画像のLRUキャッシュ＋同時実行制御＋キャンセル */
+/* [fix][avatar-cache] 画像のLRUキャッシュ+同時実行制御+キャンセル */
 (function(){
     if(window.__imageCache){ return; }
     const MAX = 180;
@@ -95,7 +94,7 @@ async function hydrateDriveImage(imgEl){
     }catch(e){ console.warn('hydrateDriveImage error', e); }
 }
 
-// ui.js - UI操作・表示機能（完全版）
+// ui.js - UI操作・表示機能(完全版)
 
 // タブ切替
 function switchTab(tab) {
@@ -611,34 +610,54 @@ function resolveImageUrl(contact, type = 'photo') {
 }
 
 // [IMAGE FIX] 安全な画像読み込み
+/* [fix][avatar] START (anchor:ui.js:loadImageSafely) */
 async function loadImageSafely(imgElement, url){
     if (!imgElement || !url) return;
     try{
         if (url.startsWith('drive:')) {
-            const ctrl = (window.__imageAbort && window.__imageAbort.current) ? window.__imageAbort.current : null;
-            /* [fix][image-load] replace corrupted queue call */
-            let objUrl = null;
-            try {
-                if (typeof loadImageFromGoogleDrive === 'function') {
-                    objUrl = await loadImageFromGoogleDrive(url);
+            // [fix][avatar] キューイング機構を使用(並列制御)
+            if (typeof window.__imageQueue !== 'undefined' && typeof window.__imageQueue.enqueue === 'function') {
+                const ctrl = (window.__imageAbort && window.__imageAbort.current) || new AbortController();
+                try {
+                    const objUrl = await window.__imageQueue.enqueue(url, ctrl.signal);
+                    if (objUrl) {
+                        imgElement.src = objUrl;
+                    } else {
+                        imgElement.src = generatePlaceholderImage();
+                    }
+                } catch (e) {
+                    if (e && e.name === 'AbortError') {
+                        console.log('[fix][avatar] load aborted');
+                    } else {
+                        console.warn('[fix][avatar] load failed', e);
+                    }
+                    imgElement.src = generatePlaceholderImage();
                 }
-            } catch (e) {
-                console.warn('[fix][image-load] loadImageFromGoogleDrive failed', e);
-            }
-            if (objUrl) {
-                imgElement.src = objUrl;
-    /* [fix][image-else] removed stray duplicated else/catch block from merge */
-} else {
-                imgElement.src = generatePlaceholderImage();
+            } else {
+                // フォールバック:直接読み込み
+                let objUrl = null;
+                try {
+                    if (typeof loadImageFromGoogleDrive === 'function') {
+                        objUrl = await loadImageFromGoogleDrive(url);
+                    }
+                } catch (e) {
+                    console.warn('[fix][avatar] loadImageFromGoogleDrive failed', e);
+                }
+                if (objUrl) {
+                    imgElement.src = objUrl;
+                } else {
+                    imgElement.src = generatePlaceholderImage();
+                }
             }
         } else {
             imgElement.src = url;
         }
     } catch (error) {
-        console.warn('[image] Failed to load image:', error);
+        console.warn('[fix][avatar] Failed to load image:', error);
         imgElement.src = generatePlaceholderImage();
     }
 }
+/* [fix][avatar] END (anchor:ui.js:loadImageSafely) */
 
 // [IMAGE FIX] プレースホルダー画像生成
 function generatePlaceholderImage() {
@@ -913,7 +932,7 @@ async function openFile(dataUrlOrPath, fileName, fileType) {
             if (!resp.ok) { throw new Error('Drive fetch error '+resp.status); }
             const blob = await resp.blob();
             const blobUrl = URL.createObjectURL(blob);
-            // PDFは新規タブで表示、それ以外はダウンロード（または新規タブで開く）
+            // PDFは新規タブで表示、それ以外はダウンロード(または新規タブで開く)
             if (fileType === 'application/pdf') {
                 window.open(blobUrl, '_blank');
             } else {
@@ -1201,6 +1220,7 @@ function handleDragLeave(e) {
     this.classList.remove('drag-over');
 }
 
+/* [fix][kanban] START (anchor:ui.js:handleDrop) */
 async function handleDrop(e) {
     if (e.stopPropagation) {
         e.stopPropagation();
@@ -1213,24 +1233,47 @@ async function handleDrop(e) {
         const newStatus = targetColumn.dataset.status;
         const contactId = draggedCard.dataset.contactId;
 
-        // ステータス更新
+        // [fix][kanban] 楽観的UI更新
         const contact = (window.contacts||[]).find(c => c.id === contactId);
         if (contact) {
+            const oldStatus = contact.status; // ロールバック用
             contact.status = newStatus;
-            if (typeof saveAllData === 'function') {
-                await saveAllData();
+            
+            // 即座にUI更新
+            if (typeof renderContacts === 'function') {
+                renderContacts();
             }
-            renderContacts();
-            if (typeof showNotification === 'function') {
-                showNotification(`ステータスを「${newStatus}」に変更しました`, 'success');
+            
+            // [fix][kanban] 永続化処理
+            try {
+                if (typeof saveAllData === 'function') {
+                    await saveAllData();
+                    if (typeof showNotification === 'function') {
+                        showNotification(`ステータスを「${newStatus}」に変更しました`, 'success');
+                    }
+                    console.log('[fix][kanban] status saved:', contactId, '->', newStatus);
+                } else {
+                    throw new Error('saveAllData not available');
+                }
+            } catch (saveError) {
+                // [fix][kanban] 保存失敗時はロールバック
+                console.error('[fix][kanban] save failed:', saveError);
+                contact.status = oldStatus;
+                if (typeof renderContacts === 'function') {
+                    renderContacts();
+                }
+                if (typeof showNotification === 'function') {
+                    showNotification('ステータス変更の保存に失敗しました', 'error');
+                }
             }
         }
     }
 
     return false;
 }
+/* [fix][kanban] END (anchor:ui.js:handleDrop) */
 
-// ステータス管理モーダル（改修版）
+// ステータス管理モーダル(改修版)
 let draggedStatusItem = null;
 
 function openStatusManagementModal() {

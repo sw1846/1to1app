@@ -1,4 +1,4 @@
-// contacts.js - 分散ファイル構造対応の連絡先管理機能（修正版）
+// contacts.js - 分散ファイル構造対応の連絡先管理機能(修正版)
 
 // [CLAUDE FIX] フィルター機能とオプション管理の修正
 // 既存契約を維持しつつ、副作用を排除した実装
@@ -330,7 +330,7 @@ function resetContactForm() {
     }
 }
 
-// [CLAUDE FIX] 新しいIDを生成（分散ファイル構造用）
+// [CLAUDE FIX] 新しいIDを生成(分散ファイル構造用)
 function generateContactId() {
     if (typeof metadata !== 'undefined' && metadata.nextContactId) {
         const newId = String(metadata.nextContactId).padStart(6, '0');
@@ -338,7 +338,7 @@ function generateContactId() {
         return newId;
     }
     
-    // フォールバック：既存の最大IDから次のIDを生成
+    // フォールバック:既存の最大IDから次のIDを生成
     let maxId = 0;
     contacts.forEach(contact => {
         const id = parseInt(contact.id) || 0;
@@ -359,12 +359,12 @@ function normalizeImageRefForSave(existingRef, currentSrc){
         const exist = String(existingRef||'');
         // 既に drive: ならそのまま
         if(cur.startsWith('drive:')) return cur;
-        // data: はアップロード器に委ね（呼び出し元で処理）
+        // data: はアップロード器に委ね(呼び出し元で処理)
         if(cur.startsWith('data:')) return null;
         // blob: / http(s): は期限切れになるため、既存の参照を維持
         if(cur.startsWith('blob:') || cur.startsWith('http:') || cur.startsWith('https:')){
             if(exist && exist.startsWith('drive:')) return exist;
-            return null; // 保存しない（既存がなければ空）
+            return null; // 保存しない(既存がなければ空)
         }
         // 既存のattachments相対パス等は許容
         if(cur && !cur.endsWith('.html')) return cur;
@@ -372,6 +372,7 @@ function normalizeImageRefForSave(existingRef, currentSrc){
     }catch(e){ console.warn('[fix][image-resolve] normalize error', e); return existingRef||null; }
 }
 
+/* [fix][attachments] START (anchor:contacts.js:saveContact) */
 async function saveContact() {
     const nameInput = document.getElementById('nameInput');
     if (!nameInput) {
@@ -398,13 +399,15 @@ async function saveContact() {
         const attachments = typeof getAttachments === 'function' ? getAttachments('attachmentList') : [];
         for (let i = 0; i < attachments.length; i++) {
             if (attachments[i].data && !attachments[i].path.includes('attachments/') && !attachments[i].path.startsWith('drive:')) {
-                if (typeof saveAttachmentToFileSystem === 'function') {
-                    const filePath = await saveAttachmentToFileSystem(
+                if (typeof window.AppData !== 'undefined' && typeof window.AppData.saveAttachmentToFileSystem === 'function') {
+                    const filePath = await window.AppData.saveAttachmentToFileSystem(
                         attachments[i].name,
                         attachments[i].data,
-                        name
+                        currentContactId || name
                     );
                     attachments[i].path = filePath;
+                } else {
+                    console.warn('[fix][attachments] saveAttachmentToFileSystem not available');
                 }
             }
         }
@@ -418,17 +421,42 @@ async function saveContact() {
         let photoPath = null;
         let businessCardPath = null;
         
+        // [fix][attachments] 既存のdrive:参照を優先
+        const existingContact = currentContactId ? contacts.find(c => c.id === currentContactId) : null;
+        const existingPhoto = existingContact ? existingContact.photo : null;
+        const existingCard = existingContact ? existingContact.businessCard : null;
+        
         // 新しい画像の場合はGoogle Driveにアップロード
         if (photoSrc && photoSrc.startsWith('data:')) {
-            photoPath = await saveAttachmentToFileSystem('photo.jpg', photoSrc, (typeof currentContactId!=='undefined'&&currentContactId)?currentContactId:name);
-        } else if (photoSrc && !photoSrc.endsWith('.html')) {
-            photoPath = photoSrc; // 既存の画像パス
+            if (typeof window.AppData !== 'undefined' && typeof window.AppData.saveAttachmentToFileSystem === 'function') {
+                photoPath = await window.AppData.saveAttachmentToFileSystem(
+                    'photo.jpg', 
+                    photoSrc, 
+                    currentContactId || name
+                );
+            } else {
+                console.warn('[fix][attachments] saveAttachmentToFileSystem not available for photo');
+            }
+        } else if (photoSrc && photoSrc.startsWith('drive:')) {
+            photoPath = photoSrc; // 既存のdrive:参照を維持
+        } else if (photoSrc && (photoSrc.startsWith('http') || photoSrc.startsWith('blob:'))) {
+            photoPath = existingPhoto || null; // 既存参照を維持(blobは一時的なので保存しない)
         }
         
         if (businessCardSrc && businessCardSrc.startsWith('data:')) {
-            businessCardPath = await saveAttachmentToFileSystem('business-card.jpg', businessCardSrc, (typeof currentContactId!=='undefined'&&currentContactId)?currentContactId:name);
-        } else if (businessCardSrc && !businessCardSrc.endsWith('.html')) {
-            businessCardPath = businessCardSrc; // 既存の画像パス
+            if (typeof window.AppData !== 'undefined' && typeof window.AppData.saveAttachmentToFileSystem === 'function') {
+                businessCardPath = await window.AppData.saveAttachmentToFileSystem(
+                    'business-card.jpg', 
+                    businessCardSrc, 
+                    currentContactId || name
+                );
+            } else {
+                console.warn('[fix][attachments] saveAttachmentToFileSystem not available for business card');
+            }
+        } else if (businessCardSrc && businessCardSrc.startsWith('drive:')) {
+            businessCardPath = businessCardSrc; // 既存のdrive:参照を維持
+        } else if (businessCardSrc && (businessCardSrc.startsWith('http') || businessCardSrc.startsWith('blob:'))) {
+            businessCardPath = existingCard || null; // 既存参照を維持
         }
         
         // 接触方法の処理
@@ -497,7 +525,6 @@ async function saveContact() {
             }
         } catch (optError) {
             console.warn('[fix][options] updateOptionIfNew failed:', optError);
-            // オプション更新失敗は致命的ではないので続行
         }
 
         // 連絡先を保存または更新
@@ -539,7 +566,7 @@ async function saveContact() {
             calculateReferrerRevenues();
         }
 
-        // データを保存（分散ファイル構造）
+        // データを保存(分散ファイル構造)
         if (typeof saveAllData === 'function') {
             await saveAllData();
         }
@@ -582,6 +609,7 @@ async function saveContact() {
         }
     }
 }
+/* [fix][attachments] END (anchor:contacts.js:saveContact) */
 
 // 連絡先削除
 async function deleteContact() {
@@ -1048,7 +1076,8 @@ function showContactDetail(contactId) {
     console.log('[fix][contacts] showed detail for:', contactId);
 }
 
-// [CLAUDE FIX] 画像URL解決関数（改善版）
+// [CLAUDE FIX] 画像URL解決関数(改善版)
+/* [fix][image-resolve] START (anchor:contacts.js:resolveContactImage) */
 async function resolveContactImage(contactId, type, fallback = null) {
     try {
         if (!contactId || !type) return fallback;
@@ -1064,10 +1093,26 @@ async function resolveContactImage(contactId, type, fallback = null) {
             storedPath = contact.businessCard || '';
         }
         
-        // drive:形式の場合
+        // [fix][image-resolve] drive:形式の場合
         if (storedPath.startsWith('drive:')) {
+            // [fix][image-resolve] キャッシュ+並列制御を使用
+            if (typeof window.__imageQueue !== 'undefined' && typeof window.__imageQueue.enqueue === 'function') {
+                try {
+                    const ctrl = new AbortController();
+                    const url = await window.__imageQueue.enqueue(storedPath, ctrl.signal);
+                    return url || fallback;
+                } catch (e) {
+                    console.warn('[fix][image-resolve] queue failed', e);
+                }
+            }
+            
+            // フォールバック:直接読み込み
             if (typeof loadImageFromGoogleDrive === 'function') {
-                return await loadImageFromGoogleDrive(storedPath);
+                try {
+                    return await loadImageFromGoogleDrive(storedPath);
+                } catch (e) {
+                    console.warn('[fix][image-resolve] direct load failed', e);
+                }
             }
         }
         
@@ -1080,12 +1125,13 @@ async function resolveContactImage(contactId, type, fallback = null) {
         return fallback;
         
     } catch (error) {
-        console.warn(`[fix][attachments] resolve failed for ${contactId}/${type}:`, error);
+        console.warn(`[fix][image-resolve] resolve failed for ${contactId}/${type}:`, error);
         return fallback;
     }
 }
+/* [fix][image-resolve] END (anchor:contacts.js:resolveContactImage) */
 
-// 添付ファイルの詳細表示（拡張版）
+// 添付ファイルの詳細表示(拡張版)
 async function renderAttachmentsInDetail(contact) {
     try {
         // 1) 連絡先直下の添付
@@ -1106,7 +1152,7 @@ async function renderAttachmentsInDetail(contact) {
             console.warn('meetings attachments fallback failed', e); 
         }
 
-        // 3) 正規化（重複排除、空要素除去）
+        // 3) 正規化(重複排除、空要素除去)
         const seen = new Set();
         atts = atts.map(a => {
             if (!a) return null;

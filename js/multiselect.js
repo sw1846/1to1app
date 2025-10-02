@@ -17,6 +17,7 @@ if (typeof window.multiSelectSearchQueries === 'undefined') {
     };
 }
 
+/* [fix][multiselect] START (anchor:multiselect.js:toggleMultiSelectDropdown) */
 // マルチセレクトドロップダウンの表示/非表示切り替え
 function toggleMultiSelectDropdown(fieldName) {
     const dropdown = document.getElementById(fieldName + 'Dropdown');
@@ -32,9 +33,13 @@ function toggleMultiSelectDropdown(fieldName) {
     // 対象のドロップダウンを切り替え
     dropdown.classList.toggle('show');
     
-    // オプションを更新
-    updateMultiSelectOptions(fieldName);
+    // [fix][multiselect] ドロップダウンを開く時にオプションと追加UIを更新
+    if (dropdown.classList.contains('show')) {
+        updateMultiSelectOptions(fieldName);
+        renderAddNewRow(fieldName);
+    }
 }
+/* [fix][multiselect] END (anchor:multiselect.js:toggleMultiSelectDropdown) */
 
 // マルチセレクトオプションの更新
 function updateMultiSelectOptions(fieldName) {
@@ -393,46 +398,73 @@ window.setupReferrerAutocomplete = setupReferrerAutocomplete;
 window.selectReferrer = selectReferrer;
 window.switchMarkdownView = switchMarkdownView;
 
-
+/* [fix][multiselect] START (anchor:multiselect.js:renderAddNewRow) */
 // --- Add-New row (input + button) just under search ---
 function renderAddNewRow(fieldName) {
     const dropdown = document.getElementById(fieldName + 'Dropdown');
     if (!dropdown) return;
-    // If already present, skip
-    if (dropdown.querySelector('.multi-select-addnew')) return;
+    
+    // [fix][multiselect] 既存の追加UIを削除（再描画のため）
+    const existing = dropdown.querySelector('.multi-select-addnew');
+    if (existing) {
+        existing.remove();
+    }
+    
     const searchBox = dropdown.querySelector('.multi-select-search');
     const addDiv = document.createElement('div');
     addDiv.className = 'multi-select-addnew';
-    addDiv.style.display = 'flex';
-    addDiv.style.gap = '0.5rem';
-    addDiv.style.padding = '0.4rem 0.6rem';
+    addDiv.style.cssText = 'display: flex; gap: 0.5rem; padding: 0.4rem 0.6rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);';
     addDiv.innerHTML = `
-        <input type="text" class="form-input" placeholder="新規値を追加..." style="flex:1" id="${fieldName}AddInput">
-        <button type="button" class="btn btn-secondary" id="${fieldName}AddBtn">追加</button>
+        <input type="text" class="form-input" placeholder="新規値を追加..." style="flex:1; padding: 0.375rem 0.5rem; font-size: 0.875rem;" id="${fieldName}AddInput">
+        <button type="button" class="btn btn-sm btn-primary" id="${fieldName}AddBtn" style="white-space: nowrap;">➕ 追加</button>
     `;
+    
+    // [fix][multiselect] 検索ボックスの直後に挿入
     if (searchBox && searchBox.parentNode) {
         searchBox.parentNode.insertBefore(addDiv, searchBox.nextSibling);
     } else {
         dropdown.prepend(addDiv);
     }
+    
     const btn = addDiv.querySelector('#' + fieldName + 'AddBtn');
+    const input = addDiv.querySelector('#' + fieldName + 'AddInput');
+    
+    // [fix][multiselect] ボタンクリックで追加
     btn.addEventListener('click', function(){
-        const input = addDiv.querySelector('#' + fieldName + 'AddInput');
         const value = (input.value || '').trim();
         addNewOption(fieldName, value);
         input.value = '';
         input.focus();
     });
+    
+    // [fix][multiselect] Enterキーでも追加
+    input.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = (input.value || '').trim();
+            addNewOption(fieldName, value);
+            input.value = '';
+        }
+    });
 }
+/* [fix][multiselect] END (anchor:multiselect.js:renderAddNewRow) */
 
-
-
+/* [fix][multiselect] START (anchor:multiselect.js:addNewOption) */
 // --- Persist new taxonomy option ---
-function addNewOption(fieldName, value) {
+async function addNewOption(fieldName, value) {
     try{
         if(!value){ notify('値を入力してください'); return; }
-        // 正規化（全角/半角・大文字小文字）
-        const normalizedValue = normalizeString(value);
+        
+        // [fix][multiselect] 正規化（全角/半角・大文字小文字）
+        let normalizedValue = value.trim();
+        if (typeof normalizeString === 'function') {
+            try {
+                normalizedValue = normalizeString(value);
+            } catch (e) {
+                console.warn('[multiselect] normalizeString failed', e);
+            }
+        }
+        
         if(!normalizedValue){ notify('値が無効です'); return; }
 
         // window.options を準備
@@ -444,41 +476,81 @@ function addNewOption(fieldName, value) {
             window.options[optionKey] = [];
         }
 
-        // 重複（正規化ベース）をチェック
-        const existingNormalized = window.options[optionKey].map(item => normalizeString(item));
-        if (existingNormalized.includes(normalizedValue)) {
+        // [fix][multiselect] 重複（正規化ベース）をチェック
+        const existingNormalized = window.options[optionKey].map(item => {
+            if (typeof normalizeString === 'function') {
+                try {
+                    return normalizeString(item);
+                } catch (e) {
+                    return String(item || '').toLowerCase().trim();
+                }
+            }
+            return String(item || '').toLowerCase().trim();
+        });
+        
+        if (existingNormalized.includes(normalizedValue.toLowerCase())) {
             notify('既に存在します'); 
             return;
         }
 
         // 追加
         window.options[optionKey].push(value.trim());
-        window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
-        console.log(`[options] added "${value}" to ${optionKey}`);
+        
+        // [fix][multiselect] ソート（日本語対応）
+        if (typeof uniqueSortedJa === 'function') {
+            window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
+        } else {
+            window.options[optionKey] = Array.from(new Set(window.options[optionKey])).sort((a, b) => 
+                a.localeCompare(b, 'ja')
+            );
+        }
+        
+        console.log(`[multiselect] added "${value}" to ${optionKey}`);
 
-        // メタデータへ永続化
+        // [fix][multiselect] メタデータへ永続化
         if (window.folderStructure && typeof AppData === 'object' && typeof AppData.saveOptionsToMetadata === 'function') {
-            AppData.saveOptionsToMetadata(window.folderStructure, window.options)
-                .then(() => console.log('[options] saved to metadata.json'))
-                .catch(err => console.warn('[options] save failed', err));
+            try {
+                await AppData.saveOptionsToMetadata(window.folderStructure, window.options);
+                console.log('[multiselect] saved to metadata.json');
+                notify(`「${value.trim()}」を追加しました`);
+            } catch (err) {
+                console.warn('[multiselect] save failed', err);
+                notify('保存に失敗しました');
+            }
+        } else {
+            console.warn('[multiselect] saveOptionsToMetadata not available');
+            notify(`「${value.trim()}」を追加しました（ローカルのみ）`);
         }
 
-        // UI即時反映
+        // [fix][multiselect] UI即時反映
         updateMultiSelectOptions(fieldName);
-        updateFilters && updateFilters();
+        if (typeof updateFilters === 'function') {
+            updateFilters();
+        }
     }catch(e){
-        console.error('[options] addNewOption error', e);
+        console.error('[multiselect] addNewOption error', e);
+        notify('エラーが発生しました');
     }
 }
+/* [fix][multiselect] END (anchor:multiselect.js:addNewOption) */
 
-
+/* [fix][multiselect] START (anchor:multiselect.js:notify) */
 /** fallback notify */
 function notify(msg){
     try{
-        if (typeof window.showToast === 'function') { window.showToast(String(msg)); }
-        else { alert(String(msg)); }
-    }catch(e){ console.log(String(msg)); }
+        // [fix][multiselect] showNotification を優先使用
+        if (typeof window.showNotification === 'function') { 
+            window.showNotification(String(msg), 'info'); 
+        } else if (typeof window.showToast === 'function') { 
+            window.showToast(String(msg)); 
+        } else { 
+            console.log('[multiselect]', String(msg)); 
+        }
+    }catch(e){ 
+        console.log('[multiselect]', String(msg)); 
+    }
 }
+/* [fix][multiselect] END (anchor:multiselect.js:notify) */
 
 /* [fix][multiselect-add] expose for late mounts */
 window.renderAddNewRow = renderAddNewRow;

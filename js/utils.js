@@ -1,4 +1,4 @@
-// utils.js - 分散ファイル構造対応のユーティリティ関数（修正版）
+// utils.js - 分散ファイル構造対応のユーティリティ関数(修正版)
 
 // [CLAUDE FIX] 重複排除・正規化・エラーハンドリング強化
 
@@ -33,7 +33,7 @@ function formatDate(dateString) {
     }
 }
 
-// [CLAUDE FIX] 文字列正規化関数（全角半角・大小文字・空白統一）
+// [CLAUDE FIX] 文字列正規化関数(全角半角・大小文字・空白統一)
 function normalizeString(text) {
     if (!text || typeof text !== 'string') return '';
     
@@ -247,7 +247,7 @@ function parseAttachments(attachmentsStr) {
     }
 }
 
-// ToDoパース（分散ファイル構造対応）
+// ToDoパース(分散ファイル構造対応)
 function parseTodos(todosStr) {
     if (!todosStr) return [];
     
@@ -324,7 +324,7 @@ function showNotification(message, type = 'info') {
     }
 }
 
-// [CLAUDE FIX] オプションの安全な更新（エラー修正版）
+// [CLAUDE FIX] オプションの安全な更新(エラー修正版)
 function updateOptionIfNew(optionKey, value) {
     try {
         if (!value || typeof value !== 'string') return;
@@ -346,7 +346,7 @@ function updateOptionIfNew(optionKey, value) {
         // 既存の値を正規化して比較
         const existingNormalized = window.options[optionKey].map(item => normalizeString(item));
         
-        // 重複チェック（正規化ベース）
+        // 重複チェック(正規化ベース)
         if (!existingNormalized.includes(normalizedValue)) {
             window.options[optionKey].push(value);  // 元の値で保存
             window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
@@ -416,7 +416,7 @@ function buildSearchIndex(contacts = []) {
     }
 }
 
-// [CLAUDE FIX] 高速検索機能（副作用なし）
+// [CLAUDE FIX] 高速検索機能(副作用なし)
 function fastSearch(query, contacts = [], searchIndex = {}) {
     try {
         if (!query || query.trim() === '') return contacts;
@@ -441,7 +441,7 @@ function fastSearch(query, contacts = [], searchIndex = {}) {
     }
 }
 
-// [CLAUDE FIX] フィルター適用（純関数版）
+// [CLAUDE FIX] フィルター適用(純関数版)
 function applyFilters(contacts, filters) {
     try {
         if (!Array.isArray(contacts)) return [];
@@ -450,7 +450,7 @@ function applyFilters(contacts, filters) {
         return contacts.filter(contact => {
             if (!contact) return false;
             
-            // 種別フィルター（OR条件）
+            // 種別フィルター(OR条件)
             if (filters.types && filters.types.length > 0) {
                 const contactTypes = Array.isArray(contact.types) ? contact.types : [];
                 const hasMatchingType = filters.types.some(filterType => 
@@ -567,7 +567,7 @@ function updateMeetingIndex(contactId, meetings = [], meetingsIndex = {}) {
     }
 }
 
-// [CLAUDE FIX] インデックスの再構築（安全版）
+// [CLAUDE FIX] インデックスの再構築(安全版)
 function rebuildIndexes(contacts = [], meetings = [], metadata = {}) {
     try {
         console.log('[fix][utils] rebuilding indexes...');
@@ -619,7 +619,7 @@ function rebuildIndexes(contacts = [], meetings = [], metadata = {}) {
     }
 }
 
-// データマイグレーション（レガシー形式から分散構造へ）
+// データマイグレーション(レガシー形式から分散構造へ)
 function migrateFromLegacyFormat(legacyContacts, legacyMeetings, legacyOptions) {
     try {
         console.log('[fix][utils] migrating legacy data...');
@@ -754,7 +754,7 @@ function calculateDataSize(data) {
     }
 }
 
-// データの圧縮（シンプルな最適化）
+// データの圧縮(シンプルな最適化)
 function compressData(data) {
     try {
         // 不要なフィールドの削除
@@ -863,6 +863,7 @@ function validateDataIntegrity(contacts = [], meetings = []) {
 }
 
 // [CLAUDE FIX] Google Drive 画像読み込みユーティリティ
+/* [fix][avatar-cache] START (anchor:utils.js:loadImageFromGoogleDrive) */
 async function loadImageFromGoogleDrive(ref) {
     try {
         if (!ref) return null;
@@ -870,6 +871,15 @@ async function loadImageFromGoogleDrive(ref) {
         
         if (ref.startsWith('drive:')) {
             const fileId = ref.split(':')[1];
+            
+            // [fix][avatar-cache] LRUキャッシュをチェック
+            if (typeof window.__imageCache !== 'undefined' && typeof window.__imageCache.get === 'function') {
+                const cached = window.__imageCache.get(ref);
+                if (cached) {
+                    console.log('[fix][avatar-cache] cache hit:', ref);
+                    return cached;
+                }
+            }
             
             // トークン取得
             let token = null;
@@ -879,35 +889,57 @@ async function loadImageFromGoogleDrive(ref) {
             }
             
             if (!token) {
-                console.warn('[fix][utils] no access token for Drive image');
+                console.warn('[fix][avatar-cache] no access token for Drive image');
                 return null;
             }
             
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            // [fix][avatar-cache] タイムアウト付きfetch
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒
             
-            if (!response.ok) {
-                console.warn('[fix][utils] Drive fetch failed:', response.status);
+            try {
+                const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    console.warn('[fix][avatar-cache] Drive fetch failed:', response.status);
+                    return null;
+                }
+                
+                const blob = await response.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                
+                // [fix][avatar-cache] キャッシュに保存
+                if (typeof window.__imageCache !== 'undefined' && typeof window.__imageCache.set === 'function') {
+                    window.__imageCache.set(ref, objectUrl);
+                }
+                
+                return objectUrl;
+            } catch (fetchError) {
+                clearTimeout(timeoutId);
+                if (fetchError.name === 'AbortError') {
+                    console.warn('[fix][avatar-cache] fetch timeout');
+                } else {
+                    throw fetchError;
+                }
                 return null;
             }
-            
-            const blob = await response.blob();
-            return await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
         }
         
         // それ以外はURLとしてそのまま返す
         return ref;
     } catch (error) {
-        console.warn('[fix][utils] loadImageFromGoogleDrive error:', error);
+        console.warn('[fix][avatar-cache] loadImageFromGoogleDrive error:', error);
         return null;
     }
 }
-/* [fix][avatar-cache] AbortSignal対応版（UIからのキャンセルに対応） */
+/* [fix][avatar-cache] END (anchor:utils.js:loadImageFromGoogleDrive) */
+
+/* [fix][avatar-cache] AbortSignal対応版(UIからのキャンセルに対応) */
 async function loadImageFromGoogleDriveWithSignal(ref, signal){
     try{
         if(!ref) return null;
@@ -949,7 +981,6 @@ async function getImageObjectUrl(ref, signal){
     if(typeof loadImageFromGoogleDriveWithSignal === 'function') return loadImageFromGoogleDriveWithSignal(ref, signal);
     return loadImageFromGoogleDrive(ref);
 }
-
 
 // Drive汎用ファイル読み込みユーティリティ
 async function loadDriveFileAsObjectURL(ref) {
