@@ -83,6 +83,21 @@
 async function hydrateDriveImage(imgEl){
 
 
+
+
+    try{
+        if(!imgEl) return;
+        const ref = imgEl.getAttribute('src') || imgEl.dataset.src || '';
+        if(ref && ref.startsWith('drive:')){
+            imgEl.removeAttribute('src'); // いったん空に
+            if(typeof loadImageFromGoogleDrive === 'function'){
+                const dataUrl = await loadImageFromGoogleDrive(ref);
+                if(dataUrl){ imgEl.src = dataUrl; }
+            }
+        }
+    }catch(e){ console.warn('hydrateDriveImage error', e); }
+}
+
 /* [merge][restore] START function getFilteredContacts */
 function getFilteredContacts() {
     console.log('[ui] getFilteredContacts called, total contacts:', (window.contacts || []).length);
@@ -487,18 +502,7 @@ function getTypeColorClass(contact) {
 }
 /* [merge][restore] END function getTypeColorClass */
 
-    try{
-        if(!imgEl) return;
-        const ref = imgEl.getAttribute('src') || imgEl.dataset.src || '';
-        if(ref && ref.startsWith('drive:')){
-            imgEl.removeAttribute('src'); // いったん空に
-            if(typeof loadImageFromGoogleDrive === 'function'){
-                const dataUrl = await loadImageFromGoogleDrive(ref);
-                if(dataUrl){ imgEl.src = dataUrl; }
-            }
-        }
-    }catch(e){ console.warn('hydrateDriveImage error', e); }
-}
+
 
 // [IMAGE FIX] 画像URL解決（レガシー対応版）
 function resolveImageUrl(contact, type = 'photo') {
