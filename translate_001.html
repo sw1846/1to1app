@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>System A → System B 変換ツール（A命名則対応版）</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a33;--ink:#e8efff;--muted:#aab7d4;--acc:#6aa3ff;--ok:#36c27a;--warn:#e3ad2f;--bad:#ef5b73;--border:#243054}
+    body{margin:0;background:linear-gradient(180deg,#0b1020 0%,#101830 100%);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,system-ui,sans-serif}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px 80px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.2px}
+    .card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media(max-width:900px){.row{grid-template-columns:1fr}}
+    .sec{padding:16px;border-top:1px solid var(--border)}
+    .sec:first-child{border-top:none}
+    .sec h2{font-size:16px;margin:0 0 8px;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    .span6{grid-column:span 6}
+    .span12{grid-column:span 12}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="text"],input[type="password"],textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0f1731;color:var(--ink);outline:none}
+    textarea{min-height:90px;resize:vertical}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:12px;background:#192445;border:1px solid var(--border);color:var(--ink);cursor:pointer;text-decoration:none;font-weight:600}
+    .btn:hover{background:#1b264a}
+    .btn.primary{background:linear-gradient(180deg,#2d5ffd 0%,#1b45c9 100%);border:none}
+    .btn.ok{background:linear-gradient(180deg,#2cc971 0%,#1c8f50 100%);border:none}
+    .btn.warn{background:linear-gradient(180deg,#f0b528 0%,#c99011 100%);border:none}
+    .btn.bad{background:linear-gradient(180deg,#ef5b73 0%,#c43650 100%);border:none}
+    .pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#172345;border:1px solid var(--border);color:var(--muted)}
+    .small{font-size:12px;color:var(--muted)}
+    .muted{color:var(--muted)}
+    .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .right{margin-left:auto}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .log{background:#0f152b;border:1px solid var(--border);border-radius:12px;padding:12px;height:240px;overflow:auto;white-space:pre-wrap}
+    .kbd{border:1px solid var(--border);background:#0e1530;border-radius:6px;padding:2px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .progress{height:10px;background:#0f1731;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+    .bar{height:100%;width:0%;background:linear-gradient(90deg,#2d5ffd,#2cc971)}
+    .tip{padding:10px 12px;border:1px dashed var(--border);border-radius:12px;background:rgba(255,255,255,.03)}
+    .code{background:#0f1731;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>System A → System B 変換ツール（A命名則対応）</h1>
+      <div class="flex right">
+        <button class="btn" id="btnAuth">🔑 Googleにサインイン</button>
+        <span id="authState" class="pill">未認証</span>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="sec">
+        <div class="row">
+          <div class="span6">
+            <h2>① 変換元（System Aローカルフォルダ）</h2>
+            <p class="small">contacts.json / meetings.json / options.json が入ったフォルダを選択</p>
+            <div class="flex">
+              <button class="btn" id="btnPickSrc">📁 フォルダを選択</button>
+              <span id="srcState" class="pill">未選択</span>
+            </div>
+          </div>
+          <div class="span6">
+            <h2>② 出力先</h2>
+            <div class="grid" style="margin-top:8px">
+              <div class="span6">
+                <label>ローカル出力フォルダ</label>
+                <div class="flex">
+                  <button class="btn" id="btnPickDstLocal">📁 出力先を選択</button>
+                  <span id="dstLocalState" class="pill">未選択</span>
+                </div>
+              </div>
+              <div class="span6">
+                <label>Googleドライブ フォルダID</label>
+                <input id="driveFolderId" type="text" placeholder="DriveフォルダのIDを入力（任意）">
+              </div>
+              <div class="span12">
+                <div class="progress"><div class="bar" id="bar"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>③ 変換設定</h2>
+        <div class="grid">
+          <div class="span6">
+            <label>Google OAuth Client ID（Driveアップロード時に必須）</label>
+            <input id="clientId" type="text" placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com">
+            <div class="small muted" style="margin-top:6px">スコープ：<span class="mono">https://www.googleapis.com/auth/drive.file</span></div>
+          </div>
+          <div class="span6">
+            <label>オプション</label>
+            <div class="flex">
+              <label><input type="checkbox" id="optDryRun" checked> ドライラン</label>
+              <label><input type="checkbox" id="optOverwriteIndex" checked> index/* を上書き</label>
+            </div>
+          </div>
+          <div class="span12">
+            <div class="tip small">
+              <b>A命名則（連絡先名ディレクトリ＋「{連絡先名}_{元ファイル名}」）で保存しつつ、Bのディレクトリ構造は維持</b> します。
+              <div style="margin-top:6px">
+                <label><input type="checkbox" id="optUseAName"> A命名則を使う（contacts配下のディレクトリ名を連絡先名ベースに、ファイル名に連絡先名を接頭）</label><br>
+                <label class="small"><input type="checkbox" id="optAppendId" checked> 同姓同名対策としてフォルダ名の末尾に <span class="mono">__{contactId}</span> を付与</label><br>
+                <label class="small"><input type="checkbox" id="optPrefixMeetFiles" checked> meetings配下のファイル名にも連絡先名プレフィクスを付与</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>④ 実行</h2>
+        <div class="flex">
+          <button class="btn primary" id="btnConvert">🚀 変換を実行</button>
+          <button class="btn ok" id="btnUpload">☁️ 直接アップロード</button>
+          <button class="btn warn" id="btnWriteLocal">💾 ローカルへ書き出し</button>
+          <span class="right small">バージョン: 2025-09-27H</span>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>ログ</h2>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+<script>
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const log = (...args)=>{ const el=$('#log'); el.textContent += args.join(' ') + '\\n'; el.scrollTop = el.scrollHeight; }
+  const setBar = (p)=> { $('#bar').style.width = Math.min(100,Math.max(0,p))+'%'; }
+  const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+  const sanitize = (s)=> String(s||'').replace(/[\\/:*?"<>|\\u0000-\\u001F]/g,'_').trim().slice(0,180);
+  const isDataUrl = (v)=> typeof v==='string' && v.startsWith('data:');
+  const fmtDate = (d)=> d? new Date(d).toISOString(): null;
+  const guessExt = (mime)=> ({'image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp','image/gif':'.gif','application/pdf':'.pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'.docx','application/msword':'.doc','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'.xlsx','application/vnd.ms-excel':'.xls','application/vnd.openxmlformats-officedocument.presentationml.presentation':'.pptx','application/zip':'.zip'}[mime]||'');
+
+  function dataUrlToBlob(dataUrl){
+    const m = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl);
+    if(!m) throw new Error('unknown dataURL: '+dataUrl.slice(0,40)+'...');
+    const mime = m[1]; const bin = atob(m[2]); const len=bin.length; const arr = new Uint8Array(len);
+    for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i);
+    return new Blob([arr], {type:mime});
+  }
+
+  let srcHandle=null, dstHandle=null;
+  $('#btnPickSrc').onclick = async ()=>{
+    try{ srcHandle = await window.showDirectoryPicker(); $('#srcState').textContent='選択済'; log('✓ 変換元フォルダを選択'); }catch(e){ log('! 変換元の選択をキャンセル'); }
+  };
+  $('#btnPickDstLocal').onclick = async ()=>{
+    try{ dstHandle = await window.showDirectoryPicker(); $('#dstLocalState').textContent='選択済'; log('✓ 出力フォルダを選択'); }catch(e){ log('! 出力先の選択をキャンセル'); }
+  };
+  async function readJSONFrom(handle, name){
+    const f = await handle.getFileHandle(name, {create:false}).then(h=>h.getFile());
+    const t = await f.text(); return JSON.parse(t);
+  }
+  async function writeFileRecursive(root, path, blob){
+    const parts = path.split('/').filter(Boolean);
+    const file = parts.pop();
+    let dir = root;
+    for (const p of parts){ dir = await dir.getDirectoryHandle(p, {create:true}); }
+    const fh = await dir.getFileHandle(file, {create:true});
+    const ws = await fh.createWritable(); await ws.write(blob); await ws.close();
+  }
+
+  function buildIdGen(prefix='contact-', width=6){ let n=0; return ()=> prefix + String(++n).padStart(width,'0'); }
+  function buildMeetingIdGen(prefix='meeting-', width=6){ let n=0; return ()=> prefix + String(++n).padStart(width,'0'); }
+
+  function convert({contacts, meetings, options}){
+    const useAName = $('#optUseAName').checked;
+    const appendId = $('#optAppendId').checked;
+    const prefixMeet = $('#optPrefixMeetFiles').checked;
+
+    const nextContactId = buildIdGen('contact-');
+    const nextMeetingId = buildMeetingIdGen('meeting-');
+    const idMap = new Map();
+
+    const dirNameMap = new Map(); // contactId -> dirName (unique, based on name)
+    const dirNameUsed = new Set();
+
+    function buildContactDirName(name, id){
+      let base = sanitize(name||'').replace(/\s+/g,'_');
+      if (!base) base = 'no_name';
+      let dir = base;
+      if (appendId){
+        dir = `${base}__${id}`;
+      }else if (dirNameUsed.has(dir)){
+        dir = `${base}__${id.slice(-4)}`; // 同名衝突対策
+      }
+      dirNameUsed.add(dir);
+      return dir;
+    }
+
+    function contactDir(id, name){
+      if (!useAName) return `attachments/contacts/${id}`;
+      const dn = dirNameMap.get(id);
+      return `attachments/contacts/${dn}`;
+    }
+
+    function contactFileNamePrefix(id, name){
+      if (!useAName) return '';
+      const dn = dirNameMap.get(id);
+      return `${dn.split('__')[0]}_`; // 人間可読の連絡先名部分のみを接頭に
+    }
+
+    const fileRefs = []; // {kind, ownerId, meetingId?, dataUrl, outPath, name}
+    const outContacts = contacts.map((c, idx)=>{
+      const oldId = c.id ?? c.contactId ?? (idx+1);
+      const newId = nextContactId();
+      idMap.set(oldId, newId);
+
+      // dir名を確定
+      if (useAName){
+        const dn = buildContactDirName(c.name, newId);
+        dirNameMap.set(newId, dn);
+      }
+
+      let photoRef=null, bizRef=null, attaches=[];
+
+      if (isDataUrl(c.photo)) {
+        const mime = /^data:([^;]+)/.exec(c.photo)?.[1]||'image/jpeg';
+        const ext = guessExt(mime) || '.jpg';
+        const dir = contactDir(newId, c.name);
+        const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}photo${ext}` : `photo${ext}`;
+        const outPath = `${dir}/${fname}`;
+        fileRefs.push({kind:'contact-photo', ownerId:newId, dataUrl:c.photo, outPath});
+        photoRef = { path: outPath, driveFileId: null };
+      } else if (c.photo && typeof c.photo==='object' && isDataUrl(c.photo.dataUrl)){
+        const mime = /^data:([^;]+)/.exec(c.photo.dataUrl)?.[1]||'application/octet-stream';
+        const ext = guessExt(mime) || '';
+        const dir = contactDir(newId, c.name);
+        const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}${sanitize(c.photo.name||('photo'+ext))}` : `photo${ext}`;
+        const outPath = `${dir}/${fname}`;
+        fileRefs.push({kind:'contact-photo', ownerId:newId, dataUrl:c.photo.dataUrl, outPath, name: c.photo.name});
+        photoRef = { path: outPath, driveFileId: null };
+      }
+
+      if (isDataUrl(c.businessCard)) {
+        const mime = /^data:([^;]+)/.exec(c.businessCard)?.[1]||'image/jpeg';
+        const ext = guessExt(mime) || '.jpg';
+        const dir = contactDir(newId, c.name);
+        const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}business-card${ext}` : `business-card${ext}`;
+        const outPath = `${dir}/${fname}`;
+        fileRefs.push({kind:'contact-bizcard', ownerId:newId, dataUrl:c.businessCard, outPath});
+        bizRef = { path: outPath, driveFileId: null };
+      } else if (c.businessCard && typeof c.businessCard==='object' && isDataUrl(c.businessCard.dataUrl)){
+        const mime = /^data:([^;]+)/.exec(c.businessCard.dataUrl)?.[1]||'application/octet-stream';
+        const ext = guessExt(mime) || '';
+        const dir = contactDir(newId, c.name);
+        const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}${sanitize(c.businessCard.name||('business-card'+ext))}` : `business-card${ext}`;
+        const outPath = `${dir}/${fname}`;
+        fileRefs.push({kind:'contact-bizcard', ownerId:newId, dataUrl:c.businessCard.dataUrl, outPath, name: c.businessCard.name});
+        bizRef = { path: outPath, driveFileId: null };
+      }
+
+      if (Array.isArray(c.attachments)){
+        for(const a of c.attachments){
+          if (typeof a==='string' && isDataUrl(a)){
+            const mime = /^data:([^;]+)/.exec(a)?.[1]||'application/octet-stream';
+            const ext = guessExt(mime) || '';
+            const dir = contactDir(newId, c.name);
+            const base = `file${ext}`;
+            const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}${base}` : base;
+            const outPath = `${dir}/${fname}`;
+            fileRefs.push({kind:'contact-attach', ownerId:newId, dataUrl:a, outPath, name: fname});
+            attaches.push({ name: fname, path: outPath, driveFileId: null, mimeType: mime });
+          } else if (a && isDataUrl(a.dataUrl)){
+            const mime = /^data:([^;]+)/.exec(a.dataUrl)?.[1]||a.mimeType||'application/octet-stream';
+            const ext = guessExt(mime) || '';
+            const dir = contactDir(newId, c.name);
+            const base = sanitize(a.name || ('file'+ext));
+            const fname = useAName ? `${contactFileNamePrefix(newId, c.name)}${base}` : base;
+            const outPath = `${dir}/${fname}`;
+            fileRefs.push({kind:'contact-attach', ownerId:newId, dataUrl:a.dataUrl, outPath, name: fname});
+            attaches.push({ name: fname, path: outPath, driveFileId: null, mimeType: mime });
+          }
+        }
+      }
+
+      const out = {
+        id: newId,
+        name: c.name || '',
+        furigana: c.furigana || '',
+        company: c.company || '',
+        emails: Array.isArray(c.emails)? c.emails : (c.email? [c.email] : []),
+        phones: Array.isArray(c.phones)? c.phones : (c.phone? [c.phone] : []),
+        website: c.website || '',
+        businesses: Array.isArray(c.businesses)? c.businesses : (c.business? [c.business] : []),
+        contactMethod: c.contactMethod || (c.referrer? 'referral':'direct'),
+        referrer: c.referrer || null,
+        directContact: c.directContact || (c.contactMethod==='direct'? '所属が同じ': null),
+        industryInterests: Array.isArray(c.industryInterests)? c.industryInterests: [],
+        strengths: c.strengths || '',
+        approach: c.approach || '',
+        history: c.history || '',
+        priorInfo: c.priorInfo || '',
+        activityArea: c.activityArea || '',
+        residence: c.residence || '',
+        hobbies: c.hobbies || '',
+        revenue: Number(c.revenue||0),
+        types: Array.isArray(c.types)? c.types : (typeof c.type==='string' && c.type? [c.type]: []),
+        affiliations: Array.isArray(c.affiliations)? c.affiliations : (typeof c.affiliation==='string' && c.affiliation? [c.affiliation]: []),
+        photoRef: photoRef,
+        businessCardRef: bizRef,
+        attachments: attaches,
+        createdAt: fmtDate(c.createdAt) || null,
+        updatedAt: fmtDate(c.updatedAt) || null
+      };
+      return out;
+    });
+
+    const meetingsByContact = new Map();
+    const outMeetingMeta = [];
+    const meetingIdMap = new Map();
+
+    (meetings||[]).forEach((m, idx)=>{
+      const oldCid = m.contactId ?? m.contactID ?? m.contact ?? m.cid;
+      const newCid = idMap.get(oldCid) || null;
+      if (!newCid) return;
+
+      const newMid = nextMeetingId();
+      meetingIdMap.set(m.id||idx, newMid);
+
+      const thisMeeting = {
+        id: newMid,
+        contactId: newCid,
+        date: fmtDate(m.date) || fmtDate(m.datetime) || fmtDate(m.createdAt) || fmtDate(new Date()),
+        content: m.content || m.note || '',
+        todos: Array.isArray(m.todos)? m.todos : [],
+        attachments: [],
+        createdAt: fmtDate(m.createdAt) || null,
+        updatedAt: fmtDate(m.updatedAt) || null
+      };
+
+      if (Array.isArray(m.attachments)){
+        for(const a of m.attachments){
+          if (typeof a==='string' && isDataUrl(a)){
+            const mime = /^data:([^;]+)/.exec(a)?.[1]||'application/octet-stream';
+            const ext = guessExt(mime) || '';
+            const dir = `attachments/meetings/${newMid}`; // Bの構造を維持
+            const cpref = ($('#optUseAName').checked && $('#optPrefixMeetFiles').checked) ? (dirNameMap.get(newCid).split('__')[0] + '_') : '';
+            const base = `file${ext}`;
+            const fname = cpref + base;
+            const outPath = `${dir}/${fname}`;
+            thisMeeting.attachments.push({ name: fname, path: outPath, driveFileId: null, mimeType: mime });
+            fileRefs.push({kind:'meeting-attach', ownerId:newCid, meetingId:newMid, dataUrl:a, outPath, name: fname});
+          } else if (a && isDataUrl(a.dataUrl)){
+            const mime = /^data:([^;]+)/.exec(a.dataUrl)?.[1]||a.mimeType||'application/octet-stream';
+            const ext = guessExt(mime) || '';
+            const dir = `attachments/meetings/${newMid}`;
+            const cpref = ($('#optUseAName').checked && $('#optPrefixMeetFiles').checked) ? (dirNameMap.get(newCid).split('__')[0] + '_') : '';
+            const base = sanitize(a.name || ('file'+ext));
+            const fname = cpref + base;
+            const outPath = `${dir}/${fname}`;
+            thisMeeting.attachments.push({ name: fname, path: outPath, driveFileId: null, mimeType: mime });
+            fileRefs.push({kind:'meeting-attach', ownerId:newCid, meetingId:newMid, dataUrl:a.dataUrl, outPath, name: fname});
+          }
+        }
+      }
+
+      const list = meetingsByContact.get(newCid) || [];
+      list.push(thisMeeting);
+      meetingsByContact.set(newCid, list);
+      outMeetingMeta.push({id:newMid, contactId:newCid, date:thisMeeting.date, attachmentCount:thisMeeting.attachments.length});
+    });
+
+    function latestMeetingAt(cid){
+      const arr = meetingsByContact.get(cid)||[];
+      if (!arr.length) return null;
+      return arr.map(m=>new Date(m.date)).sort((a,b)=>b-a)[0].toISOString();
+    }
+    const contactsIndex = outContacts.map(c=>({
+      id: c.id, name: c.name, furigana: c.furigana, company: c.company,
+      types: c.types, affiliations: c.affiliations, residence: c.residence,
+      revenue: c.revenue, referrer: c.referrer || null,
+      latestMeetingAt: latestMeetingAt(c.id),
+      referralCount: 0, referrerRevenue: 0
+    }));
+
+    const meetingsIndex = outMeetingMeta.reduce((acc, m)=>{
+      const key = m.contactId;
+      acc.total = (acc.total||0)+1;
+      acc.byContact = acc.byContact || {};
+      acc.byContact[key] = (acc.byContact[key]||0)+1;
+      return acc;
+    }, {});
+
+    const searchIndex = contactsIndex.map(c=>({
+      id:c.id, name:c.name, company:c.company,
+      tokens:[c.name,c.company,...(c.types||[]),...(c.affiliations||[]),c.residence].filter(Boolean)
+    }));
+
+    const DEF_OPTS = {
+      types: ['顧客候補','顧客','取次店・販売店','パートナー','その他'],
+      affiliations: ['商工会議所','青年会議所','BNI','その他団体'],
+      industryInterests: ['IT・技術','コンサルティング','製造業','小売業','サービス業','その他'],
+      statuses: ['新規','商談中','成約','保留','終了']
+    };
+    function pickArray(obj, key){ const v = obj && obj[key]; return Array.isArray(v)? v.filter(Boolean) : []; }
+    const metaOptionsSrc = options || {};
+    const metaOptions = {
+      types: pickArray(metaOptionsSrc,'types'),
+      affiliations: pickArray(metaOptionsSrc,'affiliations'),
+      industryInterests: pickArray(metaOptionsSrc,'industryInterests'),
+      statuses: pickArray(metaOptionsSrc,'statuses')
+    };
+    Object.keys(DEF_OPTS).forEach(k=>{ if(!Array.isArray(metaOptions[k]) || metaOptions[k].length===0) metaOptions[k] = DEF_OPTS[k].slice(); });
+    const metadata = {
+      tool: 'convert-a-to-b',
+      version: '2025-09-27H',
+      generatedAt: new Date().toISOString(),
+      counts: { contacts: outContacts.length, meetings: (outMeetingMeta||[]).length, attachments: fileRefs.length },
+      options: { useAName, appendId, prefixMeet },
+      notes: 'attachments/contacts ディレクトリ名は A命名則時に「{sanitizedName}__{contactId}」などの安定名を使用'
+    };
+
+    return { outContacts, meetingsByContact, contactsIndex, meetingsIndex, searchIndex, metadata, fileRefs };
+  }
+
+  let cachedConverted=null;
+
+  $('#btnConvert').onclick = async ()=>{
+    try{
+      if (!srcHandle) throw new Error('変換元フォルダが未選択です');
+      setBar(2);
+      const contacts = await readJSONFrom(srcHandle,'contacts.json').catch(_=>[]);
+      const meetings = await readJSONFrom(srcHandle,'meetings.json').catch(_=>[]);
+      const options = await readJSONFrom(srcHandle,'options.json').catch(_=>({}));
+      log(`contacts: ${contacts.length}, meetings: ${meetings.length}`);
+      setBar(8);
+      cachedConverted = convert({contacts, meetings, options});
+      log('✓ 変換プレビュー: ', JSON.stringify(cachedConverted.metadata));
+      setBar(15);
+      if ($('#optDryRun').checked){
+        if (!cachedConverted.contactsIndex?.length) throw new Error('連絡先が0件、または解析不可');
+        log('✓ ドライランOK: 連絡先', cachedConverted.contactsIndex.length, '件 / 添付', cachedConverted.fileRefs.length, '件');
+      }
+      setBar(20);
+    }catch(e){ log('! 変換エラー: '+ e.message); console.error(e); }
+  };
+
+  $('#btnWriteLocal').onclick = async ()=>{
+    try{
+      if (!cachedConverted) throw new Error('先に「変換を実行」');
+      if (!dstHandle) throw new Error('出力先フォルダを選択');
+      setBar(25);
+      const { outContacts, meetingsByContact, contactsIndex, meetingsIndex, searchIndex, metadata, fileRefs } = cachedConverted;
+
+      await writeFileRecursive(dstHandle, 'index/contacts-index.json', new Blob([JSON.stringify(contactsIndex,null,2)],{type:'application/json'}));
+      await writeFileRecursive(dstHandle, 'index/meetings-index.json', new Blob([JSON.stringify(meetingsIndex,null,2)],{type:'application/json'}));
+      await writeFileRecursive(dstHandle, 'index/search-index.json', new Blob([JSON.stringify(searchIndex,null,2)],{type:'application/json'}));
+      await writeFileRecursive(dstHandle, 'index/metadata.json', new Blob([JSON.stringify(metadata,null,2)],{type:'application/json'}));
+      setBar(32);
+
+      for (const c of outContacts){
+        await writeFileRecursive(dstHandle, `contacts/${c.id}.json`, new Blob([JSON.stringify(c,null,2)],{type:'application/json'}));
+      }
+      setBar(44);
+
+      const allCids = new Set([...meetingsByContact.keys(), ...outContacts.map(c=>c.id)]);
+      for (const cid of allCids){ const arr = meetingsByContact.get(cid) || [];
+        await writeFileRecursive(dstHandle, `meetings/${cid}-meetings.json`, new Blob([JSON.stringify(arr,null,2)],{type:'application/json'}));
+      }
+      setBar(58);
+
+      let done=0;
+      for (const f of fileRefs){
+        const blob = dataUrlToBlob(f.dataUrl);
+        await writeFileRecursive(dstHandle, f.outPath, blob);
+        if ((++done % 5)===0) { setBar(58 + Math.floor(40*done/fileRefs.length)); await sleep(1); }
+      }
+      setBar(100);
+      log('✓ ローカル書き出し完了');
+    }catch(e){ log('! ローカル書き出しエラー: '+e.message); }
+  };
+
+  // ==== Drive upload ====
+  let tokenClient=null, accessToken=null;
+  $('#btnAuth').onclick = async ()=>{
+    try{
+      const clientId = $('#clientId').value.trim();
+      if (!clientId) throw new Error('Client ID を入力してください');
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        prompt: '',
+        callback: (resp)=>{
+          if (resp.error) { log('! 認証エラー: '+resp.error); return; }
+          accessToken = resp.access_token;
+          $('#authState').textContent='認証済';
+          log('✓ 認証 OK');
+        }
+      });
+      tokenClient.requestAccessToken();
+    }catch(e){ log('! 認証初期化エラー: '+e.message); }
+  };
+
+  async function driveFetch(url, init={}){
+    if (!accessToken) throw new Error('未認証です');
+    const resp = await fetch(url, { ...init, headers: { ...(init.headers||{}), 'Authorization': 'Bearer ' + accessToken } });
+    if (!resp.ok){ const text = await resp.text(); throw new Error('Drive API error '+resp.status+': '+text); }
+    const ct = resp.headers.get('Content-Type')||'';
+    if (ct.includes('application/json')) return resp.json();
+    return resp;
+  }
+  async function createFolder(name, parentId){
+    const meta = {name, mimeType:'application/vnd.google-apps.folder', ...(parentId? {parents:[parentId]}:{})};
+    const r = await driveFetch('https://www.googleapis.com/drive/v3/files', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(meta)});
+    return r.id;
+  }
+  async function ensureFolderPath(parentId, path){
+    const parts = path.split('/').filter(Boolean);
+    let pid = parentId;
+    for (const p of parts){
+      const q = `name='${p.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and '${pid}' in parents and trashed=false`;
+      const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)&spaces=drive');
+      if (r.files && r.files[0]) { pid = r.files[0].id; } else { pid = await createFolder(p, pid); }
+    }
+    return pid;
+  }
+  async function uploadBlob(name, mimeType, parentId, blob){
+    async function findExistingId(){
+      const q = `name='${name.replace(/'/g,"\\'")}' and '${parentId}' in parents and trashed=false`;
+      const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,modifiedTime)&spaces=drive');
+      if(r && r.files && r.files.length){
+        r.files.sort((a,b)=> new Date(b.modifiedTime||0) - new Date(a.modifiedTime||0));
+        return r.files[0].id;
+      }
+      return null;
+    }
+    const boundary = 'abound_'+Math.random().toString(36).slice(2);
+    const meta = {name, mimeType, parents:[parentId]};
+    const body = new Blob([
+      '--'+boundary+'\r\n','Content-Type: application/json; charset=UTF-8\r\n\r\n',JSON.stringify(meta)+'\r\n',
+      '--'+boundary+'\r\n','Content-Type: '+(mimeType||'application/octet-stream')+'\r\n\r\n',blob,'\r\n--'+boundary+'--'
+    ], {type:'multipart/related; boundary='+boundary});
+    try{
+      const exists = await findExistingId();
+      if(exists){
+        const url = 'https://www.googleapis.com/upload/drive/v3/files/'+exists+'?uploadType=multipart&fields=id,name';
+        const r = await driveFetch(url, {method:'PATCH', body});
+        return r.id;
+      }
+    }catch(_e){ /* ignore and create fresh */ }
+    const r = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {method:'POST', body});
+    return r.id;
+  }
+
+
+  $('#btnUpload').onclick = async ()=>{
+    try{
+      if (!cachedConverted) throw new Error('先に「変換を実行」');
+      const parent = $('#driveFolderId').value.trim();
+      if (!parent) throw new Error('DriveのフォルダIDを入力');
+      if (!accessToken) throw new Error('まず「Googleにサインイン」してください');
+      setBar(24);
+      const { outContacts, meetingsByContact, contactsIndex, meetingsIndex, searchIndex, metadata, fileRefs } = cachedConverted;
+
+      const indexId   = await ensureFolderPath(parent, 'index');
+      const contactsId= await ensureFolderPath(parent, 'contacts');
+      const meetingsId= await ensureFolderPath(parent, 'meetings');
+      const attachRoot= await ensureFolderPath(parent, 'attachments');
+      const attachContactsRoot = await ensureFolderPath(attachRoot, 'contacts');
+      const attachMeetingsRoot = await ensureFolderPath(attachRoot, 'meetings');
+      log('✓ フォルダ構成準備完了');
+
+      // 添付アップロード
+      let done=0;
+      for (const f of fileRefs){
+        const blob = dataUrlToBlob(f.dataUrl);
+        let parentId = null, fileName = f.outPath.split('/').pop();
+        if (f.kind==='contact-photo' || f.kind==='contact-bizcard' || f.kind==='contact-attach'){
+          const subPath = f.outPath.split('/').slice(1,-1).join('/'); // keep 'contacts/<dir>' under attachments
+          const cidFolder = await ensureFolderPath(attachRoot, subPath); // keep full relative path under attachments
+          parentId = cidFolder;
+        } else {
+          const midFolder = await ensureFolderPath(attachMeetingsRoot, f.meetingId);
+          parentId = midFolder;
+        }
+        const fileId = await uploadBlob(fileName, blob.type || 'application/octet-stream', parentId, blob);
+        f.driveFileId = fileId;
+        done++; if ((done%5)===0){ setBar(24 + Math.floor(40*done/fileRefs.length)); await sleep(1); }
+      }
+      log(`✓ 添付アップロード完了: ${fileRefs.length} 件`);
+
+      const fileIdByPath = new Map(fileRefs.filter(x=>x.driveFileId).map(x=>[x.outPath, x.driveFileId]));
+      const contactsOutPatched = outContacts.map(c=>{
+        if (c.photoRef && c.photoRef.path) c.photoRef.driveFileId = fileIdByPath.get(c.photoRef.path)||null;
+        if (c.businessCardRef && c.businessCardRef.path) c.businessCardRef.driveFileId = fileIdByPath.get(c.businessCardRef.path)||null;
+        if (Array.isArray(c.attachments)){ c.attachments.forEach(a=>{ a.driveFileId = fileIdByPath.get(a.path)||null; }); }
+        return c;
+      });
+
+      const meetingsFiles = [];
+      const allCids = new Set([...meetingsByContact.keys(), ...outContacts.map(c=>c.id)]);
+      for (const cid of allCids){ const arr = meetingsByContact.get(cid) || [];
+        const patched = arr.map(m=>{
+          if (Array.isArray(m.attachments)){ m.attachments.forEach(a=>{ a.driveFileId = fileIdByPath.get(a.path)||null; }); }
+          return m;
+        });
+        meetingsFiles.push({ path:`${cid}-meetings.json`, json: patched }); }
+
+      await uploadBlob('contacts-index.json','application/json',indexId,new Blob([JSON.stringify(contactsIndex,null,2)],{type:'application/json'}));
+      await uploadBlob('meetings-index.json','application/json',indexId,new Blob([JSON.stringify(meetingsIndex,null,2)],{type:'application/json'}));
+      await uploadBlob('search-index.json','application/json',indexId,new Blob([JSON.stringify(searchIndex,null,2)],{type:'application/json'}));
+      await uploadBlob('metadata.json','application/json',indexId,new Blob([JSON.stringify(metadata,null,2)],{type:'application/json'}));
+
+      for (const c of contactsOutPatched){
+        await uploadBlob(`${c.id}.json`,'application/json',contactsId,new Blob([JSON.stringify(c,null,2)],{type:'application/json'}));
+      }
+      for (const mf of meetingsFiles){
+        await uploadBlob(mf.path,'application/json',meetingsId,new Blob([JSON.stringify(mf.json,null,2)],{type:'application/json'}));
+      }
+      setBar(100);
+      log('✓ Googleドライブへのアップロード完了');
+    }catch(e){ log('! アップロードエラー: '+e.message); console.error(e); }
+  };
+</script>
+</body>
+</html>
