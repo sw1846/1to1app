@@ -171,6 +171,6 @@ function closeModal(modalId) {
 }
 
 // グローバル関数として公開
-window.setupMultiSelect = setupMultiSelect;
-window.switchMarkdownView = switchMarkdownView;
-window.clearSearchAndFilters = clearSearchAndFilters;
+if (typeof setupMultiSelect === 'function') window.setupMultiSelect = setupMultiSelect;
+if (typeof switchMarkdownView === 'function') window.switchMarkdownView = switchMarkdownView;
+if (typeof clearSearchAndFilters === 'function') window.clearSearchAndFilters = clearSearchAndFilters;
