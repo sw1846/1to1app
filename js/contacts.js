@@ -190,58 +190,57 @@ function loadContactData(contactId) {
 }
 
 // [CLAUDE FIX] 画像読み込み関数の追加
+/* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
 async function loadContactImages(contact) {
     try {
         // 顔写真の処理
         const photoPreview = document.getElementById('photoPreview');
         const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-        if (contact.photo && photoPreview && photoPreviewContainer) {
-            if (typeof resolveAttachmentUrl === 'function') {
-                const url = await resolveAttachmentUrl(contact.id, 'avatar');
-                if (url) {
-                    photoPreview.src = url;
-                    photoPreviewContainer.style.display = 'block';
-                } else {
-                    photoPreview.src = '';
-                    photoPreviewContainer.style.display = 'none';
-                }
+        if (photoPreview && photoPreviewContainer) {
+            // [fix][avatar] 統一リゾルバを使用
+            let url = null;
+            if (typeof AppData !== 'undefined' && typeof AppData.resolveContactImageUrl === 'function') {
+                url = await AppData.resolveContactImageUrl(contact, 'photo');
+            } else if (typeof resolveAttachmentUrl === 'function') {
+                url = await resolveAttachmentUrl(contact.id, 'avatar');
+            }
+            
+            if (url) {
+                photoPreview.src = url;
+                photoPreviewContainer.style.display = 'block';
+                console.log('[fix][avatar] loaded photo:', contact.id);
             } else {
-                console.warn('[fix][photo] resolveAttachmentUrl not available');
                 photoPreview.src = '';
                 photoPreviewContainer.style.display = 'none';
             }
-        } else if (photoPreview && photoPreviewContainer) {
-            photoPreview.src = '';
-            photoPreviewContainer.style.display = 'none';
         }
         
         // 名刺画像の処理
         const businessCardPreview = document.getElementById('businessCardPreview');
         const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
-        if (contact.businessCard && businessCardPreview && businessCardPreviewContainer) {
-            if (typeof resolveAttachmentUrl === 'function') {
-                const url = await resolveAttachmentUrl(contact.id, 'businessCard');
-                if (url) {
-                    businessCardPreview.src = url;
-                    businessCardPreviewContainer.style.display = 'block';
-                } else {
-                    businessCardPreview.src = '';
-                    businessCardPreviewContainer.style.display = 'none';
-                }
+        if (businessCardPreview && businessCardPreviewContainer) {
+            // [fix][avatar] 統一リゾルバを使用
+            let url = null;
+            if (typeof AppData !== 'undefined' && typeof AppData.resolveContactImageUrl === 'function') {
+                url = await AppData.resolveContactImageUrl(contact, 'businessCard');
+            } else if (typeof resolveAttachmentUrl === 'function') {
+                url = await resolveAttachmentUrl(contact.id, 'businessCard');
+            }
+            
+            if (url) {
+                businessCardPreview.src = url;
+                businessCardPreviewContainer.style.display = 'block';
+                console.log('[fix][avatar] loaded businessCard:', contact.id);
             } else {
-                console.warn('[fix][businessCard] resolveAttachmentUrl not available');
                 businessCardPreview.src = '';
                 businessCardPreviewContainer.style.display = 'none';
             }
-        } else if (businessCardPreview && businessCardPreviewContainer) {
-            businessCardPreview.src = '';
-            businessCardPreviewContainer.style.display = 'none';
         }
     } catch (error) {
-        console.warn('[fix][images] loadContactImages error:', error);
+        console.warn('[fix][avatar] loadContactImages error:', error);
     }
 }
-
+/* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */
 // フォームリセット
 function resetContactForm() {
     const contactForm = document.getElementById('contactForm');
@@ -421,12 +420,12 @@ async function saveContact() {
         let photoPath = null;
         let businessCardPath = null;
         
-        // [fix][attachments] 既存のdrive:参照を優先
+// [fix][attachments] 既存のdrive:参照を優先
         const existingContact = currentContactId ? contacts.find(c => c.id === currentContactId) : null;
         const existingPhoto = existingContact ? existingContact.photo : null;
         const existingCard = existingContact ? existingContact.businessCard : null;
         
-        // 新しい画像の場合はGoogle Driveにアップロード
+        // [fix][avatar] 新しい画像の場合はGoogle Driveにアップロード
         if (photoSrc && photoSrc.startsWith('data:')) {
             if (typeof window.AppData !== 'undefined' && typeof window.AppData.saveAttachmentToFileSystem === 'function') {
                 photoPath = await window.AppData.saveAttachmentToFileSystem(
@@ -438,9 +437,17 @@ async function saveContact() {
                 console.warn('[fix][attachments] saveAttachmentToFileSystem not available for photo');
             }
         } else if (photoSrc && photoSrc.startsWith('drive:')) {
-            photoPath = photoSrc; // 既存のdrive:参照を維持
-        } else if (photoSrc && (photoSrc.startsWith('http') || photoSrc.startsWith('blob:'))) {
-            photoPath = existingPhoto || null; // 既存参照を維持(blobは一時的なので保存しない)
+            // [fix][avatar] 既存のdrive:参照を維持
+            photoPath = photoSrc;
+        } else if (photoSrc && (photoSrc.startsWith('http') || photoSrc.startsWith('https'))) {
+            // [fix][avatar] 既存のhttp/https URLを維持
+            photoPath = photoSrc;
+        } else if (photoSrc && photoSrc.startsWith('blob:')) {
+            // [fix][avatar] blob:は一時的なので既存参照を維持
+            photoPath = existingPhoto || null;
+        } else if (!photoSrc && existingPhoto) {
+            // [fix][avatar] srcが空でも既存値があれば維持
+            photoPath = existingPhoto;
         }
         
         if (businessCardSrc && businessCardSrc.startsWith('data:')) {
@@ -454,11 +461,18 @@ async function saveContact() {
                 console.warn('[fix][attachments] saveAttachmentToFileSystem not available for business card');
             }
         } else if (businessCardSrc && businessCardSrc.startsWith('drive:')) {
-            businessCardPath = businessCardSrc; // 既存のdrive:参照を維持
-        } else if (businessCardSrc && (businessCardSrc.startsWith('http') || businessCardSrc.startsWith('blob:'))) {
-            businessCardPath = existingCard || null; // 既存参照を維持
+            // [fix][avatar] 既存のdrive:参照を維持
+            businessCardPath = businessCardSrc;
+        } else if (businessCardSrc && (businessCardSrc.startsWith('http') || businessCardSrc.startsWith('https'))) {
+            // [fix][avatar] 既存のhttp/https URLを維持
+            businessCardPath = businessCardSrc;
+        } else if (businessCardSrc && businessCardSrc.startsWith('blob:')) {
+            // [fix][avatar] blob:は一時的なので既存参照を維持
+            businessCardPath = existingCard || null;
+        } else if (!businessCardSrc && existingCard) {
+            // [fix][avatar] srcが空でも既存値があれば維持
+            businessCardPath = existingCard;
         }
-        
         // 接触方法の処理
         const contactMethodDirect = document.getElementById('contactMethodDirect');
         const isDirect = contactMethodDirect ? contactMethodDirect.checked : true;

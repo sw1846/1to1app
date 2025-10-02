@@ -432,9 +432,11 @@ function renderAddNewRow(fieldName) {
     // [fix][multiselect] ボタンクリックで追加
     btn.addEventListener('click', function(){
         const value = (input.value || '').trim();
-        addNewOption(fieldName, value);
-        input.value = '';
-        input.focus();
+        if(value){
+            addNewOption(fieldName, value);
+            input.value = '';
+            input.focus();
+        }
     });
     
     // [fix][multiselect] Enterキーでも追加
@@ -442,8 +444,10 @@ function renderAddNewRow(fieldName) {
         if (e.key === 'Enter') {
             e.preventDefault();
             const value = (input.value || '').trim();
-            addNewOption(fieldName, value);
-            input.value = '';
+            if(value){
+                addNewOption(fieldName, value);
+                input.value = '';
+            }
         }
     });
 }

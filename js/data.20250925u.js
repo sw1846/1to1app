@@ -1211,5 +1211,83 @@ async function saveOptionsToMetadata(structure, options){
   }
 }
 __root.AppData.saveOptionsToMetadata = saveOptionsToMetadata;
-
+/* [fix][kanban] START (anchor:data.js:updateContactStatus) */
+// === Update contact status and persist to Drive ===
+async function updateContactStatus(contactId, newStatus){
+  _ensureReady();
+  try{
+    if(!contactId || !newStatus){ throw new Error('contactId and newStatus required'); }
+    
+    // Update in-memory contacts array
+    const contact = (window.contacts||[]).find(c => c.id === contactId);
+    if(!contact){ throw new Error('Contact not found: ' + contactId); }
+    
+    const oldStatus = contact.status;
+    contact.status = newStatus;
+    contact.updatedAt = new Date().toISOString();
+    
+    // Persist to Drive
+    if(!window.folderStructure || !window.folderStructure.contacts){
+      throw new Error('folderStructure.contacts not available');
+    }
+    
+    const fileName = 'contact-' + String(contactId).padStart(6,'0') + '.json';
+    const contactData = JSON.stringify(contact, null, 2);
+    await upsertJsonInFolder(window.folderStructure.contacts, fileName, contactData);
+    
+    console.log('[fix][kanban] status updated:', contactId, '->', newStatus);
+    return true;
+  }catch(e){
+    console.error('[fix][kanban] updateContactStatus error:', e);
+    throw e;
+  }
+}
+__root.AppData.updateContactStatus = updateContactStatus;
+/* [fix][kanban] END (anchor:data.js:updateContactStatus) */
+/* [fix][avatar] START (anchor:data.js:resolveContactImageUrl) */
+// === Unified image URL resolver for contacts (handles legacy data) ===
+async function resolveContactImageUrl(contact, kind){
+  try{
+    if(!contact || !kind) return null;
+    
+    const fieldName = (kind === 'photo' || kind === 'avatar') ? 'photo' : 'businessCard';
+    const refFieldName = fieldName + 'Ref';
+    
+    // [fix][avatar] Priority 1: Direct URL in contact.photo / contact.businessCard
+    let directUrl = contact[fieldName];
+    if(directUrl && typeof directUrl === 'string'){
+      // data:, http:, https:, drive: are all valid
+      if(directUrl.startsWith('data:') || directUrl.startsWith('http:') || 
+         directUrl.startsWith('https:') || directUrl.startsWith('drive:')){
+        console.log('[fix][avatar] using direct URL:', fieldName, directUrl.substring(0,50));
+        return directUrl;
+      }
+    }
+    
+    // [fix][avatar] Priority 2: photoRef / businessCardRef with driveFileId
+    const refObj = contact[refFieldName];
+    if(refObj && refObj.driveFileId){
+      const driveRef = 'drive:' + refObj.driveFileId;
+      console.log('[fix][avatar] using ref.driveFileId:', fieldName, driveRef);
+      return driveRef;
+    }
+    
+    // [fix][avatar] Priority 3: Folder search fallback (existing logic)
+    if(typeof resolveAttachmentUrl === 'function'){
+      const url = await resolveAttachmentUrl(contact.id, kind);
+      if(url){
+        console.log('[fix][avatar] folder search found:', fieldName, url.substring(0,50));
+        return url;
+      }
+    }
+    
+    console.log('[fix][avatar] no image found for:', contact.id, kind);
+    return null;
+  }catch(e){
+    console.warn('[fix][avatar] resolveContactImageUrl error:', e);
+    return null;
+  }
+}
+__root.AppData.resolveContactImageUrl = resolveContactImageUrl;
+/* [fix][avatar] END (anchor:data.js:resolveContactImageUrl) */
 })(window);
