@@ -744,3 +744,29 @@ async function handleDrop(e) {
 if (typeof setupMultiSelect === 'function') window.setupMultiSelect = setupMultiSelect;
 if (typeof switchMarkdownView === 'function') window.switchMarkdownView = switchMarkdownView;
 if (typeof clearSearchAndFilters === 'function') window.clearSearchAndFilters = clearSearchAndFilters;
+
+
+/* [fix][expose] START (anchor:ui.js:publish-core-ui) */
+(function(){
+  try {
+    console.log('[fix][expose] publishing core UI functions');
+    var names = [
+      'getFilteredContacts','renderContacts','createContactListItem','createContactCard',
+      'renderContactTree','createTreeNode','filterByReferrer','clearReferrerFilter',
+      'sortContacts','toNum','getTypeColorClass',
+      'renderKanbanView','createKanbanColumn','createKanbanCard','handleDrop',
+      'resolveImageUrl','hydrateDriveImage','loadImageSafely','sanitizeImageUrl','generatePlaceholderImage'
+    ];
+    names.forEach(function(n){
+      try{
+        if (typeof window[n] !== 'function' && typeof globalThis[n] === 'function'){
+          window[n] = globalThis[n];
+        }
+      }catch(_){}
+    });
+  } catch(e){
+    console.warn('[fix][expose] failed to publish core UI functions', e);
+  }
+})();
+/* [fix][expose] END (anchor:ui.js:publish-core-ui) */
+
