@@ -742,7 +742,13 @@ __root.AppData.hydrateMissingFromFiles = async function(structure, contactsArr, 
 
   var contactFiles = {};
   var meetingFiles = {};
-  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+  function pad6(x){ try{ 
+      var s = String(x);
+      s = s.replace(/^contact-/, '');
+      s = s.replace(/\D/g,'');
+      if(!s) s = String(x);
+      return s.padStart(6,'0'); 
+    }catch(e){ return String(x); } }
 
   if(contactFolderId){
     try{
@@ -884,7 +890,13 @@ async function hydrateMissingFromFilesParallel(structure, contactsArr, meetingsM
 
   var contactFiles = {};
   var meetingFiles = {};
-  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+  function pad6(x){ try{ 
+      var s = String(x);
+      s = s.replace(/^contact-/, '');
+      s = s.replace(/\D/g,'');
+      if(!s) s = String(x);
+      return s.padStart(6,'0'); 
+    }catch(e){ return String(x); } }
 
   // Pre-list filenames -> id maps
   if(contactFolderId){
@@ -1222,7 +1234,13 @@ __root.AppData.saveAllToMigrated = async function(structure, contactsArr, meetin
   _ensureReady();
   if(!structure) throw new Error('structure not available');
 
-  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+  function pad6(x){ try{ 
+      var s = String(x);
+      s = s.replace(/^contact-/, '');
+      s = s.replace(/\D/g,'');
+      if(!s) s = String(x);
+      return s.padStart(6,'0'); 
+    }catch(e){ return String(x); } }
   function pickIndexFields(c){
     return {
       id: c.id,
@@ -1310,7 +1328,8 @@ async function updateContactStatus(contactId, newStatus){
       throw new Error('folderStructure.contacts not available');
     }
     
-    const fileName = 'contact-' + String(contactId).padStart(6,'0') + '.json';
+    const _idStr = String(contactId).replace(/^contact-/, '').replace(/\D/g,'');
+    const fileName = 'contact-' + _idStr.padStart(6,'0') + '.json';
     const contactData = JSON.stringify(contact, null, 2);
     await upsertJsonInFolder(window.folderStructure.contacts, fileName, contactData);
     

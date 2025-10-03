@@ -626,6 +626,12 @@ function loadImageSafely(img, rawUrl){
     try{
         if(!img || !rawUrl) return;
         var url = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
+        try{
+          if(url && url.indexOf('googleapis.com/drive/v3/files')>-1 && url.indexOf('access_token=')===-1 && typeof getGoogleAccessToken==='function'){
+            var tk = getGoogleAccessToken();
+            if(tk){ url += (url.indexOf('?')>-1?'&':'?') + 'access_token=' + encodeURIComponent(tk); }
+          }
+        }catch(_e){}
         if(!url){ return; }
         var tried = false;
         const onload = ()=>{ img.onload = img.onerror = null; };
@@ -660,6 +666,159 @@ function showImageModal(url, title){
     }
 }
 /* [fix][image-utils] END (anchor:ui.js:image-utils) */
+
+/* [fix][filters] START (anchor:ui.js:refresh-filter-dropdowns) */
+function refreshFilterDropdowns(){
+  try{
+    // 種別セレクトを options.types から再構築
+    var sel = document.getElementById('typeFilter');
+    if(sel){
+      var cur = sel.value;
+      // クリア
+      while(sel.firstChild) sel.removeChild(sel.firstChild);
+      var addOpt = function(v, label){ var o=document.createElement('option'); o.value=v; o.textContent=label||v; sel.appendChild(o); };
+      addOpt('','すべて');
+      var types = (window.options && Array.isArray(window.options.types)) ? window.options.types.slice(0) : [];
+      // 既存データからも補完（安全に）
+      try{
+        if(Array.isArray(window.contacts)){
+          window.contacts.forEach(function(c){
+            (Array.isArray(c.types) ? c.types : []).forEach(function(t){
+              if(t && types.indexOf(t)===-1) types.push(t);
+            });
+          });
+        }
+      }catch(_){}
+      // 重複除去 & ソート
+      types = Array.from(new Set(types.filter(Boolean))).sort(function(a,b){ return String(a).localeCompare(String(b),'ja'); });
+      types.forEach(function(t){ addOpt(t, t); });
+      // 既存選択を復元（なければ空）
+      sel.value = (types.indexOf(cur)>=0 || cur==='') ? cur : '';
+    }
+  }catch(e){ console.warn('[fix][filters] refreshFilterDropdowns error', e); }
+}
+// オプション更新イベントに追従
+try{
+  window.addEventListener('options:updated', function(){ refreshFilterDropdowns(); }, false);
+}catch(_){}
+/* [fix][filters] END (anchor:ui.js:refresh-filter-dropdowns) */
+
+/* [fix][kanban] START (anchor:ui.js:status-management-modal) */
+function openStatusManagementModal(){
+  try{
+    // 既存を削除
+    var old = document.getElementById('statusManageModal');
+    if(old) old.remove();
+
+    var statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
+      ? window.options.statuses.slice(0)
+      : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
+
+    var overlay = document.createElement('div');
+    overlay.id = 'statusManageModal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;min-width:520px;max-width:90vw;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);';
+    modal.innerHTML = '<div style="padding:14px 16px;border-bottom:1px solid #eee;font-weight:600;">カンバンのステータス管理</div>';
+    var body = document.createElement('div');
+    body.style.cssText = 'padding:14px 16px;';
+
+    var list = document.createElement('div');
+    statuses.forEach(function(s, idx){
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;margin:6px 0;';
+      row.innerHTML = `
+        <input type="text" value="${s}" data-idx="${idx}" style="flex:1 1 auto;padding:6px 8px;border:1px solid #ddd;border-radius:6px;">
+        <button class="btn btn-sm" data-act="up">↑</button>
+        <button class="btn btn-sm" data-act="down">↓</button>
+        <button class="btn btn-sm" data-act="del">削除</button>
+      `;
+      list.appendChild(row);
+    });
+
+    var addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
+    addRow.innerHTML = `
+      <input type="text" id="statusNewInput" placeholder="新しいステータス名" style="flex:1 1 auto;padding:6px 8px;border:1px solid #ddd;border-radius:6px;">
+      <button class="btn btn-sm" id="statusAddBtn">追加</button>
+    `;
+
+    var footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #eee;';
+    footer.innerHTML = `
+      <button class="btn btn-sm" id="statusCancel">キャンセル</button>
+      <button class="btn btn-sm btn-primary" id="statusSave">保存</button>
+    `;
+
+    body.appendChild(list);
+    body.appendChild(addRow);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+
+    // 行内ボタン
+    list.addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if(!btn) return;
+      var row = btn.parentElement;
+      if(btn.dataset.act==='del'){
+        row.remove();
+      }else if(btn.dataset.act==='up'){
+        var prev = row.previousElementSibling;
+        if(prev) list.insertBefore(row, prev);
+      }else if(btn.dataset.act==='down'){
+        var next = row.nextElementSibling;
+        if(next) list.insertBefore(next, row);
+      }
+    });
+
+    // 追加
+    document.getElementById('statusAddBtn').onclick = function(){
+      var v = document.getElementById('statusNewInput').value.trim();
+      if(!v) return;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;margin:6px 0;';
+      row.innerHTML = `
+        <input type="text" value="${v}" style="flex:1 1 auto;padding:6px 8px;border:1px solid #ddd;border-radius:6px;">
+        <button class="btn btn-sm" data-act="up">↑</button>
+        <button class="btn btn-sm" data-act="down">↓</button>
+        <button class="btn btn-sm" data-act="del">削除</button>
+      `;
+      list.appendChild(row);
+      document.getElementById('statusNewInput').value = '';
+    };
+
+    // 保存
+    document.getElementById('statusSave').onclick = async function(){
+      try{
+        var newList = Array.from(list.querySelectorAll('input[type="text"]')).map(function(i){ return i.value.trim(); }).filter(Boolean);
+        if(!window.options) window.options = {};
+        window.options.statuses = Array.from(new Set(newList));
+        // 永続化
+        if(window.folderStructure && window.AppData && typeof window.AppData.saveOptionsToMetadata==='function'){
+          try{ await window.AppData.saveOptionsToMetadata(window.folderStructure, window.options); notify('ステータスを保存しました'); }catch(e){ notify('保存に失敗しました'); }
+        }
+        // 再描画
+        if(typeof refreshFilterDropdowns==='function') refreshFilterDropdowns();
+        if(typeof renderContacts==='function') renderContacts();
+        overlay.remove();
+      }catch(e){ console.warn('[fix][kanban] save statuses failed', e); }
+    };
+    document.getElementById('statusCancel').onclick = function(){ overlay.remove(); };
+
+  }catch(e){
+    console.warn('[fix][kanban] openStatusManagementModal error', e);
+  }
+}
+// 起動時にフィルターを初期化
+try{ 
+  if(document.readyState!=='loading') refreshFilterDropdowns();
+  else window.addEventListener('DOMContentLoaded', function(){ refreshFilterDropdowns(); }, false);
+}catch(_){}
+/* [fix][kanban] END (anchor:ui.js:status-management-modal) */
+
 
 
 function switchView(view) {
@@ -942,7 +1101,7 @@ function clearSearchAndFilters(){
       'renderContactTree','createTreeNode','filterByReferrer','clearReferrerFilter',
       'sortContacts','toNum','getTypeColorClass',
       'renderKanbanView','createKanbanColumn','createKanbanCard','handleDrop',
-      'resolveImageUrl','hydrateDriveImage','loadImageSafely','sanitizeImageUrl','generatePlaceholderImage','filterContacts','clearSearchAndFilters'
+      'resolveImageUrl','hydrateDriveImage','loadImageSafely','sanitizeImageUrl','generatePlaceholderImage','filterContacts','clearSearchAndFilters','refreshFilterDropdowns','openStatusManagementModal'
     ];
     names.forEach(function(n){
       try{

@@ -514,6 +514,7 @@ async function addNewOption(fieldName, value) {
                 await AppData.saveOptionsToMetadata(window.folderStructure, window.options);
                 console.log('[multiselect] saved to metadata.json');
                 notify(`「${value.trim()}」を追加しました`);
+                try{ window.dispatchEvent(new CustomEvent('options:updated', {detail:{key: optionKey}})); }catch(_){}
             } catch (err) {
                 console.warn('[multiselect] save to metadata failed', err);
                 notify('保存に失敗しました（オフライン/未認証）');
