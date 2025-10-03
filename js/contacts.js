@@ -263,6 +263,8 @@ function displayAttachments(atts, targetElementId){
 /* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
 
 /* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
+
+/* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
 async function loadContactImages(contact) {
     try {
         if (!contact) return;
@@ -278,7 +280,13 @@ async function loadContactImages(contact) {
                 url = resolveImageUrl(contact, 'photo');
             }
             if (url) {
-                photoPreview.src = url;
+                // 遅延安全読み込み
+                try{
+                  if(typeof generatePlaceholderImage==='function'){ photoPreview.src = generatePlaceholderImage(); }
+                  photoPreview.setAttribute('data-src', url);
+                  if(typeof loadImageSafely==='function'){ setTimeout(function(){ loadImageSafely(photoPreview, url); },0); }
+                  else { photoPreview.src = url; }
+                }catch(_e){ photoPreview.src = url; }
                 photoPreviewContainer.style.display = 'block';
             } else {
                 photoPreview.src = '';
@@ -297,7 +305,12 @@ async function loadContactImages(contact) {
                 url = resolveImageUrl(contact, 'businessCard');
             }
             if (url) {
-                businessCardPreview.src = url;
+                try{
+                  if(typeof generatePlaceholderImage==='function'){ businessCardPreview.src = generatePlaceholderImage(); }
+                  businessCardPreview.setAttribute('data-src', url);
+                  if(typeof loadImageSafely==='function'){ setTimeout(function(){ loadImageSafely(businessCardPreview, url); },0); }
+                  else { businessCardPreview.src = url; }
+                }catch(_e){ businessCardPreview.src = url; }
                 businessCardPreviewContainer.style.display = 'block';
                 // クリックで拡大（ライトボックス）
                 businessCardPreview.onclick = () => {
@@ -313,6 +326,7 @@ async function loadContactImages(contact) {
         console.warn('[fix][image-resolve] loadContactImages error:', error);
     }
 }
+/* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */
 /* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */
 
 /* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */

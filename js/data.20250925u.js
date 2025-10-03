@@ -405,12 +405,14 @@ async function downloadJsonById(fileId){
 }
 
 // 🔧 FIX: upsertJsonInFolder implementation (was missing)
+
 async function upsertJsonInFolder(folderId, fileName, jsonData){
   _ensureReady();
   try {
+    // jsonData は Object でも String(既にJSON化済み)でも受け付ける
+    var jsonContent = (typeof jsonData === 'string') ? jsonData : JSON.stringify(jsonData || {}, null, 2);
     const existingFileId = await driveFindChildByName(folderId, fileName, 'application/json');
-    const jsonContent = JSON.stringify(jsonData, null, 2);
-    
+
     if (existingFileId) {
       // Update existing file
       const response = await gapi.client.request({
@@ -421,25 +423,22 @@ async function upsertJsonInFolder(folderId, fileName, jsonData){
         body: jsonContent
       });
       log('Updated JSON file:', fileName, 'in folder:', folderId);
-      return response.result.id;
+      return existingFileId;
     } else {
       // Create new file
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const closeDelim = "\r\n--" + boundary + "--";
       const metadata = {
         name: fileName,
         mimeType: 'application/json',
-        parents: [folderId]
+        parents: [ folderId ]
       };
-      
-      const boundary = '-------1to1app' + Date.now();
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const closeDelim = "\r\n--" + boundary + "--";
-      
       const multipartBody = delimiter +
         "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
         JSON.stringify(metadata) + delimiter +
         "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
         jsonContent + closeDelim;
-      
       const response = await gapi.client.request({
         path: '/upload/drive/v3/files',
         method: 'POST',
@@ -447,15 +446,15 @@ async function upsertJsonInFolder(folderId, fileName, jsonData){
         headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
         body: multipartBody
       });
-      
       log('Created JSON file:', fileName, 'in folder:', folderId);
-      return response.result.id;
+      return response.result && response.result.id;
     }
   } catch (error) {
-    console.error('upsertJsonInFolder failed:', error);
+    console.error('upsertJsonInFolder error:', error);
     throw error;
   }
 }
+
 
 // 🔧 FIX: Image URL resolution with proper token handling
 
@@ -1216,6 +1215,81 @@ async function saveOptionsToMetadata(structure, options){
   }
 }
 __root.AppData.saveOptionsToMetadata = saveOptionsToMetadata;
+
+/* [fix][persist] START (anchor:data.js:saveAllToMigrated) */
+__root.AppData.saveAllToMigrated = async function(structure, contactsArr, meetingsMap, options){
+  await ensureGapiClient();
+  _ensureReady();
+  if(!structure) throw new Error('structure not available');
+
+  function pad6(x){ try{ return String(x).padStart(6,'0'); }catch(e){ return String(x); } }
+  function pickIndexFields(c){
+    return {
+      id: c.id,
+      name: c.name||'',
+      company: c.company||'',
+      business: c.business||'',
+      types: Array.isArray(c.types)? c.types : [],
+      affiliations: Array.isArray(c.affiliations)? c.affiliations : [],
+      industryInterests: Array.isArray(c.industryInterests)? c.industryInterests : [],
+      status: c.status||'新規',
+      updatedAt: c.updatedAt||c.createdAt||new Date().toISOString()
+    };
+  }
+
+  // 1) Per-contact files
+  if(structure.contacts){
+    for(var i=0;i<(contactsArr||[]).length;i++){
+      var c = contactsArr[i];
+      if(!c || !c.id) continue;
+      var fname = 'contact-' + pad6(c.id) + '.json';
+      await upsertJsonInFolder(structure.contacts, fname, c);
+    }
+  }
+
+  // 2) Per-contact meetings files
+  if(structure.meetings){
+    var keys = Object.keys(meetingsMap||{});
+    for(var j=0;j<keys.length;j++){
+      var cid = keys[j];
+      var list = Array.isArray(meetingsMap[cid]) ? meetingsMap[cid] : [];
+      var fname2 = 'contact-' + pad6(cid) + '-meetings.json';
+      await upsertJsonInFolder(structure.meetings, fname2, list);
+    }
+  }
+
+  // 3) Indexes
+  if(structure.index){
+    var idxContacts = (contactsArr||[]).map(pickIndexFields);
+    await upsertJsonInFolder(structure.index, 'contacts-index.json', idxContacts);
+
+    var idxMeetings = {};
+    Object.keys(meetingsMap||{}).forEach(function(cid){
+      idxMeetings[cid] = (Array.isArray(meetingsMap[cid]) ? meetingsMap[cid].length : 0);
+    });
+    await upsertJsonInFolder(structure.index, 'meetings-index.json', idxMeetings);
+
+    if(options && typeof __root.AppData.saveOptionsToMetadata === 'function'){
+      try{ await __root.AppData.saveOptionsToMetadata(structure, options); }catch(e){ console.warn('saveOptionsToMetadata failed', e); }
+    }else{
+      await upsertJsonInFolder(structure.index, 'metadata.json', { options: options||{} });
+    }
+  }
+  return true;
+};
+
+async function saveAllData(){
+  try{
+    if(!__root.folderStructure) throw new Error('folderStructure not set');
+    var ok = await __root.AppData.saveAllToMigrated(__root.folderStructure, __root.contacts||[], __root.meetingsByContact||{}, __root.options||{});
+    return ok;
+  }catch(e){
+    console.error('[fix][persist] saveAllData error', e);
+    throw e;
+  }
+}
+__root.saveAllData = saveAllData;
+/* [fix][persist] END (anchor:data.js:saveAllToMigrated) */
 /* [fix][kanban] START (anchor:data.js:updateContactStatus) */
 // === Update contact status and persist to Drive ===
 async function updateContactStatus(contactId, newStatus){

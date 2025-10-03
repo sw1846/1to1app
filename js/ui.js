@@ -288,6 +288,8 @@ function createContactListItem(contact) {
 /* [merge][restore] START function createContactCard */
 
 /* [fix][avatar] START (anchor:ui.js:createContactCard) */
+
+/* [fix][avatar] START (anchor:ui.js:createContactCard) */
 function createContactCard(contact) {
     const card = document.createElement('div');
     card.className = 'contact-card' + (typeof getTypeColorClass === 'function' ? getTypeColorClass(contact) : '');
@@ -303,7 +305,7 @@ function createContactCard(contact) {
     // 画像URL解決
     const photoUrl = (typeof resolveImageUrl === 'function') ? resolveImageUrl(contact, 'photo') : null;
     const photoHtml = photoUrl
-        ? `<img class="contact-photo" src="${photoUrl}" alt="avatar">`
+        ? `<img class="contact-photo" src="${typeof generatePlaceholderImage==='function'?generatePlaceholderImage():''}" data-src="${photoUrl}" alt="avatar">`
         : `<div class="contact-photo contact-photo--placeholder"></div>`;
 
     // 会社・氏名等
@@ -321,12 +323,22 @@ function createContactCard(contact) {
         </div>
     `;
 
+    // 遅延読み込み
+    try{
+      var img = card.querySelector('img[data-src]');
+      if(img && typeof loadImageSafely === 'function'){
+        setTimeout(function(){ loadImageSafely(img, img.getAttribute('data-src')); }, 0);
+      }
+    }catch(e){}
+
     // カンバン用ドラッグ属性
     card.draggable = true;
     card.addEventListener('dragstart', handleDragStart);
 
     return card;
 }
+/* [fix][avatar] END (anchor:ui.js:createContactCard) */
+
 /* [fix][avatar] END (anchor:ui.js:createContactCard) */
 
 /* [merge][restore] END function createContactCard */
@@ -609,23 +621,34 @@ function generatePlaceholderImage(){
 }
 
 // data-src を安全に読み込み、エラー時に非表示/プレースホルダ維持
+
 function loadImageSafely(img, rawUrl){
     try{
         if(!img || !rawUrl) return;
         var url = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
         if(!url){ return; }
+        var tried = false;
         const onload = ()=>{ img.onload = img.onerror = null; };
-        const onerror = ()=>{ img.onload = img.onerror = null; /* 保険：srcを空にして崩れ防止 */ };
+        const onerror = ()=>{ 
+            if(!tried){
+                tried = true;
+                try{
+                    // 再度トークンを付与してリトライ
+                    var u2 = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
+                    if(u2 && u2 !== img.src){ img.src = u2; return; }
+                }catch(_e){}
+            }
+            img.onload = img.onerror = null;
+        };
         img.onload = onload;
         img.onerror = onerror;
-        // 即時差し替え
         img.src = url;
-        // data-src は消す
         try{ img.removeAttribute('data-src'); }catch(_){}
     }catch(e){
         console.warn('[fix][image-utils] loadImageSafely error', e);
     }
 }
+
 
 // 既存HTMLからの呼び出し互換（連絡先詳細のonclick="showImageModal(url, ...)"）
 function showImageModal(url, title){
@@ -878,6 +901,38 @@ if (typeof switchMarkdownView === 'function') window.switchMarkdownView = switch
 if (typeof clearSearchAndFilters === 'function') window.clearSearchAndFilters = clearSearchAndFilters;
 
 
+
+
+/* [fix][search] START (anchor:ui.js:filters) */
+function filterContacts(){
+  try{
+    if(typeof renderContacts === 'function'){ renderContacts(); }
+  }catch(e){ console.warn('[fix][search] filterContacts error', e); }
+}
+
+function clearSearchAndFilters(){
+  try{
+    var q = document.getElementById('searchInput');
+    if(q) q.value = '';
+    var typeSel = document.getElementById('typeFilter');
+    if(typeSel) typeSel.value = '';
+
+    // テキスト系フィルタ
+    window.filterValues = window.filterValues || {};
+    ['affiliation','business','industryInterests','residence'].forEach(function(k){
+      window.filterValues[k] = '';
+      var el = document.getElementById(k==='industryInterests'?'industryInterestsFilter':(k+'Filter'));
+      if(el && typeof el.value !== 'undefined') el.value = '';
+    });
+
+    // 紹介者フィルタ
+    if(typeof clearReferrerFilter === 'function'){ clearReferrerFilter(); }
+    else { window.referrerFilter = ''; }
+
+    if(typeof renderContacts === 'function'){ renderContacts(); }
+  }catch(e){ console.warn('[fix][search] clearSearchAndFilters error', e); }
+}
+/* [fix][search] END (anchor:ui.js:filters) */
 /* [fix][expose] START (anchor:ui.js:publish-core-ui) */
 (function(){
   try {
@@ -887,7 +942,7 @@ if (typeof clearSearchAndFilters === 'function') window.clearSearchAndFilters = 
       'renderContactTree','createTreeNode','filterByReferrer','clearReferrerFilter',
       'sortContacts','toNum','getTypeColorClass',
       'renderKanbanView','createKanbanColumn','createKanbanCard','handleDrop',
-      'resolveImageUrl','hydrateDriveImage','loadImageSafely','sanitizeImageUrl','generatePlaceholderImage'
+      'resolveImageUrl','hydrateDriveImage','loadImageSafely','sanitizeImageUrl','generatePlaceholderImage','filterContacts','clearSearchAndFilters'
     ];
     names.forEach(function(n){
       try{
