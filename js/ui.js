@@ -596,6 +596,49 @@ function openImageLightbox(url){
     }
 }
 /* [fix][image-viewer] END (anchor:ui.js:openImageLightbox) */
+
+/* [fix][image-utils] START (anchor:ui.js:image-utils) */
+// 小さな透明GIFをプレースホルダに使用
+function generatePlaceholderImage(){
+    try{
+        // 1x1 transparent GIF
+        return 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+    }catch(e){
+        return '';
+    }
+}
+
+// data-src を安全に読み込み、エラー時に非表示/プレースホルダ維持
+function loadImageSafely(img, rawUrl){
+    try{
+        if(!img || !rawUrl) return;
+        var url = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
+        if(!url){ return; }
+        const onload = ()=>{ img.onload = img.onerror = null; };
+        const onerror = ()=>{ img.onload = img.onerror = null; /* 保険：srcを空にして崩れ防止 */ };
+        img.onload = onload;
+        img.onerror = onerror;
+        // 即時差し替え
+        img.src = url;
+        // data-src は消す
+        try{ img.removeAttribute('data-src'); }catch(_){}
+    }catch(e){
+        console.warn('[fix][image-utils] loadImageSafely error', e);
+    }
+}
+
+// 既存HTMLからの呼び出し互換（連絡先詳細のonclick="showImageModal(url, ...)"）
+function showImageModal(url, title){
+    try{
+        if (typeof openImageLightbox === 'function'){ openImageLightbox(url); }
+        else if (url){ window.open(url, '_blank'); }
+    }catch(e){
+        console.warn('[fix][image-utils] showImageModal error', e);
+    }
+}
+/* [fix][image-utils] END (anchor:ui.js:image-utils) */
+
+
 function switchView(view) {
     currentView = view;
     document.querySelectorAll('.view-btn').forEach(btn => {
