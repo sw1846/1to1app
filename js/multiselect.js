@@ -455,87 +455,79 @@ function renderAddNewRow(fieldName) {
 
 /* [fix][multiselect] START (anchor:multiselect.js:addNewOption) */
 // --- Persist new taxonomy option ---
+
+/* [fix][taxonomy] START (anchor:multiselect.js:addNewOption) */
 async function addNewOption(fieldName, value) {
     try{
         if(!value){ notify('値を入力してください'); return; }
-        
-        // [fix][multiselect] 正規化（全角/半角・大文字小文字）
+
+        // 正規化
         let normalizedValue = value.trim();
         if (typeof normalizeString === 'function') {
-            try {
-                normalizedValue = normalizeString(value);
-            } catch (e) {
-                console.warn('[multiselect] normalizeString failed', e);
-            }
+            try { normalizedValue = normalizeString(value); } catch(e){ console.warn('[multiselect] normalizeString failed', e); }
         }
-        
         if(!normalizedValue){ notify('値が無効です'); return; }
 
-        // window.options を準備
-        if (!window.options || typeof window.options !== 'object') window.options = {};
-        const optionKey = (fieldName === 'industryInterests') ? 'industryInterests'
-                        : (fieldName === 'affiliation') ? 'affiliations'
-                        : (fieldName === 'type') ? 'types' : fieldName;
-        if (!Array.isArray(window.options[optionKey])) {
-            window.options[optionKey] = [];
-        }
+        // options マスタ
+        if (!window.options) window.options = {};
+        const optionKey = fieldName; // 'type' | 'affiliation' | 'industryInterests'
+        if (!Array.isArray(window.options[optionKey])) window.options[optionKey] = [];
 
-        // [fix][multiselect] 重複（正規化ベース）をチェック
+        // 既存チェック（大文字小文字・全半角吸収）
         const existingNormalized = window.options[optionKey].map(item => {
-            if (typeof normalizeString === 'function') {
-                try {
-                    return normalizeString(item);
-                } catch (e) {
-                    return String(item || '').toLowerCase().trim();
-                }
-            }
-            return String(item || '').toLowerCase().trim();
+            try { return (typeof normalizeString === 'function') ? normalizeString(String(item||'')) : String(item||''); }
+            catch(e){ return String(item||''); }
         });
-        
-        if (existingNormalized.includes(normalizedValue.toLowerCase())) {
-            notify('既に存在します'); 
-            return;
-        }
+        if (existingNormalized.includes(normalizedValue)) { notify('既に存在します'); return; }
 
-        // 追加
+        // 追加 & ソート
         window.options[optionKey].push(value.trim());
-        
-        // [fix][multiselect] ソート（日本語対応）
         if (typeof uniqueSortedJa === 'function') {
             window.options[optionKey] = uniqueSortedJa(window.options[optionKey]);
         } else {
-            window.options[optionKey] = Array.from(new Set(window.options[optionKey])).sort((a, b) => 
-                a.localeCompare(b, 'ja')
-            );
+            window.options[optionKey] = Array.from(new Set(window.options[optionKey])).sort((a, b) => a.localeCompare(b, 'ja'));
         }
-        
         console.log(`[multiselect] added "${value}" to ${optionKey}`);
 
-        // [fix][multiselect] メタデータへ永続化
+        // 現在編集中の連絡先へ即時反映（UI即時適用）
+        const mapToContactField = (k)=> (k === 'type' ? 'types' : (k === 'affiliation' ? 'affiliations' : 'industryInterests'));
+        const targetField = mapToContactField(optionKey);
+        if (typeof window.currentContactId !== 'undefined' && Array.isArray(window.contacts)) {
+            const c = window.contacts.find(x => x.id === window.currentContactId);
+            if (c) {
+                if (!Array.isArray(c[targetField])) c[targetField] = [];
+                if (!c[targetField].includes(value.trim())) c[targetField].push(value.trim());
+            }
+        }
+
+        // 選択状態へも追加
+        if (!window.selectedOptions[optionKey]) window.selectedOptions[optionKey] = [];
+        if (!window.selectedOptions[optionKey].includes(value.trim())) window.selectedOptions[optionKey].push(value.trim());
+
+        // UI再描画
+        if (typeof updateMultiSelectOptions === 'function') updateMultiSelectOptions(optionKey);
+        if (typeof updateMultiSelectTags === 'function') updateMultiSelectTags(optionKey);
+
+        // メタデータ保存（失敗してもUIは維持）
         if (window.folderStructure && typeof AppData === 'object' && typeof AppData.saveOptionsToMetadata === 'function') {
             try {
                 await AppData.saveOptionsToMetadata(window.folderStructure, window.options);
                 console.log('[multiselect] saved to metadata.json');
                 notify(`「${value.trim()}」を追加しました`);
             } catch (err) {
-                console.warn('[multiselect] save failed', err);
-                notify('保存に失敗しました');
+                console.warn('[multiselect] save to metadata failed', err);
+                notify('保存に失敗しました（オフライン/未認証）');
             }
         } else {
-            console.warn('[multiselect] saveOptionsToMetadata not available');
-            notify(`「${value.trim()}」を追加しました（ローカルのみ）`);
-        }
-
-        // [fix][multiselect] UI即時反映
-        updateMultiSelectOptions(fieldName);
-        if (typeof updateFilters === 'function') {
-            updateFilters();
+            console.warn('[multiselect] saveOptionsToMetadata unavailable');
         }
     }catch(e){
-        console.error('[multiselect] addNewOption error', e);
-        notify('エラーが発生しました');
+        console.warn('[multiselect] addNewOption error', e);
+        notify('追加に失敗しました');
     }
 }
+/* [fix][taxonomy] END (anchor:multiselect.js:addNewOption) */
+
 /* [fix][multiselect] END (anchor:multiselect.js:addNewOption) */
 
 /* [fix][multiselect] START (anchor:multiselect.js:notify) */

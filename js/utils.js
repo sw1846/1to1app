@@ -69,6 +69,46 @@ function uniqueSortedJa(array) {
 
 // URLとメールアドレスをリンク化
 function linkifyText(text) {
+
+/* [fix][utils] START (anchor:utils.js:sanitizeImageUrl) */
+// Google Drive アクセストークン取得（gapiのトークンを優先）
+function getGoogleAccessToken(){
+    try{
+        const t = (window.gapi && gapi.client && gapi.client.getToken && gapi.client.getToken()) || null;
+        return (t && t.access_token) ? t.access_token : null;
+    }catch(e){
+        return null;
+    }
+}
+
+// drive:FILEID → alt=media のダウンロードURLへ
+function buildDriveDownloadUrl(fileId){
+    if(!fileId) return null;
+    const token = getGoogleAccessToken();
+    const base = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media';
+    return token ? (base + '&access_token=' + encodeURIComponent(token)) : base;
+}
+
+// 画像用URLのサニタイズ＆drive: → ダウンロードURL化
+function sanitizeImageUrl(url){
+    try{
+        if(!url || typeof url !== 'string') return null;
+        const u = url.trim();
+        if (u.startsWith('data:') || u.startsWith('http:') || u.startsWith('https:') || u.startsWith('blob:')){
+            return u;
+        }
+        if (u.startsWith('drive:')){
+            const id = u.slice(6).trim();
+            if(!id) return null;
+            return buildDriveDownloadUrl(id);
+        }
+        return null;
+    }catch(e){
+        console.warn('[fix][utils] sanitizeImageUrl error', e);
+        return null;
+    }
+}
+/* [fix][utils] END (anchor:utils.js:sanitizeImageUrl) */
     if (!text) return '';
     
     try {

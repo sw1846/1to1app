@@ -458,56 +458,61 @@ async function upsertJsonInFolder(folderId, fileName, jsonData){
 }
 
 // 🔧 FIX: Image URL resolution with proper token handling
+
+/* [fix][data] START (anchor:data.js:resolveAttachmentUrl) */
 async function resolveAttachmentUrl(contactId, kind, prefer){
   _ensureReady();
-  prefer = prefer || 'webContent';
-  
+  prefer = prefer || 'media';
+
   try {
-    if (!global.folderStructure || !global.folderStructure.attachmentsContacts) {
-      console.warn('Attachments folder structure not available');
+    if (!window.folderStructure || !window.folderStructure.attachmentsContacts) {
+      console.warn('[fix][data] attachmentsContacts not available');
       return null;
     }
-    
-    const attachmentsFolder = global.folderStructure.attachmentsContacts;
-    const contactFolder = await driveFindChildByName(attachmentsFolder, 'contact-' + String(contactId).padStart(6, '0'));
-    
-    if (!contactFolder) {
-      console.warn('Contact folder not found for ID:', contactId);
-      return null;
-    }
-    
-    // Look for image files based on kind
-    /* [fix][image-resolve] accept 'photo'/'avatar' and 'businessCard' synonyms */
-const _k = (String(kind||'').toLowerCase());
-const isAvatar = (_k === 'avatar' || _k === 'photo' || _k === 'face' || _k === 'profile');
-const isBiz = (_k === 'businesscard' || _k === 'business-card' || _k === 'card' || _k === 'namecard');
-const extensions = isAvatar ? ['jpg','jpeg','png','webp'] : ['jpg','jpeg','png','pdf','webp'];
-const prefixes = isAvatar ? ['photo','avatar','profile','face'] : ['business-card','businessCard','card','namecard','meishi'];
-    
-    const files = await driveListChildren(contactFolder);
-    
-    for (const prefix of prefixes) {
-      for (const ext of extensions) {
-        const fileName = prefix + '.' + ext;
-        const file = files.find(f => f.name.toLowerCase() === fileName.toLowerCase());
-        if (file) {
-          // Return Drive file URL with media access
-          const token = gapi.client.getToken();
-          if (token && token.access_token) {
-            return `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&access_token=${encodeURIComponent(token.access_token)}`;
-          }
-          // Fallback to webContentLink if available
-          return file.webContentLink || null;
-        }
+
+    const contactFolderName = 'contact-' + String(contactId).padStart(6, '0');
+    const attachmentsFolderId = window.folderStructure.attachmentsContacts;
+    const contactFolderId = await driveFindChildByName(attachmentsFolderId, contactFolderName);
+
+    if (!contactFolderId) return null;
+
+    // kind によって優先するMIME
+    const wantImage = (kind === 'avatar' || kind === 'photo' || kind === 'businessCard');
+    const files = await driveListChildren(contactFolderId, {});
+    if (!files || !files.length) return null;
+
+    // 名称・拡張子優先の簡易フィルタ
+    const byScore = (f) => {
+      const name = String(f.name || '').toLowerCase();
+      const mt = String(f.mimeType || '').toLowerCase();
+      let score = 0;
+      if (wantImage){
+        if (mt.startsWith('image/')) score += 5;
+        if (/avatar|photo|face/.test(name)) score += 3;
+        if (/card|meishi|business/.test(name)) score += (kind === 'businessCard' ? 3 : 1);
+      } else {
+        if (/pdf/.test(mt) || name.endsWith('.pdf')) score += 4;
       }
+      score += new Date(f.modifiedTime||0).getTime()/1e13;
+      return score;
+    };
+
+    files.sort((a,b)=> byScore(b)-byScore(a));
+    const pick = files[0];
+    if (!pick || !pick.id) return null;
+
+    // ダウンロードURL（alt=media + access_token）
+    if (typeof buildDriveDownloadUrl === 'function') {
+      return buildDriveDownloadUrl(pick.id);
     }
-    
-    return null;
+    return 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(pick.id) + '?alt=media';
   } catch (error) {
     console.warn('resolveAttachmentUrl failed:', error);
     return null;
   }
 }
+/* [fix][data] END (anchor:data.js:resolveAttachmentUrl) */
+
 
 // 🔧 FIX: Sanitize URL to prevent HTML injection
 function sanitizeImageUrl(url) {
@@ -1246,48 +1251,49 @@ __root.AppData.updateContactStatus = updateContactStatus;
 /* [fix][kanban] END (anchor:data.js:updateContactStatus) */
 /* [fix][avatar] START (anchor:data.js:resolveContactImageUrl) */
 // === Unified image URL resolver for contacts (handles legacy data) ===
+
+/* [fix][data] START (anchor:data.js:resolveContactImageUrl) */
 async function resolveContactImageUrl(contact, kind){
   try{
     if(!contact || !kind) return null;
-    
+
     const fieldName = (kind === 'photo' || kind === 'avatar') ? 'photo' : 'businessCard';
-    const refFieldName = fieldName + 'Ref';
-    
-    // [fix][avatar] Priority 1: Direct URL in contact.photo / contact.businessCard
-    let directUrl = contact[fieldName];
-    if(directUrl && typeof directUrl === 'string'){
-      // data:, http:, https:, drive: are all valid
-      if(directUrl.startsWith('data:') || directUrl.startsWith('http:') || 
-         directUrl.startsWith('https:') || directUrl.startsWith('drive:')){
-        console.log('[fix][avatar] using direct URL:', fieldName, directUrl.substring(0,50));
-        return directUrl;
+    const refField = fieldName + 'Ref';
+
+    // 1) 直接URL
+    if (contact[fieldName]) {
+      const s = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(contact[fieldName])) : String(contact[fieldName]);
+      if (s) return s;
+    }
+
+    // 2) 参照オブジェクト
+    const ref = contact[refField];
+    if (ref && typeof ref === 'object') {
+      if (ref.directUrl) {
+        const s = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(ref.directUrl)) : String(ref.directUrl);
+        if (s) return s;
+      }
+      if (ref.driveFileId) {
+        if (typeof buildDriveDownloadUrl === 'function') return buildDriveDownloadUrl(ref.driveFileId);
+        return 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(ref.driveFileId) + '?alt=media';
       }
     }
-    
-    // [fix][avatar] Priority 2: photoRef / businessCardRef with driveFileId
-    const refObj = contact[refFieldName];
-    if(refObj && refObj.driveFileId){
-      const driveRef = 'drive:' + refObj.driveFileId;
-      console.log('[fix][avatar] using ref.driveFileId:', fieldName, driveRef);
-      return driveRef;
+
+    // 3) 添付フォルダから探索
+    if (typeof resolveAttachmentUrl === 'function') {
+      const fallbackKind = (kind === 'photo') ? 'avatar' : kind;
+      const u = await resolveAttachmentUrl(contact.id, fallbackKind);
+      if (u) return u;
     }
-    
-    // [fix][avatar] Priority 3: Folder search fallback (existing logic)
-    if(typeof resolveAttachmentUrl === 'function'){
-      const url = await resolveAttachmentUrl(contact.id, kind);
-      if(url){
-        console.log('[fix][avatar] folder search found:', fieldName, url.substring(0,50));
-        return url;
-      }
-    }
-    
-    console.log('[fix][avatar] no image found for:', contact.id, kind);
+
     return null;
   }catch(e){
     console.warn('[fix][avatar] resolveContactImageUrl error:', e);
     return null;
   }
 }
+/* [fix][data] END (anchor:data.js:resolveContactImageUrl) */
+
 __root.AppData.resolveContactImageUrl = resolveContactImageUrl;
 /* [fix][avatar] END (anchor:data.js:resolveContactImageUrl) */
 })(window);

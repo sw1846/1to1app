@@ -286,55 +286,49 @@ function createContactListItem(contact) {
 
 
 /* [merge][restore] START function createContactCard */
+
+/* [fix][avatar] START (anchor:ui.js:createContactCard) */
 function createContactCard(contact) {
     const card = document.createElement('div');
-    card.className = 'contact-card' + getTypeColorClass(contact);
+    card.className = 'contact-card' + (typeof getTypeColorClass === 'function' ? getTypeColorClass(contact) : '');
+    card.dataset.contactId = contact.id;
+
+    // 詳細表示
     card.onclick = () => {
         if (typeof showContactDetail === 'function') {
             showContactDetail(contact.id);
         }
     };
 
-    const contactMeetings = window.meetings ? window.meetings.filter(m => m.contactId === contact.id) : [];
-    const todoCount = contactMeetings.reduce((sum, m) => sum + (m.todos?.filter(t => !t.completed).length || 0), 0);
-    const latestMeetingDate = typeof getLatestMeetingDate === 'function' ? getLatestMeetingDate(contact.id) : null;
+    // 画像URL解決
+    const photoUrl = (typeof resolveImageUrl === 'function') ? resolveImageUrl(contact, 'photo') : null;
+    const photoHtml = photoUrl
+        ? `<img class="contact-photo" src="${photoUrl}" alt="avatar">`
+        : `<div class="contact-photo contact-photo--placeholder"></div>`;
 
-    const businessesDisplay = contact.businesses && contact.businesses.length > 0 ? 
-        contact.businesses.slice(0, 2).join(', ') + (contact.businesses.length > 2 ? '...' : '') : '';
-
-    // [IMAGE FIX] 画像URL解決とサニタイズ
-    const photoUrl = resolveImageUrl(contact, 'photo');
-    const photoHtml = photoUrl 
-        ? `<img class="contact-photo" src="${generatePlaceholderImage()}" data-src="${photoUrl}" data-contact-id="${contact.id}">`
-        : '<div class="contact-photo"></div>';
+    // 会社・氏名等
+    const safe = (v)=> (typeof escapeHtml === 'function') ? escapeHtml(String(v||'')) : String(v||'');
+    const latestMeetingDate = (typeof getLatestMeetingDate === 'function') ? getLatestMeetingDate(contact.id) : '';
 
     card.innerHTML = `
         ${photoHtml}
         <div class="contact-info">
-            <h3>${escapeHtml(contact.name)}</h3>
-            ${contact.furigana ? `<p>${escapeHtml(contact.furigana)}</p>` : ''}
-            ${contact.company ? `<p>${escapeHtml(contact.company)}</p>` : ''}
-            ${businessesDisplay ? `<p>📋 ${escapeHtml(businessesDisplay)}</p>` : ''}
-            ${contact.emails && contact.emails[0] ? `<p>📧 ${escapeHtml(contact.emails[0])}</p>` : ''}
-            ${contact.phones && contact.phones[0] ? `<p>📞 ${escapeHtml(contact.phones[0])}</p>` : ''}
-            ${contact.revenue ? `<p>💰 売上: ¥${contact.revenue.toLocaleString()}</p>` : ''}
-            ${contact.referrerRevenue ? `<p>🤝 紹介売上: ¥${contact.referrerRevenue.toLocaleString()}</p>` : ''}
-            ${contact.referralCount > 0 ? `<p>🔗 <span class="clickable-link" onclick="event.stopPropagation(); filterByReferrer('${escapeHtml(contact.name)}')">紹介数: ${contact.referralCount}人</span></p>` : ''}
-            ${todoCount > 0 ? `<p>📋 未完了ToDo: ${todoCount}件</p>` : ''}
-            ${latestMeetingDate ? `<p>📅 最終面談: ${formatDate(latestMeetingDate)}</p>` : ''}
+            <div class="contact-name">${safe(contact.name)}</div>
+            <div class="contact-company">${safe(contact.company || '')}</div>
+            <div class="contact-meta">
+                ${latestMeetingDate ? `<span class="meta-item">最終面談: ${safe(latestMeetingDate)}</span>` : ''}
+            </div>
         </div>
     `;
 
-    // [IMAGE FIX] 画像の非同期読み込み
-    setTimeout(() => {
-        const img = card.querySelector('img.contact-photo[data-src]');
-        if (img && img.dataset.src) {
-            loadImageSafely(img, img.dataset.src);
-        }
-    }, 0);
-    
+    // カンバン用ドラッグ属性
+    card.draggable = true;
+    card.addEventListener('dragstart', handleDragStart);
+
     return card;
 }
+/* [fix][avatar] END (anchor:ui.js:createContactCard) */
+
 /* [merge][restore] END function createContactCard */
 
 
@@ -505,39 +499,52 @@ function getTypeColorClass(contact) {
 
 
 // [IMAGE FIX] 画像URL解決（レガシー対応版）
+
+/* [fix][avatar] START (anchor:ui.js:resolveImageUrl) */
 function resolveImageUrl(contact, type = 'photo') {
     try{
         const fieldName = (type === 'photo') ? 'photo' : 'businessCard';
-        let url = contact && contact[fieldName];
+        const refField = fieldName + 'Ref';
+        let url = contact && contact[fieldName] ? String(contact[fieldName]) : null;
 
-        // [fix][avatar] Priority 1: Direct URL (data:, http:, https:, drive:)
-        if(url && typeof url === 'string'){
-            if(url.startsWith('data:') || url.startsWith('http:') || 
-               url.startsWith('https:') || url.startsWith('drive:')){
-                const sanitized = sanitizeImageUrl(url);
-                if(sanitized) return sanitized;
+        // 1) 直接URLがあればサニタイズして返す（data/http/https/blob/drive）
+        if (url) {
+            const sanitized = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(url) : url;
+            if (sanitized) return sanitized;
+        }
+
+        // 2) *Ref オブジェクトを優先（directUrl / driveFileId）
+        const ref = contact && contact[refField];
+        if (ref && typeof ref === 'object') {
+            if (ref.directUrl) {
+                const s = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(ref.directUrl) : ref.directUrl;
+                if (s) return s;
+            }
+            if (ref.driveFileId) {
+                if (typeof buildDriveDownloadUrl === 'function') {
+                    return buildDriveDownloadUrl(ref.driveFileId);
+                }
+                return 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(ref.driveFileId) + '?alt=media';
             }
         }
 
-        // [fix][avatar] Priority 2: Fallback to *Ref if string URL missing
-        if (!url) {
-            const refObj = (type === 'photo') ? (contact && contact.photoRef) : (contact && contact.businessCardRef);
-            if (refObj && refObj.driveFileId) {
-                url = 'drive:' + refObj.driveFileId;
-            } else if (refObj && refObj.path) {
-                // Path only is not directly loadable in <img>; leave null so placeholder is used.
-                url = null;
+        // 3) photo/businessCard に drive: が残っている場合
+        if (url && url.startsWith && url.startsWith('drive:')) {
+            const id = url.slice(6).trim();
+            if (id) {
+                return (typeof buildDriveDownloadUrl === 'function') ? buildDriveDownloadUrl(id) : null;
             }
         }
 
-        if (!url) return null;
-        const sanitized = sanitizeImageUrl(url);
-        return sanitized || null;
+        // 4) 見つからない場合は null
+        return null;
     }catch(e){
         console.warn('[fix][avatar] resolveImageUrl error', e);
         return null;
     }
 }
+/* [fix][avatar] END (anchor:ui.js:resolveImageUrl) */
+
 
 // ui.js - UI操作・表示機能(完全版)
 
@@ -562,6 +569,33 @@ function switchTab(tab) {
 }
 
 // 表示切替
+
+/* [fix][image-viewer] START (anchor:ui.js:openImageLightbox) */
+// 画像の簡易ライトボックス（名刺や顔写真の拡大表示）
+function openImageLightbox(url){
+    try{
+        if(!url) return;
+        let overlay = document.getElementById('imageLightbox');
+        if(!overlay){
+            overlay = document.createElement('div');
+            overlay.id = 'imageLightbox';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;';
+            overlay.addEventListener('click', ()=> overlay.remove());
+            const img = document.createElement('img');
+            img.id = 'imageLightboxImg';
+            img.style.cssText = 'max-width:90vw;max-height:90vh;box-shadow:0 10px 30px rgba(0,0,0,.5);border-radius:8px;';
+            overlay.appendChild(img);
+            document.body.appendChild(overlay);
+        }
+        const img = document.getElementById('imageLightboxImg');
+        img.src = url;
+        overlay.style.display = 'flex';
+    }catch(e){
+        console.warn('[fix][image-viewer] openImageLightbox error', e);
+        window.open(url, '_blank');
+    }
+}
+/* [fix][image-viewer] END (anchor:ui.js:openImageLightbox) */
 function switchView(view) {
     currentView = view;
     document.querySelectorAll('.view-btn').forEach(btn => {
@@ -582,6 +616,8 @@ function closeModal(modalId) {
 
 
 /* [merge][restore-kanban] START function renderKanbanView */
+
+/* [fix][kanban] START (anchor:ui.js:renderKanbanView) */
 function renderKanbanView(container, contactList) {
     // ステータス管理ボタン
     const header = document.createElement('div');
@@ -597,13 +633,23 @@ function renderKanbanView(container, contactList) {
     const board = document.createElement('div');
     board.className = 'kanban-board';
 
-    (Array.isArray(window.options && window.options.statuses) ? window.options.statuses : ['新規','商談中','成約','保留','終了']).forEach(status => { /* guard statuses */
+    // ステータス配列（options.statuses が無ければデフォルト）
+    let statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
+        ? window.options.statuses.slice(0)
+        : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
+
+    // 重複排除＆空文字除去
+    statuses = Array.from(new Set(statuses.filter(Boolean)));
+
+    statuses.forEach(status => {
         const column = createKanbanColumn(status, contactList);
         board.appendChild(column);
     });
 
     container.appendChild(board);
 }
+/* [fix][kanban] END (anchor:ui.js:renderKanbanView) */
+
 /* [merge][restore-kanban] END function renderKanbanView */
 
 
@@ -691,6 +737,45 @@ function createKanbanCard(contact) {
 
 
 /* [fix][kanban] START (anchor:ui.js:handleDrop) */
+
+
+/* [fix][kanban] START (anchor:ui.js:drag-handlers) */
+// グローバルにドラッグ中カード参照（既存handleDropが参照）
+var draggedCard = (typeof draggedCard !== 'undefined') ? draggedCard : null;
+
+function handleDragStart(e){
+    try{
+        draggedCard = this;
+        if (e.dataTransfer){
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.dataset.contactId || '');
+        }
+        this.classList.add('dragging');
+    }catch(err){ console.warn('[fix][kanban] handleDragStart error', err); }
+}
+
+function handleDragOver(e){
+    try{
+        if (e.preventDefault) e.preventDefault(); // dropを許可
+        if (e.dataTransfer){ e.dataTransfer.dropEffect = 'move'; }
+        this.classList.add('drag-over');
+        return false;
+    }catch(err){ console.warn('[fix][kanban] handleDragOver error', err); return false; }
+}
+
+function handleDragLeave(e){
+    try{
+        this.classList.remove('drag-over');
+    }catch(err){ console.warn('[fix][kanban] handleDragLeave error', err); }
+}
+
+function handleDragEnd(e){
+    try{
+        this.classList.remove('dragging');
+    }catch(err){ console.warn('[fix][kanban] handleDragEnd error', err); }
+}
+/* [fix][kanban] END (anchor:ui.js:drag-handlers) */
+
 async function handleDrop(e) {
     if (e.stopPropagation) {
         e.stopPropagation();

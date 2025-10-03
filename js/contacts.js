@@ -190,56 +190,131 @@ function loadContactData(contactId) {
 }
 
 // [CLAUDE FIX] 画像読み込み関数の追加
+
+/* [fix][attachments] START (anchor:contacts.js:displayAttachments) */
+// 連絡先編集モーダル内・添付ファイル一覧を描画
+function displayAttachments(atts, targetElementId){
+    try{
+        const container = document.getElementById(targetElementId);
+        if(!container) return;
+        container.innerHTML = '';
+
+        if (!Array.isArray(atts) || !atts.length){
+            container.innerHTML = '<div class="empty">添付ファイルはありません</div>';
+            return;
+        }
+
+        atts.forEach(file => {
+            const name = (file && (file.name || file.filename)) || 'ファイル';
+            const mime = String(file && (file.mime || file.mimetype || '')).toLowerCase();
+            const path = String(file && (file.path || file.url || file.ref || '')).trim();
+
+            // URL解決
+            let url = null;
+            if (path){
+                if (path.startsWith('drive:')){
+                    const id = path.slice(6).trim();
+                    if (id && typeof buildDriveDownloadUrl === 'function'){
+                        url = buildDriveDownloadUrl(id);
+                    }
+                }else if (typeof sanitizeImageUrl === 'function'){
+                    url = sanitizeImageUrl(path) || path;
+                }else{
+                    url = path;
+                }
+            }
+
+            const card = document.createElement('div');
+            card.className = 'attachment-card';
+
+            if (mime.startsWith('image/')){
+                const img = document.createElement('img');
+                img.className = 'attachment-thumb';
+                img.alt = name;
+                if (url) img.src = url;
+                img.onclick = ()=> { if (url) (typeof openImageLightbox === 'function' ? openImageLightbox(url) : window.open(url, '_blank')); };
+                card.appendChild(img);
+            }else if (mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf')){
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm';
+                btn.textContent = 'PDFを開く';
+                btn.onclick = ()=> { if (url) window.open(url, '_blank'); };
+                card.appendChild(btn);
+            }else{
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm';
+                btn.textContent = 'ダウンロード';
+                btn.onclick = ()=> { if (url) window.open(url, '_blank'); };
+                card.appendChild(btn);
+            }
+
+            const label = document.createElement('div');
+            label.className = 'attachment-name';
+            label.textContent = name;
+            card.appendChild(label);
+
+            container.appendChild(card);
+        });
+    }catch(e){
+        console.warn('[fix][attachments] displayAttachments error', e);
+    }
+}
+/* [fix][attachments] END (anchor:contacts.js:displayAttachments) */
+/* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
+
 /* [fix][image-resolve] START (anchor:contacts.js:loadContactImages) */
 async function loadContactImages(contact) {
     try {
-        // 顔写真の処理
+        if (!contact) return;
+
+        // 顔写真
         const photoPreview = document.getElementById('photoPreview');
         const photoPreviewContainer = document.getElementById('photoPreviewContainer');
         if (photoPreview && photoPreviewContainer) {
-            // [fix][avatar] 統一リゾルバを使用
             let url = null;
             if (typeof AppData !== 'undefined' && typeof AppData.resolveContactImageUrl === 'function') {
                 url = await AppData.resolveContactImageUrl(contact, 'photo');
-            } else if (typeof resolveAttachmentUrl === 'function') {
-                url = await resolveAttachmentUrl(contact.id, 'avatar');
+            } else if (typeof resolveImageUrl === 'function') {
+                url = resolveImageUrl(contact, 'photo');
             }
-            
             if (url) {
                 photoPreview.src = url;
                 photoPreviewContainer.style.display = 'block';
-                console.log('[fix][avatar] loaded photo:', contact.id);
             } else {
                 photoPreview.src = '';
                 photoPreviewContainer.style.display = 'none';
             }
         }
-        
-        // 名刺画像の処理
+
+        // 名刺画像
         const businessCardPreview = document.getElementById('businessCardPreview');
         const businessCardPreviewContainer = document.getElementById('businessCardPreviewContainer');
         if (businessCardPreview && businessCardPreviewContainer) {
-            // [fix][avatar] 統一リゾルバを使用
             let url = null;
             if (typeof AppData !== 'undefined' && typeof AppData.resolveContactImageUrl === 'function') {
                 url = await AppData.resolveContactImageUrl(contact, 'businessCard');
-            } else if (typeof resolveAttachmentUrl === 'function') {
-                url = await resolveAttachmentUrl(contact.id, 'businessCard');
+            } else if (typeof resolveImageUrl === 'function') {
+                url = resolveImageUrl(contact, 'businessCard');
             }
-            
             if (url) {
                 businessCardPreview.src = url;
                 businessCardPreviewContainer.style.display = 'block';
-                console.log('[fix][avatar] loaded businessCard:', contact.id);
+                // クリックで拡大（ライトボックス）
+                businessCardPreview.onclick = () => {
+                    if (typeof openImageLightbox === 'function') openImageLightbox(url);
+                    else window.open(url, '_blank');
+                };
             } else {
                 businessCardPreview.src = '';
                 businessCardPreviewContainer.style.display = 'none';
             }
         }
     } catch (error) {
-        console.warn('[fix][avatar] loadContactImages error:', error);
+        console.warn('[fix][image-resolve] loadContactImages error:', error);
     }
 }
+/* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */
+
 /* [fix][image-resolve] END (anchor:contacts.js:loadContactImages) */
 // フォームリセット
 function resetContactForm() {
