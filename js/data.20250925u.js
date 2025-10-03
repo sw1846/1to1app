@@ -1296,16 +1296,34 @@ __root.AppData.saveAllToMigrated = async function(structure, contactsArr, meetin
   return true;
 };
 
+
+/* [fix][persist] START (anchor:data.js:saveAllData) */
 async function saveAllData(){
   try{
     if(!__root.folderStructure) throw new Error('folderStructure not set');
+
+    if(!__root.meetingsByContact || typeof __root.meetingsByContact !== 'object'){
+      __root.meetingsByContact = {};
+      if(Array.isArray(__root.meetings)){
+        __root.meetings.forEach(function(m){
+          if(!m || !m.contactId) return;
+          var k = String(m.contactId).replace(/^contact-/, '').replace(/\D/g,'');
+          if(!__root.meetingsByContact[k]) __root.meetingsByContact[k] = [];
+          __root.meetingsByContact[k].push(m);
+        });
+      }
+    }
+
     var ok = await __root.AppData.saveAllToMigrated(__root.folderStructure, __root.contacts||[], __root.meetingsByContact||{}, __root.options||{});
+    console.log('[fix][persist] saveAllData completed:', ok);
     return ok;
   }catch(e){
     console.error('[fix][persist] saveAllData error', e);
     throw e;
   }
 }
+/* [fix][persist] END (anchor:data.js:saveAllData) */
+
 __root.saveAllData = saveAllData;
 /* [fix][persist] END (anchor:data.js:saveAllToMigrated) */
 /* [fix][kanban] START (anchor:data.js:updateContactStatus) */
