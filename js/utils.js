@@ -1100,3 +1100,57 @@ function toInitials(displayName) {
         return '?';
     }
 }
+
+
+/* [fix][utils] START (anchor:utils.js:drive-helpers) */
+function isDriveRef(u){
+  if(!u || typeof u !== 'string') return false;
+  return u.startsWith('drive:') || u.indexOf('googleapis.com/drive/v3/files')>-1;
+}
+function extractDriveFileId(u){
+  if(!u) return null;
+  if(typeof u === 'string' && u.startsWith('drive:')) return u.split(':')[1];
+  const m = String(u||'').match(/drive\/v3\/files\/([^?&]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function getGoogleAccessToken(){
+  try{
+    return (gapi && gapi.client && gapi.client.getToken) ? (gapi.client.getToken()||{}).access_token : null;
+  }catch(_){ return null; }
+}
+function resolveDriveDownloadUrl(fileId){
+  const token = getGoogleAccessToken();
+  const base = 'https://www.googleapis.com/drive/v3/files/'+ encodeURIComponent(fileId) + '?alt=media';
+  return token ? (base + '&access_token=' + encodeURIComponent(token)) : base;
+}
+async function resolveAttachmentUrl(ref){
+  try{
+    if(!ref) return null;
+    if(isDriveRef(ref)){
+      const id = extractDriveFileId(ref);
+      if(!id) return null;
+      return resolveDriveDownloadUrl(id);
+    }
+    return String(ref);
+  }catch(e){
+    console.warn('[fix][utils] resolveAttachmentUrl failed', e);
+    return null;
+  }
+}
+async function loadImageFromGoogleDrive(ref){
+  try{
+    const id = extractDriveFileId(ref);
+    if(!id) return null;
+    const tk = getGoogleAccessToken();
+    if(!tk) return null;
+    const url = 'https://www.googleapis.com/drive/v3/files/'+ encodeURIComponent(id) + '?alt=media';
+    const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + tk }});
+    if(!resp.ok) throw new Error('fetch failed ' + resp.status);
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
+  }catch(e){
+    console.warn('[fix][avatar] loadImageFromGoogleDrive failed', e);
+    return null;
+  }
+}
+/* [fix][utils] END (anchor:utils.js:drive-helpers) */

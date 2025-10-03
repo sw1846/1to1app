@@ -1323,3 +1323,80 @@ async function renderAttachmentsInDetail(contact) {
         console.warn('renderAttachmentsInDetail error', e); 
     }
 }
+
+
+/* [fix][attachments] START (anchor:contacts.js:getAttachments) */
+function getAttachments(containerId){
+  try{
+    const el = document.getElementById(containerId);
+    if(!el) return [];
+    const items = el.querySelectorAll('.file-item, [data-file-name], [data-file-path]');
+    return Array.from(items).map(function(n){
+      return {
+        name: n.dataset.fileName || n.getAttribute('data-file-name') || (n.textContent||'file').trim(),
+        data: n.dataset.fileData || n.getAttribute('data-file-data') || '',
+        type: n.dataset.fileType || n.getAttribute('data-file-type') || '',
+        path: n.dataset.filePath || n.getAttribute('data-file-path') || ''
+      };
+    }).filter(function(f){ return (f.name && (f.data || f.path)); });
+  }catch(e){
+    console.warn('[fix][attachments] getAttachments error', e);
+    return [];
+  }
+}
+/* [fix][attachments] END (anchor:contacts.js:getAttachments) */
+
+
+/* [fix][attachments] START (anchor:contacts.js:displayAttachmentsSafe) */
+async function displayAttachmentsSafe(atts, targetElementId){
+  const container = document.getElementById(targetElementId);
+  if(!container){ return; }
+  container.innerHTML = '';
+  if(!Array.isArray(atts) || !atts.length){
+    container.innerHTML = '<div class="empty">添付ファイルはありません</div>';
+    return;
+  }
+  for(const file of atts){
+    const name = file.name || file.filename || 'ファイル';
+    const mime = String(file.mime || file.mimetype || file.type || '').toLowerCase();
+    const ref = String(file.path || file.url || file.ref || file.data || '').trim();
+    let url = null;
+    if(ref){
+      if(typeof resolveAttachmentUrl==='function'){
+        url = await resolveAttachmentUrl(ref);
+      }else{
+        url = ref.startsWith('drive:') ? resolveDriveDownloadUrl(ref.split(':')[1]) : ref;
+      }
+    }
+    const card = document.createElement('div');
+    card.className = 'attachment-card';
+    const title = document.createElement('div');
+    title.className = 'attachment-name';
+    title.textContent = name;
+    card.appendChild(title);
+    const openBtn = document.createElement('button');
+    openBtn.className = 'btn btn-sm';
+    const isPDF = mime.includes('pdf') || name.toLowerCase().endsWith('.pdf');
+    openBtn.textContent = isPDF ? 'PDFを開く' : 'ファイルを開く';
+    openBtn.onclick = async function(){
+      try{
+        if(!url && ref && ref.startsWith('drive:')){
+          const id = ref.split(':')[1];
+          const token = (typeof getGoogleAccessToken==='function') ? getGoogleAccessToken() : null;
+          if(token){
+            url = 'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media&access_token='+encodeURIComponent(token);
+          }
+        }
+        if(url){
+          window.open(url, '_blank');
+        }else{
+          alert('ファイルを開けませんでした');
+        }
+      }catch(e){ console.warn('[fix][attachments] open failed', e); }
+    };
+    card.appendChild(openBtn);
+    container.appendChild(card);
+  }
+}
+try{ window.displayAttachments = displayAttachmentsSafe; }catch(_){}
+/* [fix][attachments] END (anchor:contacts.js:displayAttachmentsSafe) */
