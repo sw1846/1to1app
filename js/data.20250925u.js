@@ -282,110 +282,77 @@ async function driveFindChildByName(parentId, name, mimeType){
 // ======== Missing functions implementation ========
 
 /* [fix][attachments-upload] contacts用アップロード関数（avatar/名刺/添付に対応） */
+
+/* [fix][persist] START (anchor:data.js:saveAttachmentToFileSystem) */
 async function saveAttachmentToFileSystem(fileName, dataUrl, contactNameOrId){
-  _ensureReady();
+  function parseDataUrl(u){
+    if(!u || typeof u!=='string' || u.indexOf('data:')!==0) throw new Error('invalid data url');
+    const m = u.match(/^data:([^;]+);base64,(.*)$/);
+    if(!m) throw new Error('unsupported data url');
+    const mime = m[1]; const b64 = m[2];
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime };
+  }
+  function normalizeName(n){
+    try{ return String(n||'file').replace(/[^\w\.\-ぁ-んァ-ヶ一-龠ー]/g,'_').slice(0,120); }catch(_){ return 'file'; }
+  }
+
+  const ctrl = new AbortController();
+  const timeoutMs = 60_000;
+  const to = setTimeout(()=>ctrl.abort(), timeoutMs);
+
   try{
-    if(!global.folderStructure || !global.folderStructure.attachmentsContacts){
-      throw new Error('attachmentsContacts folder is not resolved');
-    }
-    const attachmentsRoot = global.folderStructure.attachmentsContacts;
-    
-    // contactId を優先的に決定
-    let contactId = null;
-    try{
-      if (typeof global.currentContactId !== 'undefined' && global.currentContactId) {
-        contactId = String(global.currentContactId);
-      }
-    }catch(_e){}
-    if(!contactId){
-      // 引数からID推定（数値 or 既存のcontactsから名前一致）
-      const s = String(contactNameOrId||'').trim();
-      if(/^\d+$/.test(s)){ contactId = s; }
-      else if (Array.isArray(global.contacts)){
-        const hit = global.contacts.find(c => (c && (c.id===s || c.name===s)));
-        if(hit && hit.id){ contactId = String(hit.id); }
-      }
-    }
-    // フォルダ名決定（IDがなければ名前スラグ）
-    function slugify(x){ return String(x||'').toLowerCase().replace(/[^\w\-ぁ-んァ-ン一-龥]/g,'-').replace(/-+/g,'-').replace(/^-|-$|/g,''); }
-    const folderName = contactId ? ('contact-' + String(contactId).padStart(6,'0'))
-                                 : ('contact-' + slugify(contactNameOrId||'unknown'));
-    
-    // 連絡先用サブフォルダを作成/取得
-    let contactFolderId = await driveFindChildByName(attachmentsRoot, folderName, 'application/vnd.google-apps.folder');
-    if(!contactFolderId){
-      contactFolderId = await getOrCreateFolderId(folderName, attachmentsRoot);
-    }
-    
-    // dataURL -> Blob 化
-    function dataUrlToBytes(url){
-      const m = String(url||'').match(/^data:([^;,]+)?;(base64)?,(.*)$/);
-      if(!m){ throw new Error('Invalid data URL'); }
-      const mime = m[1] || 'application/octet-stream';
-      const isB64 = m[2] === 'base64';
-      const data = m[3] || '';
-      const bin = isB64 ? atob(data) : decodeURIComponent(data);
-      const len = bin.length;
-      const bytes = new Uint8Array(len);
-      for(let i=0;i<len;i++){ bytes[i] = bin.charCodeAt(i); }
-      return { bytes, mime };
-    }
-    const { bytes, mime } = dataUrlToBytes(dataUrl);
-    
-    // ファイル名の正規化（photo/business-cardを優先）
-    const lower = String(fileName||'').toLowerCase();
-    let normalizedName = lower.includes('photo') || lower.includes('avatar') ? 'photo'
-                         : lower.includes('business') || lower.includes('meishi') || lower.includes('card') ? 'business-card'
-                         : (lower.replace(/[^a-z0-9\.\-_]/g,'') || 'file');
-    // 既に拡張子が無ければ推定
-    if(!/\.(jpg|jpeg|png|webp|pdf)$/i.test(normalizedName)){
-      if(mime === 'application/pdf'){ normalizedName += '.pdf'; }
-      else if(mime.indexOf('png')>=0){ normalizedName += '.png'; }
-      else if(mime.indexOf('webp')>=0){ normalizedName += '.webp'; }
-      else { normalizedName += '.jpg'; }
-    }
-    
-    // multipart アップロード
-    const boundary = '-------1to1appBoundary' + Math.random().toString(16).slice(2);
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const closeDelim = "\r\n--" + boundary + "--";
-    
-    const metadata = {
-      name: normalizedName,
-      parents: [contactFolderId]
+    const { bytes, mime } = parseDataUrl(dataUrl);
+    const blob = new Blob([bytes], {type: mime});
+    const meta = {
+      name: normalizeName(fileName || (contactNameOrId ? (contactNameOrId + '_' + Date.now()) : ('file_' + Date.now()))),
+      mimeType: mime,
+      parents: [ (window.folderStructure && window.folderStructure.attachments) ? window.folderStructure.attachments : window.folderStructure.root ]
     };
-    
-    // Convert bytes to base64 for multipart
-    let binary = '';
-    for(let i=0;i<bytes.length;i++){ binary += String.fromCharCode(bytes[i]); }
-    const b64 = btoa(binary);
-    
-    const multipartBody = 
-      delimiter +
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-      JSON.stringify(metadata) + delimiter +
-      'Content-Type: ' + mime + '\r\n' +
-      'Content-Transfer-Encoding: base64\r\n' +
-      '\r\n' + b64 + closeDelim;
-    
-    const resp = await gapi.client.request({
-      path: '/upload/drive/v3/files',
-      method: 'POST',
-      params: { uploadType: 'multipart', supportsAllDrives: true },
-      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-      body: multipartBody
-    });
-    
-    const fileId = resp && resp.result && resp.result.id;
-    if(!fileId){ throw new Error('upload failed'); }
-    
-    // 'drive:' 形式で返却（既存の画像ローダーが対応）
-    return 'drive:' + fileId;
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = '\r\n--' + boundary + '\r\n';
+    const closeDelim = '\r\n--' + boundary + '--';
+    const head = new Blob(
+      [delimiter, 'Content-Type: application/json; charset=UTF-8\r\n\r\n', JSON.stringify(meta),
+       delimiter, 'Content-Type: ', mime, '\r\n\r\n'],
+      {type: 'text/plain'}
+    );
+    const tail = new Blob([closeDelim], {type:'text/plain'});
+    const bodyBlob = new Blob([head, blob, tail], {type: 'multipart/related; boundary=' + boundary});
+
+    const token = (typeof getGoogleAccessToken==='function') ? getGoogleAccessToken() : (gapi?.client?.getToken?.()||{}).access_token;
+    if(!token) throw new Error('no access token');
+
+    const upload = async ()=> {
+      const resp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+        body: bodyBlob,
+        signal: ctrl.signal
+      });
+      if(!resp.ok) throw new Error('upload failed: ' + resp.status);
+      return await resp.json();
+    };
+
+    let json = null;
+    try{ json = await upload(); }
+    catch(e){
+      await new Promise(r=>setTimeout(r, 800));
+      json = await upload();
+    }
+    return 'drive:' + json.id;
   }catch(e){
-    console.warn('saveAttachmentToFileSystem failed', e);
+    console.error('[fix][persist] saveAttachmentToFileSystem error', e);
     throw e;
+  }finally{
+    clearTimeout(to);
   }
 }
+/* [fix][persist] END (anchor:data.js:saveAttachmentToFileSystem) */
+
 __root.AppData = __root.AppData || {};
 __root.AppData.saveAttachmentToFileSystem = saveAttachmentToFileSystem;
 

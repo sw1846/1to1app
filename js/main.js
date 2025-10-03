@@ -715,3 +715,11 @@ function initializeMainApp(){
   });
 
 })();
+/* [fix][kanban] START (anchor:main.js:defaults-statuses) */
+try{
+  if(!window.options) window.options = {};
+  if(!Array.isArray(window.options.statuses) || !window.options.statuses.length){
+    window.options.statuses = ['新規','商談中','成約','保留','終了'];
+  }
+}catch(e){ console.warn('[fix][kanban] defaults set failed', e); }
+/* [fix][kanban] END (anchor:main.js:defaults-statuses) */
