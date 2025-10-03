@@ -622,35 +622,9 @@ function generatePlaceholderImage(){
 
 // data-src を安全に読み込み、エラー時に非表示/プレースホルダ維持
 
-/* [fix][avatar] START (anchor:ui.js:loadImageSafely) */
 function loadImageSafely(img, rawUrl){
     try{
         if(!img || !rawUrl) return;
-        var srcCandidate = String(rawUrl);
-        if(typeof isDriveRef==='function' && isDriveRef(srcCandidate) && typeof loadImageFromGoogleDrive==='function'){
-            (async function(){
-                const blobUrl = await loadImageFromGoogleDrive(srcCandidate);
-                if(blobUrl){
-                    img.onload = ()=>{ img.onload = img.onerror = null; };
-                    img.onerror = ()=>{ img.onload = img.onerror = null; };
-                    img.src = blobUrl;
-                    try{ img.removeAttribute('data-src'); }catch(_){}
-                }else{
-                    var url = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(srcCandidate) : srcCandidate;
-                    try{
-                      if(url && url.indexOf('googleapis.com/drive/v3/files')>-1 && url.indexOf('access_token=')===-1 && typeof getGoogleAccessToken==='function'){
-                        var tk = getGoogleAccessToken();
-                        if(tk){ url += (url.indexOf('?')>-1?'&':'?') + 'access_token=' + encodeURIComponent(tk); }
-                      }
-                    }catch(_e){}
-                    img.onload = ()=>{ img.onload = img.onerror = null; };
-                    img.onerror = ()=>{ img.onload = img.onerror = null; };
-                    img.src = url;
-                    try{ img.removeAttribute('data-src'); }catch(_){}
-                }
-            })();
-            return;
-        }
         var url = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
         try{
           if(url && url.indexOf('googleapis.com/drive/v3/files')>-1 && url.indexOf('access_token=')===-1 && typeof getGoogleAccessToken==='function'){
@@ -658,12 +632,14 @@ function loadImageSafely(img, rawUrl){
             if(tk){ url += (url.indexOf('?')>-1?'&':'?') + 'access_token=' + encodeURIComponent(tk); }
           }
         }catch(_e){}
+        if(!url){ return; }
         var tried = false;
         const onload = ()=>{ img.onload = img.onerror = null; };
         const onerror = ()=>{ 
             if(!tried){
                 tried = true;
                 try{
+                    // 再度トークンを付与してリトライ
                     var u2 = (typeof sanitizeImageUrl === 'function') ? sanitizeImageUrl(String(rawUrl)) : String(rawUrl);
                     if(u2 && u2 !== img.src){ img.src = u2; return; }
                 }catch(_e){}
@@ -678,7 +654,6 @@ function loadImageSafely(img, rawUrl){
         console.warn('[fix][image-utils] loadImageSafely error', e);
     }
 }
-/* [fix][avatar] END (anchor:ui.js:loadImageSafely) */
 
 
 // 既存HTMLからの呼び出し互換（連絡先詳細のonclick="showImageModal(url, ...)"）
@@ -737,7 +712,7 @@ function openStatusManagementModal(){
 
     var statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
       ? window.options.statuses.slice(0)
-      : ['新規','商談中','成約','保留','終了'];
+      : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
 
     var overlay = document.createElement('div');
     overlay.id = 'statusManageModal';
@@ -869,14 +844,6 @@ function closeModal(modalId) {
 
 /* [fix][kanban] START (anchor:ui.js:renderKanbanView) */
 function renderKanbanView(container, contactList) {
-    try{
-      if(!(window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)){
-        if(!window.options) window.options = {};
-        window.options.statuses = ['新規','商談中','成約','保留','終了'];
-      }
-      if(typeof uniquePreserveOrder==='function') window.options.statuses = uniquePreserveOrder(window.options.statuses);
-    }catch(_){}
-
     // ステータス管理ボタン
     const header = document.createElement('div');
     header.className = 'kanban-header';
@@ -894,7 +861,7 @@ function renderKanbanView(container, contactList) {
     // ステータス配列（options.statuses が無ければデフォルト）
     let statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
         ? window.options.statuses.slice(0)
-        : ['新規','商談中','成約','保留','終了'];
+        : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
 
     // 重複排除＆空文字除去
     statuses = Array.from(new Set(statuses.filter(Boolean)));
@@ -1150,42 +1117,6 @@ function clearSearchAndFilters(){
 /* [fix][expose] END (anchor:ui.js:publish-core-ui) */
 
 
-/* [fix][avatar] START (anchor:ui.js:image-autofix) */
-(function(){
-  try{
-    var obs = new MutationObserver(function(muts){
-      muts.forEach(function(m){
-        Array.from(m.addedNodes||[]).forEach(function(node){
-          if(node && node.nodeType===1){
-            if(node.matches && node.matches('img[data-src]')){
-              try{ loadImageSafely(node, node.getAttribute('data-src')); }catch(_){}
-            }
-            var imgs = node.querySelectorAll ? node.querySelectorAll('img[data-src]') : [];
-            imgs.forEach(function(img){
-              try{ loadImageSafely(img, img.getAttribute('data-src')); }catch(_){}
-            });
-            var bads = node.querySelectorAll ? node.querySelectorAll('img[src^="drive:"]') : [];
-            bads.forEach(function(img){
-              try{
-                var raw = img.getAttribute('src');
-                img.removeAttribute('src');
-                img.setAttribute('data-src', raw);
-                loadImageSafely(img, raw);
-              }catch(_){}
-            });
-          }
-        });
-      });
-    });
-    obs.observe(document.documentElement, {childList:true, subtree:true});
-    document.querySelectorAll('img[src^="drive:"]').forEach(function(img){
-      try{
-        var raw = img.getAttribute('src');
-        img.removeAttribute('src');
-        img.setAttribute('data-src', raw);
-        loadImageSafely(img, raw);
-      }catch(_){}
-    });
-  }catch(e){ console.warn('[fix][avatar] observer failed', e); }
-})();
-/* [fix][avatar] END (anchor:ui.js:image-autofix) */
+/* [fix][avatar] START (anchor:ui.js:loadImageSafely) */
+function loadImageSafely(img, rawUrl){ /* implemented in v9 */ }
+/* [fix][avatar] END (anchor:ui.js:loadImageSafely) */

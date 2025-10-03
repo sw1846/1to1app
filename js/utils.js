@@ -1102,55 +1102,111 @@ function toInitials(displayName) {
 }
 
 
-/* [fix][utils] START (anchor:utils.js:drive-helpers) */
-function isDriveRef(u){
-  if(!u || typeof u !== 'string') return false;
-  return u.startsWith('drive:') || u.indexOf('googleapis.com/drive/v3/files')>-1;
-}
-function extractDriveFileId(u){
-  if(!u) return null;
-  if(typeof u === 'string' && u.startsWith('drive:')) return u.split(':')[1];
-  const m = String(u||'').match(/drive\/v3\/files\/([^?&]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-function getGoogleAccessToken(){
-  try{
-    return (gapi && gapi.client && gapi.client.getToken) ? (gapi.client.getToken()||{}).access_token : null;
-  }catch(_){ return null; }
-}
-function resolveDriveDownloadUrl(fileId){
-  const token = getGoogleAccessToken();
-  const base = 'https://www.googleapis.com/drive/v3/files/'+ encodeURIComponent(fileId) + '?alt=media';
-  return token ? (base + '&access_token=' + encodeURIComponent(token)) : base;
-}
-async function resolveAttachmentUrl(ref){
-  try{
-    if(!ref) return null;
-    if(isDriveRef(ref)){
-      const id = extractDriveFileId(ref);
-      if(!id) return null;
-      return resolveDriveDownloadUrl(id);
+/* [fix][avatar] START (anchor:utils.js:image-queue) */
+(function(){
+  if(window.__imageQueue) return;
+  const MAX_CONCURRENCY = 6;
+  const inflight = new Map();
+  const blobCache = new Map();
+  const queue = [];
+  let active = 0;
+  function now(){ return Date.now(); }
+  function evict(){
+    const LIMIT = 300;
+    if(blobCache.size <= LIMIT) return;
+    const arr = Array.from(blobCache.entries()).sort((a,b)=>a[1].ts-b[1].ts);
+    for(let i=0;i<arr.length-LIMIT;i++){
+      const [k, v] = arr[i];
+      try{ URL.revokeObjectURL(v.url); }catch(_){}
+      blobCache.delete(k);
     }
-    return String(ref);
-  }catch(e){
-    console.warn('[fix][utils] resolveAttachmentUrl failed', e);
-    return null;
   }
-}
-async function loadImageFromGoogleDrive(ref){
+  async function fetchDriveBlobUrl(fileId){
+    const tk = (typeof getGoogleAccessToken==='function') ? getGoogleAccessToken() : null;
+    if(!tk) throw new Error('no token');
+    const url = 'https://www.googleapis.com/drive/v3/files/'+ encodeURIComponent(fileId) + '?alt=media';
+    const ctrl = new AbortController();
+    const timeout = setTimeout(()=>ctrl.abort(), 45000);
+    try{
+      const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + tk }, signal: ctrl.signal });
+      if(!resp.ok) throw new Error('status ' + resp.status);
+      const blob = await resp.blob();
+      return URL.createObjectURL(blob);
+    }finally{ clearTimeout(timeout); }
+  }
+  async function run(task){
+    if(active >= MAX_CONCURRENCY){
+      await new Promise(res=>queue.push(res));
+    }
+    active++;
+    try{ return await task(); }
+    finally{
+      active--;
+      const n = queue.shift();
+      if(n) n();
+    }
+  }
+  window.__imageQueue = {
+    async getBlobUrlForFileId(fileId){
+      if(!fileId) return null;
+      const c = blobCache.get(fileId);
+      if(c){ c.ts = now(); return c.url; }
+      if(inflight.has(fileId)) return inflight.get(fileId);
+      const p = run(async ()=>{
+        const c2 = blobCache.get(fileId);
+        if(c2){ c2.ts = now(); return c2.url; }
+        let lastErr = null;
+        for(let i=0;i<3;i++){
+          try{
+            const u = await fetchDriveBlobUrl(fileId);
+            blobCache.set(fileId, {url: u, ts: now()});
+            evict();
+            return u;
+          }catch(e){
+            lastErr = e;
+            await new Promise(r=>setTimeout(r, 400 * Math.pow(2,i) + Math.floor(Math.random()*150)));
+          }
+        }
+        throw lastErr || new Error('failed');
+      });
+      inflight.set(fileId, p);
+      try{
+        return await p;
+      }finally{
+        inflight.delete(fileId);
+      }
+    },
+    _revokeAll(){
+      for(const [,v] of blobCache){
+        try{ URL.revokeObjectURL(v.url); }catch(_){}
+      }
+      blobCache.clear();
+    }
+  };
+})();
+/* [fix][avatar] END (anchor:utils.js:image-queue) */
+
+
+/* [fix][attachments] START (anchor:utils.js:open-drive-in-newtab) */
+async function openDriveFileInNewTab(ref){
   try{
     const id = extractDriveFileId(ref);
-    if(!id) return null;
-    const tk = getGoogleAccessToken();
-    if(!tk) return null;
+    if(!id) return;
+    const tk = getGoogleAccessToken && getGoogleAccessToken();
+    if(!tk){
+      const url = resolveDriveDownloadUrl(id);
+      if(url) window.open(url, '_blank');
+      return;
+    }
     const url = 'https://www.googleapis.com/drive/v3/files/'+ encodeURIComponent(id) + '?alt=media';
-    const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + tk }});
-    if(!resp.ok) throw new Error('fetch failed ' + resp.status);
+    const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + tk } });
+    if(!resp.ok) throw new Error('status '+resp.status);
     const blob = await resp.blob();
-    return URL.createObjectURL(blob);
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank');
+    setTimeout(()=>URL.revokeObjectURL(objectUrl), 60_000);
   }catch(e){
-    console.warn('[fix][avatar] loadImageFromGoogleDrive failed', e);
-    return null;
+    console.warn('[fix][attachments] openDriveFileInNewTab failed', e);
   }
 }
-/* [fix][utils] END (anchor:utils.js:drive-helpers) */
+/* [fix][attachments] END (anchor:utils.js:open-drive-in-newtab) */
