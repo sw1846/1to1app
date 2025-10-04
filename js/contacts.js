@@ -193,7 +193,7 @@ function loadContactData(contactId) {
 
 /* [fix][attachments] START (anchor:contacts.js:displayAttachments) */
 // 連絡先編集モーダル内・添付ファイル一覧を描画
-function displayAttachments(atts, targetElementId){
+async function displayAttachments(atts, targetElementId){
     try{
         const container = document.getElementById(targetElementId);
         if(!container) return;
@@ -224,7 +224,7 @@ function displayAttachments(atts, targetElementId){
                 }
             }
             /* [fix][pdf] try resolveAttachmentUrl if no URL */
-            if ((!url || url === 'null' || url === '') && typeof AppData !== 'undefined' && typeof AppData.resolveAttachmentUrl === 'function'){
+            if ((!url || url === 'null' || url === '') && typeof AppData !== 'undefined' && typeof AppData.resolveAttachmentUrl === 'function' && typeof currentContactId !== 'undefined' && currentContactId){
                 try{ const alt = await AppData.resolveAttachmentUrl(currentContactId, 'pdf'); if(alt) url = alt; }catch(_e){}
             }
 
