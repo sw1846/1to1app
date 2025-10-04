@@ -229,6 +229,28 @@ async function displayAttachments(atts, targetElementId){
             }
 
             const card = document.createElement('div');
+            /* [fix][pdf] fallback (non-await, post-render updater) */
+            if ((!url || url === 'null' || url === '') 
+                && typeof AppData !== 'undefined' 
+                && typeof AppData.resolveAttachmentUrl === 'function' 
+                && typeof currentContactId !== 'undefined' && currentContactId){
+                try {
+                    AppData.resolveAttachmentUrl(currentContactId, 'pdf')
+                        .then(function(alt){
+                            if (!alt) return;
+                            // 優先的にPDFボタン/リンクを更新
+                            var anchor = card.querySelector('a[href]');
+                            if (anchor) { anchor.setAttribute('href', alt); anchor.onclick = function(){ window.open(alt, '_blank'); }; }
+                            // 画像プレビューが必要なら差し替え（PDF以外でも使えるように保険）
+                            var img = card.querySelector('img.attachment-thumb');
+                            if (img && !img.getAttribute('src')) {
+                                img.setAttribute('src', alt);
+                            }
+                        })
+                        .catch(function(){});
+                } catch(_e){}
+            }
+
             card.className = 'attachment-card';
 
             if (mime.startsWith('image/')){
@@ -1284,6 +1306,28 @@ async function renderAttachmentsInDetail(contact) {
 
         for (const file of atts) {
             const card = document.createElement('div');
+            /* [fix][pdf] fallback (non-await, post-render updater) */
+            if ((!url || url === 'null' || url === '') 
+                && typeof AppData !== 'undefined' 
+                && typeof AppData.resolveAttachmentUrl === 'function' 
+                && typeof currentContactId !== 'undefined' && currentContactId){
+                try {
+                    AppData.resolveAttachmentUrl(currentContactId, 'pdf')
+                        .then(function(alt){
+                            if (!alt) return;
+                            // 優先的にPDFボタン/リンクを更新
+                            var anchor = card.querySelector('a[href]');
+                            if (anchor) { anchor.setAttribute('href', alt); anchor.onclick = function(){ window.open(alt, '_blank'); }; }
+                            // 画像プレビューが必要なら差し替え（PDF以外でも使えるように保険）
+                            var img = card.querySelector('img.attachment-thumb');
+                            if (img && !img.getAttribute('src')) {
+                                img.setAttribute('src', alt);
+                            }
+                        })
+                        .catch(function(){});
+                } catch(_e){}
+            }
+
             card.className = 'attachment-card';
             card.style.cssText = 'border:1px solid var(--border-color);border-radius:10px;padding:10px;background:var(--bg-secondary);';
             const name = file.name || 'ファイル';
