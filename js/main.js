@@ -1,3 +1,6 @@
+
+/* [marker] BUILD v20251004-v10b */
+try{ console.log('[marker] BUILD', 'v20251004-v10b'); }catch(_){}
 /* ===== 1to1app main.js (U5 - 修正版) =====
    - data.js(U4) のイベント 'gis:token' を受けて UI をログイン後状態へ切替
    - 「保存先フォルダ選択」モーダルを表示（初回 or 変更時）

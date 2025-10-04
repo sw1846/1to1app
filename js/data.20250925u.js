@@ -280,21 +280,17 @@ async function driveFindChildByName(parentId, name, mimeType){
 }
 
 /* [fix][drive] START (anchor:data.js:getFileIdInFolder) */
-// 名前と親フォルダで単一ファイルIDを取得（厳密一致→部分一致の順）
-// contacts.js から直接呼ばれることがあるため、グローバル関数としても公開します。
 async function getFileIdInFolder(fileName, parentFolderId){
   try{
     _ensureReady();
     if(!fileName || !parentFolderId) return null;
-    // 既存のユーティリティを活用
-    const id = await driveFindChildByName(parentFolderId, String(fileName), /*mimeType*/ null);
+    const id = await driveFindChildByName(parentFolderId, String(fileName), null);
     return id || null;
   }catch(e){
     console.warn('[fix][drive] getFileIdInFolder failed:', e);
     return null;
   }
 }
-// 公開
 __root.getFileIdInFolder = getFileIdInFolder;
 __root.AppData = __root.AppData || {};
 __root.AppData.getFileIdInFolder = getFileIdInFolder;
