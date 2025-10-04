@@ -223,6 +223,16 @@ function displayAttachments(atts, targetElementId){
                     url = path;
                 }
             }
+            /* [fix][pdf] Fallback: pathが直接URLでない場合、AppData.resolveAttachmentUrlから推定 */
+            if ((!url || url === 'null' || url === '') && typeof AppData !== 'undefined' && typeof AppData.resolveContactImageUrl === 'function'){
+                try{
+                    // PDF優先で試す（image以外）
+                    if (String(mime||'').toLowerCase().includes('pdf')){
+                        const alt = await (typeof AppData.resolveAttachmentUrl === 'function' ? AppData.resolveAttachmentUrl(currentContactId, 'pdf') : null);
+                        if (alt) url = alt;
+                    }
+                }catch(_e){}
+            }
 
             const card = document.createElement('div');
             card.className = 'attachment-card';

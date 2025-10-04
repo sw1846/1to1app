@@ -712,7 +712,7 @@ function openStatusManagementModal(){
 
     var statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
       ? window.options.statuses.slice(0)
-      : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
+      : ['新規','商談中','成約','保留','終了'];
 
     var overlay = document.createElement('div');
     overlay.id = 'statusManageModal';
@@ -859,9 +859,10 @@ function renderKanbanView(container, contactList) {
     board.className = 'kanban-board';
 
     // ステータス配列（options.statuses が無ければデフォルト）
+    /* [fix][kanban-order] デフォルト並び順を要望に合わせて5種類に変更 */
     let statuses = (window.options && Array.isArray(window.options.statuses) && window.options.statuses.length)
         ? window.options.statuses.slice(0)
-        : ['新規','アポ取り','面談','商談中','成約','保留','終了'];
+        : ['新規','商談中','成約','保留','終了'];
 
     // 重複排除＆空文字除去
     statuses = Array.from(new Set(statuses.filter(Boolean)));
